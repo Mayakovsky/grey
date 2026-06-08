@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# turbo
+.turbo/
+
+# test coverage
+coverage/
+
+# env — NEVER commit real secrets. .env.example IS committed.
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# NOTE: pnpm-lock.yaml is intentionally NOT ignored — it is committed.

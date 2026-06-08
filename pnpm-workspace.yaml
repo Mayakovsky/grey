@@ -1,0 +1,12 @@
+packages:
+  - "packages/*"
+  - "adapters/*"
+
+# pnpm 11 blocks dependency build/postinstall scripts by default. Approve each
+# one explicitly here (never blanket approval). Inspected + justified 2026-06-08:
+#
+#   esbuild — postinstall installs/links esbuild's platform-native binary
+#     (esbuild = JS wrapper + native exe; without it esbuild cannot run).
+#     Pulled in transitively by vitest -> vite -> esbuild.
+allowBuilds:
+  esbuild: true

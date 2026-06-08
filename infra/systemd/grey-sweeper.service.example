@@ -1,0 +1,6 @@
+# Populated in Step 8 (deployment movement). Do not deploy.
+# Placeholder systemd unit for grey-sweeper.
+#
+# In Step 8 this will run grey-sweeper as its own unit, separate from grey-core
+# (it holds Tier A signing capability and must fail independently). Dedicated
+# user, working dir, and log dir. See infra/deploy/deploy.md.

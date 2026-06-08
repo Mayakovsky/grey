@@ -1,0 +1,6 @@
+# Populated in Step 8 (deployment movement). Do not deploy.
+# Placeholder systemd unit for grey-core.
+#
+# In Step 8 this will run grey-core as its own unit: dedicated user, dedicated
+# working directory, dedicated log dir, NO Requires=/Wants= relationship with
+# ElizaOS Grey's unit. See infra/deploy/deploy.md.
