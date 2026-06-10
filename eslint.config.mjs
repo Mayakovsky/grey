@@ -18,6 +18,17 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    // Conventional underscore-ignore for deliberately-unused args/vars/caught errors
+    // (e.g. ported placeholder params). Standard typescript-eslint convention; not a
+    // blanket disable.
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
+    },
+  },
   // Keep ESLint out of formatting's lane — Prettier owns formatting.
   eslintConfigPrettier,
 );
