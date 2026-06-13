@@ -3,7 +3,7 @@
 // constants dropped. Thresholds, weights, keywords, and prompts-adjacent config
 // preserved verbatim (bug-preservation rule).
 
-import type { ScoreWeights } from './types';
+import type { ScoreWeights } from '@grey/schemas';
 
 // ── LLM ──────────────────────────────────────
 

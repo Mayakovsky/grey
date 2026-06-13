@@ -2,7 +2,7 @@
 // Verification pipeline extracted from plugin-wpv (Movement 1 Step 2).
 
 // Domain types + enums
-export * from './types';
+export * from '@grey/schemas';
 
 // Stage functions (FWD-4) + composition
 export * from './pipeline';

@@ -6,7 +6,7 @@ import {
   type StructuralAnalysis,
   type WhitepaperRecord,
   type ExtractedClaim,
-} from '../src/types';
+} from '@grey/schemas';
 
 /** Anthropic client mock that always returns one tool_use block with `input`. */
 export function mockClient(

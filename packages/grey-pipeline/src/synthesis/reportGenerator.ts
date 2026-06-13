@@ -17,7 +17,7 @@ import type {
   Verdict,
   MicaClaimStatus,
   MicaComplianceStatus,
-} from '../types';
+} from '@grey/schemas';
 import { KNOWN_PROTOCOL_PATTERN } from '../constants/protocols';
 
 export interface DiscoveryProvenance {

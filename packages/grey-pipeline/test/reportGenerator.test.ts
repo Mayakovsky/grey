@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ReportGenerator } from '../src/synthesis/reportGenerator';
-import { Verdict, ClaimCategory, type VerificationResult } from '../src/types';
+import { Verdict, ClaimCategory, type VerificationResult } from '@grey/schemas';
 import { emptyAnalysis, fixtureWhitepaper } from './_helpers';
 
 const verification: VerificationResult = {

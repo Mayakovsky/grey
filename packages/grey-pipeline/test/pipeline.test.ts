@@ -10,7 +10,7 @@ import type { PipelineDeps } from '../src/deps';
 import type { GreyDb } from '../src/persistence/client';
 import * as schema from '../src/persistence/schema';
 import { createLogger } from '../src/logger';
-import { Verdict } from '../src/types';
+import { Verdict } from '@grey/schemas';
 import { mockClient, tracker, emptyAnalysis, fixtureWhitepaper, makeClaims } from './_helpers';
 
 // Stage functions don't touch the db; runFullPipeline's persistence is exercised by

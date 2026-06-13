@@ -3,7 +3,7 @@
 // (native fetch + regex HTML strip; no cheerio, no Playwright in core — the optional
 // headlessResolver is injected). Only imports repointed (../types, ../logger).
 
-import type { ResolvedContent } from '../types';
+import type { ResolvedContent } from '@grey/schemas';
 import { createLogger } from '../logger';
 
 const log = createLogger({ operation: 'DocsSiteCrawler' });

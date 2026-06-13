@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ClaimEvaluator } from '../src/evaluation/claimEvaluator';
-import { ClaimCategory, type ExtractedClaim } from '../src/types';
+import { ClaimCategory, type ExtractedClaim } from '@grey/schemas';
 import { mockClient, tracker } from './_helpers';
 
 const tpsClaim: ExtractedClaim = {
