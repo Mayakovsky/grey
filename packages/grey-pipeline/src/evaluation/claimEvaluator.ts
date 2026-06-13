@@ -11,7 +11,7 @@ import type {
   Plausibility,
   Originality,
   Consistency,
-} from '../types';
+} from '@grey/schemas';
 import type { CostTracker } from '../telemetry/costTracker';
 import type { AnthropicClient } from '../clients/anthropic';
 import { GREY_MODEL } from '../constants';

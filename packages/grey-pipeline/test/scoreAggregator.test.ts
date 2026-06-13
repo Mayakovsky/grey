@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ScoreAggregator } from '../src/synthesis/scoreAggregator';
-import { ClaimCategory, Verdict } from '../src/types';
+import { ClaimCategory, Verdict } from '@grey/schemas';
 
 const cs = (category: ClaimCategory, score: number) => ({ category, score });
 

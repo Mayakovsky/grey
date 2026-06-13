@@ -13,8 +13,8 @@ import type {
   VerificationResult,
   WhitepaperRecord,
   FullVerificationReport,
-} from './types';
-import { WhitepaperStatus } from './types';
+} from '@grey/schemas';
+import { WhitepaperStatus } from '@grey/schemas';
 import { GREY_MODEL, LLM_PRICING } from './constants';
 import { StructuralAnalyzer } from './structural/structuralAnalyzer';
 import { ClaimExtractor } from './extraction/claimExtractor';

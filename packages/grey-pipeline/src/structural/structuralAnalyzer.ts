@@ -8,7 +8,7 @@ import type {
   MicaAnalysis,
   MicaClaimStatus,
   MicaComplianceStatus,
-} from '../types';
+} from '@grey/schemas';
 import {
   HYPE_KEYWORDS,
   TECH_KEYWORDS,

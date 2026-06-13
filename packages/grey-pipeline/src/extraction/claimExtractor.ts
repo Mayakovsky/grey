@@ -4,7 +4,7 @@
 // and WPV_MODEL→GREY_MODEL (D-MODEL); the AnthropicClient interface now lives in
 // ../clients/anthropic. Prompts, tool schema, and parsing logic are verbatim.
 
-import type { ExtractedClaim, ClaimCategory } from '../types';
+import type { ExtractedClaim, ClaimCategory } from '@grey/schemas';
 import type { CostTracker } from '../telemetry/costTracker';
 import type { AnthropicClient } from '../clients/anthropic';
 import { GREY_MODEL, CLAIM_EXTRACTION_MAX_TOKENS } from '../constants';

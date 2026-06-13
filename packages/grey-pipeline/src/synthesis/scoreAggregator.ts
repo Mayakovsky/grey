@@ -2,7 +2,7 @@
 // Ported verbatim from plugin-wpv/src/verification/ScoreAggregator.ts. Pure;
 // no ElizaOS, no deps. Aggregates per-claim scores → confidence + focus areas + verdict.
 
-import type { ClaimCategory, Verdict, ScoreWeights } from '../types';
+import type { ClaimCategory, Verdict, ScoreWeights } from '@grey/schemas';
 import { DEFAULT_SCORE_WEIGHTS, VERDICT_THRESHOLDS, MIN_EVALUABLE_CLAIMS } from '../constants';
 
 export class ScoreAggregator {
