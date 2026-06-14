@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/daily_greenlight_list.schema.json",
+  "title": "DailyGreenlightListResponse",
+  "description": "Response payload for the daily_greenlight_list free resource. Derived from GREENLIGHT_SPEC (plugin-wpv/src/acp/AgentCardConfig.ts:124-132).",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Calendar date of the greenlight batch (ISO 8601 YYYY-MM-DD)."
+    },
+    "totalVerified": { "type": "number", "minimum": 0 },
+    "projects": { "type": "array" }
+  },
+  "required": ["date", "totalVerified", "projects"]
+}

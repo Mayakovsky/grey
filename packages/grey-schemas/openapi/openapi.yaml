@@ -1,0 +1,244 @@
+openapi: 3.1.0
+info:
+  title: Whitepaper Grey API
+  version: 1.0.0
+  description: >
+    HTTP contract for Whitepaper Grey's v1 offerings. Every response is a
+    GreyResponseEnvelope wrapping exactly one of `payload` / `error`. Authored in
+    Movement 2.5 (schema layer); routes are placeholders that Movement 3 (grey-core)
+    is authoritative for and may relocate. x402 payment integration is Movement 5;
+    this document declares the payment CONTRACT only, not its implementation.
+servers:
+  - url: https://whitepapergrey.com
+    description: Live domain
+  - url: http://localhost:3001
+    description: Local dev (NEW_GREY_PORT)
+
+components:
+  securitySchemes:
+    x402PaymentRequired:
+      type: apiKey
+      in: header
+      name: X-PAYMENT
+      description: |
+        x402 payment authorization (NOT an API key — see semantic note below).
+
+        Clients receive HTTP 402 with a PaymentRequirements body specifying
+        maxAmountRequired, payTo, asset, network, expiresAt, and nonce.
+        Clients sign an EIP-712 payment authorization and submit it in the
+        X-PAYMENT header (base64-encoded JSON) on retry. Server validates
+        the signature, broadcasts the payment, returns the API response.
+
+        Semantic note: this is per-request payment, not persistent
+        authentication. OpenAPI 3.1 has no native payment scheme; apiKey
+        is used for tooling compatibility (codegen header recognition).
+        Authoritative protocol details in x-x402-* extensions below.
+
+        Protocol spec: https://x402.org
+      x-x402-spec-version: "1"
+      x-x402-protocol-url: "https://x402.org"
+      x-x402-network: "base-mainnet"
+      x-x402-asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      x-x402-scheme: "exact"
+  schemas:
+    GreyResponseEnvelope:
+      $ref: ../src/responses/v1/envelope.schema.json
+
+paths:
+  /v1/offerings/legitimacy_scan:
+    post:
+      operationId: legitimacyScan
+      summary: Project Legitimacy Scan
+      description: "Path placeholder; M3-authoritative. Cache or live L1."
+      security: [{ x402PaymentRequired: [] }]
+      x-x402-pricing: "0.25"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token_address: { type: string }
+                project_name: { type: string }
+              required: [token_address]
+      responses:
+        "200":
+          description: GreyResponseEnvelope with a LegitimacyScanResponse payload.
+          content:
+            application/json:
+              schema:
+                $ref: ../src/responses/v1/envelope.schema.json
+
+  /v1/offerings/verify_whitepaper:
+    post:
+      operationId: verifyWhitepaper
+      summary: Verify Project Whitepaper
+      description: "Path placeholder; M3-authoritative. Cache or live L1+L2."
+      security: [{ x402PaymentRequired: [] }]
+      x-x402-pricing: "1.50"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token_address: { type: string }
+                project_name: { type: string }
+                document_url: { type: string }
+              required: [token_address]
+      responses:
+        "200":
+          description: GreyResponseEnvelope with a VerifyWhitepaperResponse payload.
+          content:
+            application/json:
+              schema:
+                $ref: ../src/responses/v1/envelope.schema.json
+
+  /v1/offerings/verify_full_tech:
+    post:
+      operationId: verifyFullTech
+      summary: Full Technical Verification
+      description: "Path placeholder; M3-authoritative. Cache or live L1+L2+L3."
+      security: [{ x402PaymentRequired: [] }]
+      x-x402-pricing: "3.00"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token_address: { type: string }
+                project_name: { type: string }
+                document_url: { type: string }
+              required: [token_address]
+      responses:
+        "200":
+          description: GreyResponseEnvelope with a VerifyFullTechResponse payload.
+          content:
+            application/json:
+              schema:
+                $ref: ../src/responses/v1/envelope.schema.json
+
+  /v1/offerings/claim_extraction:
+    post:
+      operationId: claimExtraction
+      summary: Claim Extraction
+      description: "Path placeholder; M3-authoritative. L1+L2 against a buyer-provided URL."
+      security: [{ x402PaymentRequired: [] }]
+      x-x402-pricing: "0.75"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                whitepaperUrl: { type: string }
+              required: [whitepaperUrl]
+      responses:
+        "200":
+          description: GreyResponseEnvelope with a ClaimExtractionResponse payload.
+          content:
+            application/json:
+              schema:
+                $ref: ../src/responses/v1/envelope.schema.json
+
+  /v1/offerings/claim_history:
+    post:
+      operationId: claimHistory
+      summary: Claim History
+      description: "Path placeholder; M3-authoritative. Read-only DB lookup."
+      security: [{ x402PaymentRequired: [] }]
+      x-x402-pricing: "0.25"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                projectIdentifier: { type: string }
+              required: [projectIdentifier]
+      responses:
+        "200":
+          description: GreyResponseEnvelope with a ClaimHistoryResponse payload.
+          content:
+            application/json:
+              schema:
+                $ref: ../src/responses/v1/envelope.schema.json
+
+  /v1/offerings/quick_protocol_facts:
+    post:
+      operationId: quickProtocolFacts
+      summary: Quick Protocol Facts
+      description: "Path placeholder; M3-authoritative. Cache-only lookup."
+      security: [{ x402PaymentRequired: [] }]
+      x-x402-pricing: "0.30"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                projectQuery: { type: string }
+              required: [projectQuery]
+      responses:
+        "200":
+          description: GreyResponseEnvelope with a QuickProtocolFactsResponse payload.
+          content:
+            application/json:
+              schema:
+                $ref: ../src/responses/v1/envelope.schema.json
+
+  /v1/offerings/daily_tech_brief:
+    post:
+      operationId: dailyTechBrief
+      summary: Daily Technical Briefing
+      description: "Path placeholder; M3-authoritative. DB aggregation of recent verifications."
+      security: [{ x402PaymentRequired: [] }]
+      x-x402-pricing: "8.00"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date: { type: string }
+      responses:
+        "200":
+          description: GreyResponseEnvelope with a DailyTechBriefResponse payload.
+          content:
+            application/json:
+              schema:
+                $ref: ../src/responses/v1/envelope.schema.json
+
+  /v1/resources/daily_greenlight_list:
+    get:
+      operationId: dailyGreenlightList
+      summary: Daily Greenlight List (free resource)
+      description: "Path placeholder; M3-authoritative. Free — no x402 payment required."
+      responses:
+        "200":
+          description: GreyResponseEnvelope with a DailyGreenlightListResponse payload.
+          content:
+            application/json:
+              schema:
+                $ref: ../src/responses/v1/envelope.schema.json
+
+  /v1/resources/scam_alert_feed:
+    get:
+      operationId: scamAlertFeed
+      summary: Scam Alert Feed (free resource)
+      description: "Path placeholder; M3-authoritative. Free — no x402 payment required."
+      responses:
+        "200":
+          description: GreyResponseEnvelope with a ScamAlertFeedResponse payload.
+          content:
+            application/json:
+              schema:
+                $ref: ../src/responses/v1/envelope.schema.json

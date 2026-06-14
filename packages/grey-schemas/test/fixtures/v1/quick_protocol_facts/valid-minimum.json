@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "v1",
+  "offering": "quick_protocol_facts",
+  "requestId": "req-0001",
+  "agent": {
+    "did": "did:placeholder:grey",
+    "name": "Whitepaper Grey",
+    "runtime": "grey-core"
+  },
+  "subject": {
+    "tokenAddress": "0x0000000000000000000000000000000000000000",
+    "projectName": "Example"
+  },
+  "payload": {
+    "project": {},
+    "type": null,
+    "miCAStatus": null,
+    "headlineVerdict": "NOT_IN_DATABASE",
+    "lastVerified": null,
+    "sources": []
+  },
+  "metadata": {
+    "costUsd": 0.01,
+    "model": "claude-sonnet-4-6",
+    "latencyMs": 120,
+    "timestamp": "2026-06-13T00:00:00.000Z",
+    "cacheHit": false
+  }
+}

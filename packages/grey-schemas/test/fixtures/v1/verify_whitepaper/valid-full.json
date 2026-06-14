@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "v1",
+  "offering": "verify_whitepaper",
+  "requestId": "req-0001",
+  "agent": {
+    "did": "did:placeholder:grey",
+    "name": "Whitepaper Grey",
+    "runtime": "grey-core"
+  },
+  "subject": {
+    "tokenAddress": "0x0000000000000000000000000000000000000000",
+    "projectName": "Example"
+  },
+  "payload": {
+    "projectName": "Example",
+    "tokenAddress": "0xabc",
+    "structuralScore": 4,
+    "verdict": "PASS",
+    "hypeTechRatio": 0.5,
+    "claimCount": 3,
+    "claimsMicaCompliance": "NOT_MENTIONED",
+    "micaCompliant": "NOT_APPLICABLE",
+    "micaSummary": "n/a",
+    "generatedAt": "2026-06-13T00:00:00.000Z",
+    "discoveryStatus": "cached",
+    "discoverySourceTier": 0,
+    "discoveryAttempts": [
+      {
+        "tier": 0,
+        "status": "cached",
+        "structuralScore": 4,
+        "claimCount": 3,
+        "note": "hit"
+      }
+    ],
+    "claims": [
+      {
+        "claimId": "c1",
+        "category": "TOKENOMICS",
+        "claimText": "claim 1",
+        "statedEvidence": "p.1",
+        "mathematicalProofPresent": false,
+        "sourceSection": "Tokenomics",
+        "regulatoryRelevance": false
+      },
+      {
+        "claimId": "c2",
+        "category": "TOKENOMICS",
+        "claimText": "claim 2",
+        "statedEvidence": "p.1",
+        "mathematicalProofPresent": false,
+        "sourceSection": "Tokenomics",
+        "regulatoryRelevance": false
+      }
+    ],
+    "claimScores": {
+      "c1": 0.8,
+      "c2": 0.6
+    },
+    "logicSummary": "detailed"
+  },
+  "metadata": {
+    "costUsd": 0.01,
+    "model": "claude-sonnet-4-6",
+    "latencyMs": 120,
+    "timestamp": "2026-06-13T00:00:00.000Z",
+    "cacheHit": false
+  }
+}

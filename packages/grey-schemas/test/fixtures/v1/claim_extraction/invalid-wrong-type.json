@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "v1",
+  "offering": "claim_extraction",
+  "requestId": "req-0001",
+  "agent": {
+    "did": "did:placeholder:grey",
+    "name": "Whitepaper Grey",
+    "runtime": "grey-core"
+  },
+  "subject": {
+    "tokenAddress": "0x0000000000000000000000000000000000000000",
+    "projectName": "Example"
+  },
+  "payload": {
+    "whitepaper": {
+      "id": "wp-1"
+    },
+    "structuralAnalysis": {
+      "hasAbstract": true
+    },
+    "claims": "none",
+    "tokenAddress": "0xabc"
+  },
+  "metadata": {
+    "costUsd": 0.01,
+    "model": "claude-sonnet-4-6",
+    "latencyMs": 120,
+    "timestamp": "2026-06-13T00:00:00.000Z",
+    "cacheHit": false
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "v1",
+  "offering": "daily_greenlight_list",
+  "requestId": "req-0001",
+  "agent": {
+    "did": "did:placeholder:grey",
+    "name": "Whitepaper Grey",
+    "runtime": "grey-core"
+  },
+  "subject": {
+    "tokenAddress": "0x0000000000000000000000000000000000000000",
+    "projectName": "Example"
+  },
+  "payload": {
+    "date": "2026-06-13",
+    "totalVerified": 1,
+    "projects": [
+      {
+        "projectName": "Example"
+      }
+    ]
+  },
+  "metadata": {
+    "costUsd": 0.01,
+    "model": "claude-sonnet-4-6",
+    "latencyMs": 120,
+    "timestamp": "2026-06-13T00:00:00.000Z",
+    "cacheHit": false
+  }
+}

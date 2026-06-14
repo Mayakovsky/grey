@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "v1",
+  "offering": "legitimacy_scan",
+  "requestId": "req-0001",
+  "agent": {
+    "did": "did:placeholder:grey",
+    "name": "Whitepaper Grey",
+    "runtime": "grey-core"
+  },
+  "subject": {
+    "tokenAddress": "0x0000000000000000000000000000000000000000",
+    "projectName": "Example"
+  },
+  "payload": {
+    "projectName": "Example",
+    "tokenAddress": "0xabc",
+    "structuralScore": 4,
+    "verdict": "PASS",
+    "hypeTechRatio": 0.5,
+    "claimCount": 3,
+    "claimsMicaCompliance": "NOT_MENTIONED",
+    "micaCompliant": "NOT_APPLICABLE",
+    "micaSummary": "n/a",
+    "generatedAt": "2026-06-13T00:00:00.000Z",
+    "discoveryStatus": "cached",
+    "discoverySourceTier": 0,
+    "discoveryAttempts": [
+      {
+        "tier": 0,
+        "status": "cached",
+        "structuralScore": 4,
+        "claimCount": 3,
+        "note": "hit"
+      }
+    ]
+  },
+  "metadata": {
+    "costUsd": 0.01,
+    "model": "claude-sonnet-4-6",
+    "latencyMs": 120,
+    "timestamp": "2026-06-13T00:00:00.000Z",
+    "cacheHit": false
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/envelope.schema.json",
+  "title": "GreyResponseEnvelope",
+  "description": "Common response envelope for all Grey v1 offerings. Exactly one of `payload` / `error` is present. `payload` is discriminated on `offering` via allOf[if/then] (JSON Schema 2020-12 has no native discriminator keyword; a bare oneOf of the response $refs is ambiguous because the tier schemas are nested supersets).",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": "v1",
+      "description": "Envelope contract version. Literal 'v1' for the M2.5 layer."
+    },
+    "offering": {
+      "type": "string",
+      "description": "Canonical offering slug. Discriminates the payload shape.",
+      "enum": [
+        "legitimacy_scan",
+        "verify_whitepaper",
+        "verify_full_tech",
+        "claim_extraction",
+        "claim_history",
+        "quick_protocol_facts",
+        "daily_tech_brief",
+        "daily_greenlight_list",
+        "scam_alert_feed"
+      ]
+    },
+    "requestId": { "type": "string", "description": "Correlation id (UUID)." },
+    "agent": {
+      "type": "object",
+      "properties": {
+        "did": {
+          "type": "string",
+          "description": "Agent DID. Placeholder-tolerant in M2.5 (real DIDs minted in M4); accepts any did:* namespace (e.g. did:erc8004:..., did:placeholder:grey)."
+        },
+        "name": { "type": "string" },
+        "runtime": { "type": "string" }
+      },
+      "required": ["did", "name", "runtime"]
+    },
+    "subject": {
+      "type": "object",
+      "properties": {
+        "tokenAddress": { "type": ["string", "null"] },
+        "projectName": { "type": "string" }
+      },
+      "required": ["tokenAddress", "projectName"]
+    },
+    "payload": {
+      "type": "object",
+      "description": "Offering response payload. Shape is bound to `offering` by the allOf[if/then] clauses below."
+    },
+    "error": {
+      "type": "object",
+      "description": "Present instead of `payload` on a true failure. Cache-miss verdicts (NOT_IN_DATABASE, INSUFFICIENT_DATA) are valid payloads, not errors.",
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "BAD_REQUEST",
+            "PAYMENT_REQUIRED",
+            "PAYMENT_INSUFFICIENT",
+            "RATE_LIMITED",
+            "PIPELINE_ERROR",
+            "UPSTREAM_TIMEOUT",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "message": { "type": "string" },
+        "retryable": { "type": "boolean" }
+      },
+      "required": ["code", "message", "retryable"]
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "costUsd": { "type": "number" },
+        "model": { "type": "string" },
+        "latencyMs": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "ISO 8601 UTC." },
+        "cacheHit": { "type": "boolean" }
+      },
+      "required": ["costUsd", "model", "latencyMs", "timestamp", "cacheHit"]
+    }
+  },
+  "required": ["schemaVersion", "offering", "requestId", "agent", "subject", "metadata"],
+  "oneOf": [
+    { "type": "object", "required": ["payload"], "properties": { "payload": true, "error": false } },
+    { "type": "object", "required": ["error"], "properties": { "error": true, "payload": false } }
+  ],
+  "allOf": [
+    {
+      "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "legitimacy_scan" } } },
+      "then": { "type": "object", "properties": { "payload": { "$ref": "legitimacy_scan.schema.json" } } }
+    },
+    {
+      "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "verify_whitepaper" } } },
+      "then": { "type": "object", "properties": { "payload": { "$ref": "verify_whitepaper.schema.json" } } }
+    },
+    {
+      "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "verify_full_tech" } } },
+      "then": { "type": "object", "properties": { "payload": { "$ref": "verify_full_tech.schema.json" } } }
+    },
+    {
+      "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "claim_extraction" } } },
+      "then": { "type": "object", "properties": { "payload": { "$ref": "claim_extraction.schema.json" } } }
+    },
+    {
+      "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "claim_history" } } },
+      "then": { "type": "object", "properties": { "payload": { "$ref": "claim_history.schema.json" } } }
+    },
+    {
+      "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "quick_protocol_facts" } } },
+      "then": { "type": "object", "properties": { "payload": { "$ref": "quick_protocol_facts.schema.json" } } }
+    },
+    {
+      "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "daily_tech_brief" } } },
+      "then": { "type": "object", "properties": { "payload": { "$ref": "daily_tech_brief.schema.json" } } }
+    },
+    {
+      "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "daily_greenlight_list" } } },
+      "then": { "type": "object", "properties": { "payload": { "$ref": "daily_greenlight_list.schema.json" } } }
+    },
+    {
+      "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "scam_alert_feed" } } },
+      "then": { "type": "object", "properties": { "payload": { "$ref": "scam_alert_feed.schema.json" } } }
+    }
+  ],
+  "unevaluatedProperties": false
+}

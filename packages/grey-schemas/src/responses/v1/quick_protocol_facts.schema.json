@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/quick_protocol_facts.schema.json",
+  "title": "QuickProtocolFactsResponse",
+  "description": "Response payload for the quick_protocol_facts offering. Derived from QUICK_PROTOCOL_FACTS_FIELDS (plugin-wpv/src/acp/AgentCardConfig.ts:157-165). Cache-only; returns NOT_IN_DATABASE headlineVerdict on a miss.",
+  "type": "object",
+  "properties": {
+    "project": { "type": "object" },
+    "type": { "type": ["string", "null"] },
+    "miCAStatus": { "type": ["string", "null"] },
+    "headlineVerdict": { "$ref": "_shared.schema.json#/$defs/Verdict" },
+    "lastVerified": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of the last verification, or null if never verified."
+    },
+    "sources": { "type": "array" },
+    "note": { "type": ["string", "null"] }
+  },
+  "required": ["project", "type", "miCAStatus", "headlineVerdict", "lastVerified", "sources"]
+}

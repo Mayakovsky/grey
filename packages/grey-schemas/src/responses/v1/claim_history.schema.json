@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/claim_history.schema.json",
+  "title": "ClaimHistoryResponse",
+  "description": "Response payload for the claim_history offering. Derived from CLAIM_HISTORY_FIELDS (plugin-wpv/src/acp/AgentCardConfig.ts:143-148).",
+  "type": "object",
+  "properties": {
+    "project": { "type": "object" },
+    "verifications": { "type": "array" },
+    "claims": { "type": "array" },
+    "note": { "type": ["string", "null"] }
+  },
+  "required": ["project", "verifications", "claims"]
+}

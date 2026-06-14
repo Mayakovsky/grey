@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/claim_extraction.schema.json",
+  "title": "ClaimExtractionResponse",
+  "description": "Response payload for the claim_extraction offering. Derived from CLAIM_EXTRACTION_FIELDS (plugin-wpv/src/acp/AgentCardConfig.ts:174-179).",
+  "type": "object",
+  "properties": {
+    "whitepaper": { "type": "object" },
+    "structuralAnalysis": { "type": "object" },
+    "claims": { "type": "array" },
+    "tokenAddress": { "type": ["string", "null"] }
+  },
+  "required": ["whitepaper", "structuralAnalysis", "claims", "tokenAddress"]
+}
