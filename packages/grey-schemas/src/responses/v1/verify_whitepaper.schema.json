@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/verify_whitepaper.schema.json",
+  "title": "VerifyWhitepaperResponse",
+  "description": "Response payload for the verify_whitepaper offering. Derived from TokenomicsAuditReport (extends LegitimacyScanReport) in @grey/schemas/src/index.ts.",
+  "type": "object",
+  "allOf": [{ "$ref": "legitimacy_scan.schema.json" }],
+  "properties": {
+    "claims": {
+      "type": "array",
+      "items": { "$ref": "_shared.schema.json#/$defs/ExtractedClaim" }
+    },
+    "claimScores": {
+      "type": "object",
+      "description": "Per-claim aggregate score, real range 0–1. Always populated for evaluated claims (no `null` sentinel — claim IDs without an entry indicate the claim was not in the input set, not 'unscored').",
+      "additionalProperties": { "type": "number" }
+    },
+    "logicSummary": { "type": "string" }
+  },
+  "required": ["claims", "claimScores", "logicSummary"]
+}

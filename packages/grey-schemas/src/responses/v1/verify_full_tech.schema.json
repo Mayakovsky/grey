@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/verify_full_tech.schema.json",
+  "title": "VerifyFullTechResponse",
+  "description": "Response payload for the verify_full_tech offering. Derived from FullVerificationReport (extends TokenomicsAuditReport) in @grey/schemas/src/index.ts.",
+  "type": "object",
+  "allOf": [{ "$ref": "verify_whitepaper.schema.json" }],
+  "properties": {
+    "confidenceScore": { "type": "number", "description": "0–100." },
+    "evaluations": {
+      "type": "array",
+      "items": { "$ref": "_shared.schema.json#/$defs/ClaimEvaluation" }
+    },
+    "focusAreaScores": {
+      "type": "object",
+      "description": "Per-category aggregate score. `null` means the category had zero claims to score; `0` would be a real low score. Consumers MUST distinguish `null` from `0`. Keys are lowercase category names.",
+      "additionalProperties": { "type": ["number", "null"] }
+    },
+    "llmTokensUsed": { "type": "number" },
+    "computeCostUsd": { "type": "number" }
+  },
+  "required": [
+    "confidenceScore",
+    "evaluations",
+    "focusAreaScores",
+    "llmTokensUsed",
+    "computeCostUsd"
+  ]
+}

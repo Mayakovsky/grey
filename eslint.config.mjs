@@ -14,6 +14,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/.turbo/**',
       '**/coverage/**',
+      '**/generated/**',
     ],
   },
   js.configs.recommended,

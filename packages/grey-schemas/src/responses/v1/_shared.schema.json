@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/_shared.schema.json",
+  "title": "GreySharedDefs",
+  "description": "Shared $defs for the Grey v1 response schemas. Enums + reused interfaces, derived from @grey/schemas/src/index.ts (M2 domain types). 7 real TS enums + 3 union type aliases + 6 reused interfaces. The enum-vs-union distinction is TS-side only (the enum-drift test mechanism differs); at the JSON Schema level all closed value sets use `enum` arrays.",
+  "$defs": {
+    "Verdict": {
+      "type": "string",
+      "enum": ["PASS", "CONDITIONAL", "FAIL", "INSUFFICIENT_DATA", "NOT_IN_DATABASE"]
+    },
+    "ClaimCategory": {
+      "type": "string",
+      "enum": ["TOKENOMICS", "PERFORMANCE", "CONSENSUS", "SCIENTIFIC"]
+    },
+    "WhitepaperStatus": {
+      "type": "string",
+      "enum": ["DISCOVERED", "INGESTED", "VERIFYING", "VERIFIED", "FAILED"]
+    },
+    "MathValidity": {
+      "type": "string",
+      "enum": ["VALID", "FLAWED", "UNVERIFIABLE"]
+    },
+    "Plausibility": {
+      "type": "string",
+      "enum": ["HIGH", "LOW", "OUTLIER"]
+    },
+    "Originality": {
+      "type": "string",
+      "enum": ["NOVEL", "DERIVATIVE", "PLAGIARIZED"]
+    },
+    "Consistency": {
+      "type": "string",
+      "enum": ["CONSISTENT", "CONTRADICTED"]
+    },
+    "MicaClaimStatus": {
+      "description": "Union type alias (TS-side); whether a whitepaper claims MiCA compliance.",
+      "type": "string",
+      "enum": ["YES", "NO", "NOT_MENTIONED"]
+    },
+    "MicaComplianceStatus": {
+      "description": "Union type alias (TS-side); assessed MiCA compliance state.",
+      "type": "string",
+      "enum": ["YES", "NO", "PARTIAL", "NOT_APPLICABLE"]
+    },
+    "DiscoveryStatus": {
+      "description": "Union type alias (TS-side); tier selection outcome for the whitepaper source.",
+      "type": "string",
+      "enum": ["cached", "provided", "primary", "community", "aggregator", "failed"]
+    },
+    "ExtractedClaim": {
+      "type": "object",
+      "description": "A single testable claim extracted from a whitepaper (L2 output).",
+      "properties": {
+        "claimId": { "type": "string" },
+        "category": { "$ref": "#/$defs/ClaimCategory" },
+        "claimText": { "type": "string" },
+        "statedEvidence": { "type": "string" },
+        "mathematicalProofPresent": { "type": "boolean" },
+        "sourceSection": { "type": "string" },
+        "regulatoryRelevance": {
+          "type": "boolean",
+          "description": "True if the claim relates to regulatory compliance (MiCA, KYC/AML, ESMA, etc.)."
+        }
+      },
+      "required": [
+        "claimId",
+        "category",
+        "claimText",
+        "statedEvidence",
+        "mathematicalProofPresent",
+        "sourceSection",
+        "regulatoryRelevance"
+      ]
+    },
+    "ClaimEvaluation": {
+      "type": "object",
+      "description": "Per-claim evaluation result (L3 output). All scoring fields optional; absent means that method did not run for the claim.",
+      "properties": {
+        "claimId": { "type": "string" },
+        "mathValidity": { "$ref": "#/$defs/MathValidity" },
+        "benchmarkDelta": { "type": "number" },
+        "plausibility": { "$ref": "#/$defs/Plausibility" },
+        "citationSupportsClaim": { "type": ["boolean", "null"] },
+        "originality": { "$ref": "#/$defs/Originality" },
+        "consistency": { "$ref": "#/$defs/Consistency" }
+      },
+      "required": ["claimId"]
+    },
+    "DiscoveryAttempt": {
+      "type": "object",
+      "description": "Per-tier record for the discoveryAttempts array in deliverables.",
+      "properties": {
+        "tier": { "type": "number", "description": "0..4" },
+        "status": {
+          "description": "DiscoveryStatus | 'skipped' | 'error'.",
+          "anyOf": [
+            { "$ref": "#/$defs/DiscoveryStatus" },
+            { "type": "string", "enum": ["skipped", "error"] }
+          ]
+        },
+        "structuralScore": { "type": "number" },
+        "claimCount": { "type": "number" },
+        "note": { "type": "string" }
+      },
+      "required": ["tier", "status"]
+    },
+    "MicaAnalysis": {
+      "type": "object",
+      "properties": {
+        "claimsMicaCompliance": { "$ref": "#/$defs/MicaClaimStatus" },
+        "micaCompliant": { "$ref": "#/$defs/MicaComplianceStatus" },
+        "micaSummary": { "type": "string" },
+        "micaSectionsFound": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Which of the 7 required MiCA sections were found."
+        },
+        "micaSectionsMissing": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Which of the 7 required MiCA sections are missing."
+        }
+      },
+      "required": [
+        "claimsMicaCompliance",
+        "micaCompliant",
+        "micaSummary",
+        "micaSectionsFound",
+        "micaSectionsMissing"
+      ]
+    },
+    "StructuralAnalysis": {
+      "type": "object",
+      "description": "L1 structural analysis output.",
+      "properties": {
+        "hasAbstract": { "type": "boolean" },
+        "hasMethodology": { "type": "boolean" },
+        "hasTokenomics": { "type": "boolean" },
+        "hasReferences": { "type": "boolean" },
+        "citationCount": { "type": "number" },
+        "verifiedCitationRatio": { "type": "number" },
+        "hasMath": { "type": "boolean" },
+        "mathDensityScore": { "type": "number" },
+        "coherenceScore": { "type": "number" },
+        "similarityTopMatch": { "type": ["string", "null"] },
+        "similarityScore": { "type": "number" },
+        "hasAuthors": { "type": "boolean" },
+        "hasDates": { "type": "boolean" },
+        "mica": { "$ref": "#/$defs/MicaAnalysis" }
+      },
+      "required": [
+        "hasAbstract",
+        "hasMethodology",
+        "hasTokenomics",
+        "hasReferences",
+        "citationCount",
+        "verifiedCitationRatio",
+        "hasMath",
+        "mathDensityScore",
+        "coherenceScore",
+        "similarityTopMatch",
+        "similarityScore",
+        "hasAuthors",
+        "hasDates",
+        "mica"
+      ]
+    },
+    "WhitepaperRecord": {
+      "type": "object",
+      "description": "Canonical whitepaper record. ingestedAt is a Date in the pipeline; at the response boundary it serializes to an ISO 8601 date-time string (Q7).",
+      "properties": {
+        "id": { "type": "string" },
+        "projectName": { "type": "string" },
+        "tokenAddress": { "type": ["string", "null"] },
+        "chain": { "type": "string" },
+        "documentUrl": { "type": "string" },
+        "ipfsCid": { "type": ["string", "null"] },
+        "knowledgeItemId": { "type": ["string", "null"] },
+        "pageCount": { "type": "number" },
+        "ingestedAt": { "type": "string", "format": "date-time" },
+        "status": { "$ref": "#/$defs/WhitepaperStatus" },
+        "selectionScore": { "type": "number" },
+        "metadataJson": { "type": "object" }
+      },
+      "required": [
+        "id",
+        "projectName",
+        "tokenAddress",
+        "chain",
+        "documentUrl",
+        "ipfsCid",
+        "knowledgeItemId",
+        "pageCount",
+        "ingestedAt",
+        "status",
+        "selectionScore",
+        "metadataJson"
+      ]
+    }
+  }
+}

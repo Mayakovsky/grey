@@ -5,10 +5,26 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./responses": "./src/responses/index.ts",
+    "./envelope": "./src/envelope/index.ts",
+    "./validators": "./src/validators/index.ts",
+    "./openapi": "./openapi/openapi.yaml"
+  },
   "scripts": {
     "build": "echo \"@grey/schemas: no build in Step 1\"",
     "lint": "eslint . --no-error-on-unmatched-pattern",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "codegen": "tsx scripts/codegen.ts"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "json-schema-to-typescript": "^15.0.4",
+    "tsx": "^4.22.4"
   }
 }

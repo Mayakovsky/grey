@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/daily_tech_brief.schema.json",
+  "title": "DailyTechBriefResponse",
+  "description": "Response payload for the daily_tech_brief offering. Derived from DailyBriefingReport (@grey/schemas/src/index.ts).",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Calendar date of the briefing batch (ISO 8601 YYYY-MM-DD)."
+    },
+    "totalVerified": { "type": "number" },
+    "whitepapers": {
+      "type": "array",
+      "items": { "$ref": "verify_full_tech.schema.json" }
+    }
+  },
+  "required": ["date", "totalVerified", "whitepapers"]
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/legitimacy_scan.schema.json",
+  "title": "LegitimacyScanResponse",
+  "description": "Response payload for the legitimacy_scan offering. Derived from LegitimacyScanReport (@grey/schemas/src/index.ts).",
+  "type": "object",
+  "properties": {
+    "projectName": { "type": "string" },
+    "tokenAddress": { "type": ["string", "null"] },
+    "structuralScore": {
+      "type": "number",
+      "description": "Structural completeness score. Real scores are integers 1–5. The value `0` is a sentinel meaning 'structural analysis not performed' (e.g., for cache-miss responses). Consumers MUST treat `0` as 'not analyzed,' not as 'worst possible score.'"
+    },
+    "verdict": { "$ref": "_shared.schema.json#/$defs/Verdict" },
+    "hypeTechRatio": { "type": "number" },
+    "claimCount": { "type": "number" },
+    "claimsMicaCompliance": { "$ref": "_shared.schema.json#/$defs/MicaClaimStatus" },
+    "micaCompliant": { "$ref": "_shared.schema.json#/$defs/MicaComplianceStatus" },
+    "micaSummary": { "type": "string" },
+    "generatedAt": { "type": "string", "format": "date-time", "description": "ISO 8601 UTC timestamp." },
+    "discoveryStatus": { "$ref": "_shared.schema.json#/$defs/DiscoveryStatus" },
+    "discoverySourceTier": { "type": ["number", "null"] },
+    "discoveryAttempts": {
+      "type": "array",
+      "items": { "$ref": "_shared.schema.json#/$defs/DiscoveryAttempt" }
+    }
+  },
+  "required": [
+    "projectName",
+    "tokenAddress",
+    "structuralScore",
+    "verdict",
+    "hypeTechRatio",
+    "claimCount",
+    "claimsMicaCompliance",
+    "micaCompliant",
+    "micaSummary",
+    "generatedAt"
+  ]
+}

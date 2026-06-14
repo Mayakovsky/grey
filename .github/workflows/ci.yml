@@ -24,6 +24,20 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
+  codegen-drift:
+    name: codegen-drift (@grey/schemas generated output is committed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6 # reads packageManager from package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C packages/grey-schemas codegen
+      - run: git diff --exit-code packages/grey-schemas/src/generated/
+
   build:
     name: build (main only)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

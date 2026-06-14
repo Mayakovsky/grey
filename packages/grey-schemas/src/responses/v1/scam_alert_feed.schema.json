@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/scam_alert_feed.schema.json",
+  "title": "ScamAlertFeedResponse",
+  "description": "Response payload for the scam_alert_feed free resource. Derived from SCAM_ALERT_SPEC (plugin-wpv/src/acp/AgentCardConfig.ts:134-141).",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Calendar date of the scam-alert batch (ISO 8601 YYYY-MM-DD)."
+    },
+    "flagged": { "type": "array" }
+  },
+  "required": ["date", "flagged"]
+}
