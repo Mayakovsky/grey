@@ -16,3 +16,6 @@ export type { DailyGreenlightListResponse } from '../generated/v1/DailyGreenligh
 export type { ScamAlertFeedResponse } from '../generated/v1/ScamAlertFeedResponse';
 export type { GreyResponseEnvelope } from '../generated/v1/GreyResponseEnvelope';
 export type * from '../generated/v1/_shared';
+
+// M3 (Q6/FDQ-9): offering slug taxonomy + ResponseFor<O> type map (type-only; verbatimModuleSyntax).
+export type * from './types';

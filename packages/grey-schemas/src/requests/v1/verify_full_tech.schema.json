@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/requests/verify_full_tech.schema.json",
+  "title": "VerifyFullTechRequest",
+  "description": "Request body for the verify_full_tech offering. Field shapes ground-truthed from plugin-wpv AgentCardConfig.ts inputSchema (M3 FDQ-2).",
+  "type": "object",
+  "properties": {
+    "token_address": { "type": "string" },
+    "project_name": { "type": "string" },
+    "document_url": { "type": "string" }
+  },
+  "required": ["token_address"],
+  "additionalProperties": false
+}

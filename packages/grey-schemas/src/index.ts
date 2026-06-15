@@ -209,3 +209,8 @@ export interface ScoreWeights {
   originality: number; // default 0.15
   consistency: number; // default 0.10
 }
+
+// ── M3 (Q6/FDQ-9): offering slug taxonomy + ResponseFor<O> type map ──
+// Additive type-only re-export (verbatimModuleSyntax: true, Invariant 7). Does NOT modify any
+// existing M2-promoted type above (bug-preservation).
+export type { OfferingSlug, ResponseFor } from './responses/types';

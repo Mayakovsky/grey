@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/requests/claim_extraction.schema.json",
+  "title": "ClaimExtractionRequest",
+  "description": "Request body for the claim_extraction offering. URL-only input. Field shapes ground-truthed from plugin-wpv AgentCardConfig.ts inputSchema (M3 FDQ-2).",
+  "type": "object",
+  "properties": {
+    "whitepaperUrl": { "type": "string" }
+  },
+  "required": ["whitepaperUrl"],
+  "additionalProperties": false
+}
