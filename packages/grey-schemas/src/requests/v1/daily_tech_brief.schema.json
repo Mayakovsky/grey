@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/requests/daily_tech_brief.schema.json",
+  "title": "DailyTechBriefRequest",
+  "description": "Request body for the daily_tech_brief offering. Optional calendar date (defaults to latest batch). Field shapes ground-truthed from plugin-wpv AgentCardConfig.ts inputSchema (M3 FDQ-2).",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Optional YYYY-MM-DD calendar date. Omitted = latest daily batch."
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

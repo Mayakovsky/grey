@@ -6,6 +6,8 @@
 import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 
+import type { PaidOfferingSlug } from '../responses/types';
+
 import sharedSchema from '../responses/v1/_shared.schema.json';
 import legitimacyScanSchema from '../responses/v1/legitimacy_scan.schema.json';
 import verifyWhitepaperSchema from '../responses/v1/verify_whitepaper.schema.json';
@@ -18,8 +20,18 @@ import dailyGreenlightListSchema from '../responses/v1/daily_greenlight_list.sch
 import scamAlertFeedSchema from '../responses/v1/scam_alert_feed.schema.json';
 import envelopeSchema from '../responses/v1/envelope.schema.json';
 
+// M3 (Q7): request-body schemas for the 7 paid offerings (FDQ-10 — the 2 free GETs take no body).
+import legitimacyScanRequestSchema from '../requests/v1/legitimacy_scan.schema.json';
+import verifyWhitepaperRequestSchema from '../requests/v1/verify_whitepaper.schema.json';
+import verifyFullTechRequestSchema from '../requests/v1/verify_full_tech.schema.json';
+import claimExtractionRequestSchema from '../requests/v1/claim_extraction.schema.json';
+import claimHistoryRequestSchema from '../requests/v1/claim_history.schema.json';
+import quickProtocolFactsRequestSchema from '../requests/v1/quick_protocol_facts.schema.json';
+import dailyTechBriefRequestSchema from '../requests/v1/daily_tech_brief.schema.json';
+
 const BASE = 'https://schemas.whitepapergrey.com/v1/';
 const id = (file: string): string => `${BASE}${file}`;
+const reqId = (file: string): string => `${BASE}requests/${file}`;
 
 export const ajv = new Ajv2020({ strict: true, allErrors: true });
 addFormats(ajv);
@@ -38,11 +50,25 @@ ajv.addSchema([
   dailyGreenlightListSchema,
   scamAlertFeedSchema,
   envelopeSchema,
+  // M3 request schemas (distinct $id namespace: .../v1/requests/<file>).
+  legitimacyScanRequestSchema,
+  verifyWhitepaperRequestSchema,
+  verifyFullTechRequestSchema,
+  claimExtractionRequestSchema,
+  claimHistoryRequestSchema,
+  quickProtocolFactsRequestSchema,
+  dailyTechBriefRequestSchema,
 ]);
 
 function compiled(file: string): ValidateFunction {
   const v = ajv.getSchema(id(file));
   if (!v) throw new Error(`@grey/schemas/validators: no compiled schema for ${file}`);
+  return v;
+}
+
+function compiledRequest(file: string): ValidateFunction {
+  const v = ajv.getSchema(reqId(file));
+  if (!v) throw new Error(`@grey/schemas/validators: no compiled request schema for ${file}`);
   return v;
 }
 
@@ -71,4 +97,27 @@ export const offeringValidators: Record<string, ValidateFunction> = {
   daily_tech_brief: dailyTechBriefValidator,
   daily_greenlight_list: dailyGreenlightListValidator,
   scam_alert_feed: scamAlertFeedValidator,
+};
+
+// ── M3 (Q7): request-body validators for the 7 paid offerings ──
+// Compiled via the SAME shared Ajv2020 instance. grey-core's Fastify setValidatorCompiler
+// delegates request-body validation to these (no second ajv instance — HC#12).
+
+export const legitimacyScanRequestValidator = compiledRequest('legitimacy_scan.schema.json');
+export const verifyWhitepaperRequestValidator = compiledRequest('verify_whitepaper.schema.json');
+export const verifyFullTechRequestValidator = compiledRequest('verify_full_tech.schema.json');
+export const claimExtractionRequestValidator = compiledRequest('claim_extraction.schema.json');
+export const claimHistoryRequestValidator = compiledRequest('claim_history.schema.json');
+export const quickProtocolFactsRequestValidator = compiledRequest('quick_protocol_facts.schema.json');
+export const dailyTechBriefRequestValidator = compiledRequest('daily_tech_brief.schema.json');
+
+/** Per-paid-offering request-body validator lookup (7 entries; the 2 free GETs have no body — FDQ-10). */
+export const offeringRequestValidators: Record<PaidOfferingSlug, ValidateFunction> = {
+  legitimacy_scan: legitimacyScanRequestValidator,
+  verify_whitepaper: verifyWhitepaperRequestValidator,
+  verify_full_tech: verifyFullTechRequestValidator,
+  claim_extraction: claimExtractionRequestValidator,
+  claim_history: claimHistoryRequestValidator,
+  quick_protocol_facts: quickProtocolFactsRequestValidator,
+  daily_tech_brief: dailyTechBriefRequestValidator,
 };

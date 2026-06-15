@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/requests/quick_protocol_facts.schema.json",
+  "title": "QuickProtocolFactsRequest",
+  "description": "Request body for the quick_protocol_facts offering. A loose project query (token address, project name, or whitepaper URL). Field shapes ground-truthed from plugin-wpv AgentCardConfig.ts inputSchema (M3 FDQ-2).",
+  "type": "object",
+  "properties": {
+    "projectQuery": { "type": "string" }
+  },
+  "required": ["projectQuery"],
+  "additionalProperties": false
+}

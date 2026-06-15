@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/requests/legitimacy_scan.schema.json",
+  "title": "LegitimacyScanRequest",
+  "description": "Request body for the legitimacy_scan offering. Field shapes ground-truthed from plugin-wpv AgentCardConfig.ts inputSchema (M3 FDQ-2).",
+  "type": "object",
+  "properties": {
+    "token_address": { "type": "string" },
+    "project_name": { "type": "string" }
+  },
+  "required": ["token_address"],
+  "additionalProperties": false
+}
