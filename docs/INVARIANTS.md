@@ -38,8 +38,8 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Statement:** `@grey/schemas` MUST NOT import from `@grey/pipeline` or `@grey/core` (schemas is the leaf; pipeline + core consume it, never the reverse).
 - **Verification:** `! git grep -qE "from ['\"]@grey/(pipeline|core)" -- packages/grey-schemas/`
 - **Expected:** exit 0 (zero import hits = intact).
-- **Rationale:** a back-import creates a dependency cycle and breaks the layering; under bundler/tsc resolution a cycle can cause partial-initialization `undefined` exports.
-- **Established by:** M2 (FDQ-narrowed grep form; extended to `@grey/core` at M3).
+- **Rationale:** a back-import creates a dependency cycle and breaks the layering; under bundler/tsc resolution a cycle can cause partial-initialization `undefined` exports. The `['"]` quote requirement matches only the import-specifier syntax `from '@grey/...'` (M2-ratified: catches multi-line imports), never prose comments like `// do not import from @grey/pipeline` — **audited M3-followup: not vulnerable** to the bare-word false-positive defect that affected #11/#12.
+- **Established by:** M2 (FDQ-narrowed grep form; extended to `@grey/core` at M3; audited M3-followup).
 
 ## 5. `elizaos-grey-bytidentical-lock`
 - **Statement:** the production ElizaOS Grey repos stay byte-identical at `phase3-baseline` throughout the New Grey build (until M5 cutover): plugin-acp `991afc1e2353…`, plugin-wpv `08c754ad6ea7…`.
@@ -84,25 +84,25 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Established by:** M1 Step 2.
 
 ## 11. `grey-core-no-live-anthropic-invocation`
-- **Statement:** grey-core invokes no live-compute pipeline stage and no Anthropic client — all 9 offerings are cache-read-only (M3; live-compute is M3.5). No `runFullPipeline`/`analyzeStructure`/`extractClaims`/`evaluateClaims` call and no `anthropic` reference in `packages/grey-core/src/`.
-- **Verification:** `! git grep -qiE "runFullPipeline|analyzeStructure|extractClaims|evaluateClaims|anthropic" -- packages/grey-core/src/`
+- **Statement:** grey-core invokes no live-compute pipeline stage and no Anthropic client — all 9 offerings are cache-read-only (M3; live-compute is M3.5). No CALL site to `runFullPipeline`/`analyzeStructure`/`extractClaims`/`evaluateClaims` and no Anthropic import/access in `packages/grey-core/src/`.
+- **Verification:** `! git grep -qE "\b(runFullPipeline|analyzeStructure|extractClaims|evaluateClaims)\s*\(|from\s+['\"][^'\"]*anthropic|new\s+Anthropic|deps\.anthropic" -- packages/grey-core/src/`
 - **Expected:** exit 0 (zero matches = intact).
-- **Rationale:** FDQ-1 scoped M3 to cache-read-only; a live-compute or Anthropic call would silently re-introduce the deferred (and DB-empty, cost-bearing) live path.
-- **Established by:** M3.
+- **Rationale:** FDQ-1 scoped M3 to cache-read-only; a live-compute or Anthropic call would silently re-introduce the deferred (and DB-empty, cost-bearing) live path. **Targets call/import SYNTAX (`\s*\(` for invocations; `from '...anthropic'`/`new Anthropic`/`deps.anthropic` for the client) — not bare words — so descriptive comments like "NO runFullPipeline, no Anthropic" do NOT false-positive (M3-followup hardening; the original bare-word grep matched 6 such comments).**
+- **Established by:** M3 (hardened M3-followup).
 
 ## 12. `grey-core-validators-single-source`
-- **Statement:** grey-core never instantiates its own ajv — it consumes the pre-compiled validators from `@grey/schemas/validators` (Fastify's `setValidatorCompiler` delegates to them). No `new Ajv` in `packages/grey-core/src/`.
-- **Verification:** `! git grep -qE "new\s+Ajv" -- packages/grey-core/src/`
+- **Statement:** grey-core never instantiates its own ajv — it consumes the pre-compiled validators from `@grey/schemas/validators` (Fastify's `setValidatorCompiler` delegates to them). No `new Ajv2020(...)`/`new Ajv(...)` instantiation in `packages/grey-core/src/`.
+- **Verification:** `! git grep -qE "new\s+Ajv2020\s*\(|new\s+Ajv\s*\(" -- packages/grey-core/src/`
 - **Expected:** exit 0 (zero matches = intact).
-- **Rationale:** a second ajv instance would drift from the frozen schema layer's strict-mode + 2020-12 configuration (HC#12).
-- **Established by:** M3.
+- **Rationale:** a second ajv instance would drift from the frozen schema layer's strict-mode + 2020-12 configuration (HC#12). **Targets the instantiation call syntax (`new Ajv2020(` — the canonical form in `@grey/schemas/validators` — or `new Ajv(`) — not the bare word — so comments mentioning "ajv"/"no new Ajv" do NOT false-positive (M3-followup hardening, defensive — the bare `new\s+Ajv` was not matching any current comment but is tightened to prevent the #11-class defect).**
+- **Established by:** M3 (hardened M3-followup).
 
-## 13. `openapi-route-source-of-truth` (proxy)
-- **Statement:** grey-core's HTTP route paths match the OpenAPI spec — `POST /v1/offerings/<slug>` (paid) + `GET /v1/resources/<slug>` (free). The OpenAPI YAML is the single source of truth; any handler relocation updates it alongside.
-- **Verification (proxy):** `grep -q '/v1/offerings/' packages/grey-core/src/server/routes/offerings.ts && grep -q '/v1/resources/' packages/grey-core/src/server/routes/resources.ts && grep -q '/v1/offerings/legitimacy_scan' packages/grey-schemas/openapi/openapi.yaml && grep -q '/v1/resources/daily_greenlight_list' packages/grey-schemas/openapi/openapi.yaml`
-- **Expected:** exit 0 (route prefixes present in grey-core routes AND canonical paths present in the OpenAPI).
-- **Rationale:** keeps the published contract (OpenAPI → docs / future SDK gen) in lockstep with the served routes. Proxy: greps presence rather than a full path-set diff.
-- **Established by:** M3.
+## 13. `openapi-route-source-of-truth`
+- **Statement:** grey-core's offering/resource route set is EQUAL to the OpenAPI spec's `/v1/offerings/<slug>` + `/v1/resources/<slug>` path set (by slug). The OpenAPI YAML is the single source of truth; any handler relocation updates it alongside.
+- **Verification:** `pnpm -C packages/grey-core exec tsx scripts/verify-openapi-routes.ts`
+- **Expected:** exit 0 (set-equality: every OpenAPI offering/resource path has a registered grey-core handler, and every registered handler is advertised in the OpenAPI — no orphans either way).
+- **Rationale:** keeps the published contract (OpenAPI → docs / future SDK gen) in lockstep with the served routes. The script parses the OpenAPI `paths` and diffs the slug set against `offeringHandlers` keys — a true set-equality check, not a presence proxy (upgraded M3-followup; the M3 catalog shipped a presence-only proxy).
+- **Established by:** M3 (upgraded to set-equality M3-followup).
 
 ---
 

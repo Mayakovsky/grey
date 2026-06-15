@@ -39,8 +39,8 @@ export interface CreateHandlerDepsEnv {
   clock?: () => Date;
 }
 
-// Keep in sync with package.json `version` (bumped to 0.1.0 at M3 close — Phase D).
-const GREY_CORE_VERSION = '0.0.0';
+// Keep in sync with package.json `version`.
+const GREY_CORE_VERSION = '0.1.0';
 
 const IDENTITY: Omit<GreyCoreConfig, 'version'> = {
   did: 'did:placeholder:grey', // M4 swaps this for a deps-injected DID resolver
