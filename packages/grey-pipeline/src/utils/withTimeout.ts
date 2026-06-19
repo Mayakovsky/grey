@@ -12,6 +12,13 @@ export function withTimeout<T>(
   ms: number = PIPELINE_TIMEOUT_MS,
   label = 'pipeline',
 ): Promise<T> {
+  // Orphan-rejection guard (§21 fix-forward): once the timer wins the race, the variant promise
+  // is orphaned but keeps running. If it later REJECTS (network/Anthropic error past expiry) the
+  // rejection has no handler → Node unhandledRejection → possible worker crash. Attaching a no-op
+  // catch directly to the variant consumes that late rejection. The race result below is unaffected
+  // (it already settled to the timeout). Race-not-abort design ratified at §19.2 is preserved.
+  promise.catch(() => {});
+
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms);

@@ -212,8 +212,10 @@ export async function cacheOrLive<O extends ComputeOfferingSlug>(
     }
 
     // Attach discovery provenance to the RESPONSE (buyer-visible optional fields). Persistence-level
-    // provenance (whitepaper-row runMetadata) is DEFERRED — the Phase-A variants expose no such param
-    // and §16 scoped the reopen to the name-resolution helper only. See PHASE-B-PROGRESS deferred-obs.
+    // provenance (whitepaper-row runMetadata) ships via the variant's runMetadata param → metadata_json
+    // (§17). The cache-READ path intentionally does NOT replay the persisted tier: production
+    // (JobRouter:273/333) hardcodes discoveryStatus 'cached'/tier 0 on a cache-hit, and cacheRead.ts is
+    // byte-faithful to that — only the live path (here) emits the real discovery tier.
     if (provenance) {
       payload.discoveryStatus = provenance.discoveryStatus;
       payload.discoverySourceTier = provenance.discoverySourceTier;
