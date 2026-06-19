@@ -8,6 +8,7 @@ import { envelopeValidator } from '@grey/schemas/validators';
 import { buildServer } from '../src/server';
 import type { HandlerDeps, GreyCoreConfig } from '../src/deps';
 import type { WhitepaperRow, VerificationRow, ClaimRow } from '../src/handlers/types';
+import type { TieredDiscoveryResult } from '@grey/pipeline';
 
 export const TEST_CONFIG: GreyCoreConfig = {
   version: '0.1.0-test',
@@ -82,6 +83,9 @@ export interface RepoStubs {
   scamAlerts?: VerificationRow[];
   byDate?: VerificationRow[];
   latestBatch?: VerificationRow[];
+  /** M3.5: discovery result for the cache-miss live path. Default null → cacheOrLive returns the
+   *  typed-empty miss sentinel (preserves the M3 cache-miss test expectations). */
+  discover?: TieredDiscoveryResult | null;
 }
 
 export function fakeDeps(stubs: RepoStubs = {}): HandlerDeps {
@@ -102,6 +106,12 @@ export function fakeDeps(stubs: RepoStubs = {}): HandlerDeps {
   const claims = {
     findByWhitepaperId: async (): Promise<ClaimRow[]> => stubs.claims ?? [],
   };
+  // M3.5: minimal live-compute DI. `discovery.discover` defaults to null (→ typed-empty miss).
+  // `pipeline` is a bare stub — the cache-miss tests don't reach a run variant (discover null →
+  // missResult), and the cacheOrLive live-path tests mock the variants directly (cacheOrLive.test.ts).
+  const discovery = {
+    discover: async (): Promise<TieredDiscoveryResult | null> => stubs.discover ?? null,
+  };
   return {
     db: {} as HandlerDeps['db'],
     whitepapers: whitepapers as unknown as HandlerDeps['whitepapers'],
@@ -110,6 +120,8 @@ export function fakeDeps(stubs: RepoStubs = {}): HandlerDeps {
     logger: logger as unknown as HandlerDeps['logger'],
     clock: () => new Date('2026-06-14T12:00:00.000Z'),
     config: TEST_CONFIG,
+    pipeline: {} as unknown as HandlerDeps['pipeline'],
+    discovery: discovery as unknown as HandlerDeps['discovery'],
   };
 }
 

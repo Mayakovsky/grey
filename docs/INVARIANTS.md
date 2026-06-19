@@ -83,12 +83,12 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Rationale:** running `db push` against the shared project would corrupt migration history both Grey and plugin-wpv depend on; the credential split prevents runtime code holding migration privileges.
 - **Established by:** M1 Step 2.
 
-## 11. `grey-core-no-live-anthropic-invocation`
-- **Statement:** grey-core invokes no live-compute pipeline stage and no Anthropic client — all 9 offerings are cache-read-only (M3; live-compute is M3.5). No CALL site to `runFullPipeline`/`analyzeStructure`/`extractClaims`/`evaluateClaims` and no Anthropic import/access in `packages/grey-core/src/`.
-- **Verification:** `! git grep -qE "\b(runFullPipeline|analyzeStructure|extractClaims|evaluateClaims)\s*\(|from\s+['\"][^'\"]*anthropic|new\s+Anthropic|deps\.anthropic" -- packages/grey-core/src/`
+## 11. `grey-core-anthropic-via-deps-only`
+- **Statement:** grey-core never constructs or directly imports the Anthropic client — it receives one via dependency injection (`deps.pipeline.anthropic`). grey-core legitimately invokes pipeline orchestration now (M3.5 Option-1), so the M3 call-ban on `runFullPipeline`/etc. is retired; the property worth enforcing is DI discipline. No `new Anthropic(`, no `@anthropic-ai/` import, no `createAnthropicClient(` in `packages/grey-core/src/`.
+- **Verification:** `! git grep --untracked -qE "new\s+Anthropic\s*\(|from\s+['\"][^'\"]*@anthropic-ai/|createAnthropicClient\s*\(" -- packages/grey-core/src/`
 - **Expected:** exit 0 (zero matches = intact).
-- **Rationale:** FDQ-1 scoped M3 to cache-read-only; a live-compute or Anthropic call would silently re-introduce the deferred (and DB-empty, cost-bearing) live path. **Targets call/import SYNTAX (`\s*\(` for invocations; `from '...anthropic'`/`new Anthropic`/`deps.anthropic` for the client) — not bare words — so descriptive comments like "NO runFullPipeline, no Anthropic" do NOT false-positive (M3-followup hardening; the original bare-word grep matched 6 such comments).**
-- **Established by:** M3 (hardened M3-followup).
+- **Rationale:** the Anthropic client is constructed only inside `@grey/pipeline` (`createDeps`/`createAnthropicClient`) and reaches grey-core via `HandlerDeps.pipeline`; a direct construction/import in grey-core would bypass the single configured client + model pin. **Targets call/import SYNTAX (HC-B); descriptive comments do NOT false-positive.** Replaces the M3 `grey-core-no-live-anthropic-invocation` (that property is false by design at M3.5 — grey-core invokes pipeline orchestration).
+- **Established by:** M3 (as no-live-anthropic); replaced at M3.5 (Option-1 ratification).
 
 ## 12. `grey-core-validators-single-source`
 - **Statement:** grey-core never instantiates its own ajv — it consumes the pre-compiled validators from `@grey/schemas/validators` (Fastify's `setValidatorCompiler` delegates to them). No `new Ajv2020(...)`/`new Ajv(...)` instantiation in `packages/grey-core/src/`.
@@ -104,6 +104,20 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Rationale:** keeps the published contract (OpenAPI → docs / future SDK gen) in lockstep with the served routes. The script parses the OpenAPI `paths` and diffs the slug set against `offeringHandlers` keys — a true set-equality check, not a presence proxy (upgraded M3-followup; the M3 catalog shipped a presence-only proxy).
 - **Established by:** M3 (upgraded to set-equality M3-followup).
 
+## 14. `pipeline-owns-live-compute`
+- **Statement:** live-compute / discovery code lives in `@grey/pipeline`; grey-core invokes it only through pipeline exports — it never constructs or directly imports discovery internals (`TieredDocumentDiscovery`, `resolveTokenName`, `CryptoContentResolver`, `HeadlessBrowserResolver`). The discovery stack reaches grey-core as a DI member (`HandlerDeps.discovery`, typed via a single inline `import('@grey/pipeline').TieredDocumentDiscovery` in `deps/index.ts`).
+- **Verification (primary):** `! git grep --untracked -nE "\b(TieredDocumentDiscovery|resolveTokenName|CryptoContentResolver|HeadlessBrowserResolver)\s*\(|from\s+['\"][^'\"]*[/](TieredDocumentDiscovery|resolveTokenName|CryptoContentResolver|HeadlessBrowserResolver)" -- 'packages/grey-core/src/' ':(exclude)packages/grey-core/src/deps/index.ts'`
+- **Verification (secondary):** exactly **1** bare-word hit in `packages/grey-core/src/deps/index.ts` (the §15-sanctioned DI type annotation).
+- **Expected:** primary exit 0 (zero call/import hits); secondary exactly 1.
+- **Rationale:** keeps the M5 cutover surface minimal (compute migration is zero) and the MiCA-adjustment lifecycle local to pipeline. **Targets call/import SYNTAX (HC-B) — descriptive comments + the DI type annotation do NOT trip the primary; the bare-word secondary is path-scoped to the one allowed file.**
+- **Established by:** M3.5 (live-compute fill).
+
+## 15. `phase3-baseline-cite-discipline`
+- **Statement:** the ElizaOS Grey lock (`plugin-acp 991afc1e` / `plugin-wpv 08c754ad`, both `phase3-baseline`) is write-protected; read-only access is unrestricted. Any movement of the lock-anchor SHAs (production-bug-fix scenario) requires Forces' explicit chat-surface authorization, an artifact-chain re-cite, and `phase3-baseline` tag re-application (HC-C). Any M3.5+ artifact citing line numbers in locked source pins SHAs to the live `phase3-baseline` tag.
+- **Verification (procedural):** no automated grep — verified at each lock-check boundary (the lock-check command asserts the HEAD SHAs + tag) + artifact-chain review. No silent lock-anchor moves.
+- **Expected:** lock-check intact at every gate; any anchor move surfaced in chat with diff + new SHAs.
+- **Established by:** M3.5 (HC-C lock-in).
+
 ---
 
-*Invariants 11–13 established at M3 close (grey-core). Future movements append at their close, not mid-flight.*
+*Invariants 11–13 established at M3 close (grey-core); #11 replaced + #14/#15 appended at M3.5 close (live-compute fill). Future movements append at their close, not mid-flight.*

@@ -1,4 +1,6 @@
 import type { AnthropicClient } from '../src/clients/anthropic';
+import type { CryptoContentResolver } from '../src/discovery/CryptoContentResolver';
+import type { ResolvedWhitepaper } from '../src/discovery/types';
 import { CostTracker } from '../src/telemetry/costTracker';
 import {
   WhitepaperStatus,
@@ -61,6 +63,25 @@ export const fixtureWhitepaper: WhitepaperRecord = {
   selectionScore: 0,
   metadataJson: {},
 };
+
+/**
+ * Stub CryptoContentResolver for the M3.5 run-variant tests — resolveWhitepaper(url) returns the
+ * supplied text as a direct-source ResolvedWhitepaper. (Structural mock; pipeline tests run under
+ * vitest/esbuild, not tsc, so the cast is runtime-safe.)
+ */
+export function fakeCryptoResolver(text: string, pageCount = 1): CryptoContentResolver {
+  return {
+    resolveWhitepaper: async (url: string): Promise<ResolvedWhitepaper> => ({
+      text,
+      pageCount,
+      isImageOnly: false,
+      isPasswordProtected: false,
+      source: 'direct',
+      originalUrl: url,
+      resolvedUrl: url,
+    }),
+  } as unknown as CryptoContentResolver;
+}
 
 export function makeClaims(n: number): ExtractedClaim[] {
   return Array.from({ length: n }, (_, i) => ({

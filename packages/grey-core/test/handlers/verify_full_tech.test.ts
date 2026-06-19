@@ -5,12 +5,12 @@ const TOKEN = '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984';
 const url = '/v1/offerings/verify_full_tech';
 
 describe('verify_full_tech handler', () => {
-  it('cache miss → NOT_IN_DATABASE + zeroed L3 fields', async () => {
+  it('cache miss → live discovery-miss → INSUFFICIENT_DATA + zeroed L3 fields (§20)', async () => {
     const app = makeApp();
     const res = await app.inject({ method: 'POST', url, payload: { token_address: TOKEN } });
     const body = res.json() as EnvBody;
     expectValidEnvelope(body, 'verify_full_tech');
-    expect(body.payload.verdict).toBe('NOT_IN_DATABASE');
+    expect(body.payload.verdict).toBe('INSUFFICIENT_DATA');
     expect(body.payload.confidenceScore).toBe(0);
     expect(body.payload.evaluations).toEqual([]);
     expect(body.payload.focusAreaScores).toEqual({});

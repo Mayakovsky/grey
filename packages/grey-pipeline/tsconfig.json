@@ -2,7 +2,13 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // M3.5 discovery port: HeadlessBrowserResolver's Playwright page.evaluate() callbacks run in
+    // the browser context and reference DOM globals (document / HTMLElement / HTMLAnchorElement).
+    // plugin-wpv compiles its pipeline with lib ["ES2022","DOM"]; DOM is scoped to THIS package's
+    // tsconfig (NOT tsconfig.base.json) so the rest of the monorepo stays DOM-free. Verbatim-port
+    // seam — keeps the ported source byte-identical (no per-file /// <reference> edits).
+    "lib": ["ES2022", "DOM"]
   },
   "include": ["src"]
 }

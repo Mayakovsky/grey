@@ -5,13 +5,13 @@ const TOKEN = '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984';
 const url = '/v1/offerings/legitimacy_scan';
 
 describe('legitimacy_scan handler', () => {
-  it('cache miss → NOT_IN_DATABASE envelope', async () => {
+  it('cache miss → live discovery-miss → INSUFFICIENT_DATA envelope (§20)', async () => {
     const app = makeApp();
     const res = await app.inject({ method: 'POST', url, payload: { token_address: TOKEN } });
     expect(res.statusCode).toBe(200);
     const body = res.json() as EnvBody;
     expectValidEnvelope(body, 'legitimacy_scan');
-    expect(body.payload.verdict).toBe('NOT_IN_DATABASE');
+    expect(body.payload.verdict).toBe('INSUFFICIENT_DATA');
     expect(body.metadata.cacheHit).toBe(false);
     await app.close();
   });

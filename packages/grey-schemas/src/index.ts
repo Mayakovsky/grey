@@ -214,3 +214,5 @@ export interface ScoreWeights {
 // Additive type-only re-export (verbatimModuleSyntax: true, Invariant 7). Does NOT modify any
 // existing M2-promoted type above (bug-preservation).
 export type { OfferingSlug, ResponseFor } from './responses/types';
+// ── M3.5 (FDQ-1): request-side taxonomy + RequestFor<O> type map (additive; mirrors ResponseFor) ──
+export type { ComputeOfferingSlug, RequestFor } from './requests/types';

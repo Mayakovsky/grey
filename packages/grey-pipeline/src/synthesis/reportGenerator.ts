@@ -17,6 +17,7 @@ import type {
   Verdict,
   MicaClaimStatus,
   MicaComplianceStatus,
+  ClaimCategory,
 } from '@grey/schemas';
 import { KNOWN_PROTOCOL_PATTERN } from '../constants/protocols';
 
@@ -24,6 +25,31 @@ export interface DiscoveryProvenance {
   discoveryStatus: DiscoveryStatus;
   discoverySourceTier: number | null;
   discoveryAttempts: DiscoveryAttempt[];
+}
+
+/**
+ * M3.5 claim_extraction deliverable (Q3b). Concrete shape behind the open
+ * `ClaimExtractionResponse` ({} payload fields) — assignable to it at the route boundary.
+ */
+export interface ClaimExtractionReport {
+  whitepaper: {
+    id: string;
+    projectName: string;
+    tokenAddress: string | null;
+    documentUrl: string;
+    pageCount: number;
+  };
+  structuralAnalysis: { structuralScore: number; hypeTechRatio: number; [k: string]: unknown };
+  claims: Array<{
+    claimId: string;
+    category: ClaimCategory;
+    claimText: string;
+    statedEvidence: string;
+    sourceSection: string;
+    mathematicalProofPresent: boolean;
+    regulatoryRelevance: boolean;
+  }>;
+  tokenAddress: string | null;
 }
 
 const REGULATORY_PORTAL_NOTE =
@@ -156,6 +182,46 @@ export class ReportGenerator {
       focusAreaScores: lowercaseScores,
       llmTokensUsed: verification.llmTokensUsed,
       computeCostUsd: verification.computeCostUsd,
+    };
+  }
+
+  /**
+   * M3.5 (Q3b / FDQ-3): bespoke claim_extraction deliverable (L1+L2 only — no L3 evaluation, so
+   * `claims` is `ExtractedClaim[]`, not `ClaimEvaluation[]`). Shape mirrors the inline deliverable
+   * plugin-wpv assembled in JobRouter:1810-1833; locked against CLAIM_EXTRACTION_FIELDS
+   * (AgentCardConfig 174-179) + claim_extraction.schema.json (ClaimExtractionResponse).
+   */
+  generateClaimExtraction(
+    wp: WhitepaperRecord,
+    analysis: StructuralAnalysis,
+    structuralScore: number,
+    hypeTechRatio: number,
+    claims: ExtractedClaim[],
+    tokenAddress: string | null,
+  ): ClaimExtractionReport {
+    return {
+      whitepaper: {
+        id: wp.id,
+        projectName: wp.projectName,
+        tokenAddress: wp.tokenAddress,
+        documentUrl: wp.documentUrl,
+        pageCount: wp.pageCount,
+      },
+      structuralAnalysis: {
+        structuralScore,
+        hypeTechRatio,
+        ...(analysis as unknown as Record<string, unknown>),
+      },
+      claims: claims.map((c) => ({
+        claimId: c.claimId,
+        category: c.category,
+        claimText: c.claimText,
+        statedEvidence: c.statedEvidence,
+        sourceSection: c.sourceSection,
+        mathematicalProofPresent: c.mathematicalProofPresent,
+        regulatoryRelevance: c.regulatoryRelevance,
+      })),
+      tokenAddress,
     };
   }
 

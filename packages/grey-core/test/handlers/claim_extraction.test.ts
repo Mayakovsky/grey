@@ -3,8 +3,11 @@ import { makeApp, expectValidEnvelope, type EnvBody } from '../_helpers';
 
 const url = '/v1/offerings/claim_extraction';
 
-describe('claim_extraction handler (always typed-empty in M3)', () => {
-  it('returns the typed-empty envelope (no URL cache lookup in M3)', async () => {
+describe('claim_extraction handler (M3.5 live via cacheOrLive)', () => {
+  it('returns a valid envelope on the live path (bare pipeline stub → typed-empty miss sentinel)', async () => {
+    // claim_extraction now always runs live (no URL cache lookup, Q5). With the bare pipeline stub
+    // the run variant cannot acquire text, so cacheOrLive's failure path returns the typed-empty
+    // sentinel — a valid ClaimExtractionResponse. (Happy-path live coverage is in cacheOrLive.test.ts.)
     const app = makeApp();
     const res = await app.inject({ method: 'POST', url, payload: { whitepaperUrl: 'https://uniswap.org/whitepaper.pdf' } });
     expect(res.statusCode).toBe(200);

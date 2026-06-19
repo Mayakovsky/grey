@@ -1,11 +1,11 @@
-// claim_extraction (cache-read-only). Its request is a `whitepaperUrl` only, and there is no
-// repo lookup by URL in the exported pipeline surface — so in M3 it is ALWAYS a miss and returns
-// the typed-empty ClaimExtractionResponse. The live URL→whitepaper resolution + L1+L2 extraction
-// is deferred to M3.5 (see PHASE-C-PROGRESS / FDQ-1).
+// claim_extraction (M3.5 live). The request is a `whitepaperUrl` only and there is no repo
+// lookup-by-URL (Q5) — so there is no cache-read step; it always runs live via cacheOrLive, which
+// fetches+ingests the URL (dedupe-on-address upsert) and returns the bespoke ClaimExtraction
+// deliverable. The pre-run subject is unresolvable from a URL (subjectMapping.ts:15), so the
+// envelope subject is derived from the POST-run whitepaper row inside cacheOrLive.
 import type { OfferingHandler } from './types';
+import type { RequestFor } from '@grey/schemas';
+import { cacheOrLive } from '../orchestration/cacheOrLive';
 
-export const claimExtraction: OfferingHandler = async (_input, _deps) => ({
-  payload: { whitepaper: {}, structuralAnalysis: {}, claims: [], tokenAddress: null },
-  subject: { tokenAddress: null, projectName: '' },
-  cacheHit: false,
-});
+export const claimExtraction: OfferingHandler = async (input, deps) =>
+  cacheOrLive('claim_extraction', (input.requirement ?? {}) as RequestFor<'claim_extraction'>, deps);
