@@ -24,6 +24,8 @@ export type {
 } from './telemetry/costTracker';
 export { createLogger } from './logger';
 export type { Logger } from './logger';
+// M3.5 §19.2 — pipeline run-bound (4-min timeout race) for the cacheOrLive variant calls
+export { withTimeout, PIPELINE_TIMEOUT_MS } from './utils/withTimeout';
 
 // Stage classes (also individually usable)
 export { StructuralAnalyzer } from './structural/structuralAnalyzer';
@@ -33,8 +35,11 @@ export { ClaimEvaluator } from './evaluation/claimEvaluator';
 export type { SemanticScholarClient } from './evaluation/claimEvaluator';
 export { ScoreAggregator } from './synthesis/scoreAggregator';
 export { ReportGenerator } from './synthesis/reportGenerator';
-export type { DiscoveryProvenance } from './synthesis/reportGenerator';
+export type { DiscoveryProvenance, ClaimExtractionReport } from './synthesis/reportGenerator';
 export { DocsSiteCrawler } from './crawler/docsSiteCrawler';
+
+// M3.5 — discovery stack (tiered document discovery + resolveTokenName + createDiscoveryStack)
+export * from './discovery';
 
 // Persistence schema + repositories
 export * as schema from './persistence/schema';

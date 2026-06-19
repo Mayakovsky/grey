@@ -21,6 +21,9 @@ function fakeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
     logger: logger as unknown as HandlerDeps['logger'],
     clock: () => new Date('2026-06-14T00:00:00.000Z'),
     config: CONFIG,
+    // M3.5: probes don't touch live-compute deps — bare stubs satisfy the shape.
+    pipeline: {} as unknown as HandlerDeps['pipeline'],
+    discovery: {} as unknown as HandlerDeps['discovery'],
     ...overrides,
   };
 }

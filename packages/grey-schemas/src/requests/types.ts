@@ -12,6 +12,8 @@
 // 7 paid offerings only (FDQ-10): the 2 free GETs (daily_greenlight_list, scam_alert_feed)
 // take no request body and are exempt from request validation + Pattern 4b.
 
+import type { PaidOfferingSlug } from '../responses/types';
+
 export interface LegitimacyScanRequest {
   token_address: string;
   project_name?: string;
@@ -44,3 +46,34 @@ export interface QuickProtocolFactsRequest {
 export interface ClaimExtractionRequest {
   whitepaperUrl: string;
 }
+
+// ── M3.5 (FDQ-1): ComputeOfferingSlug + RequestFor<O> (additive; mirrors ResponseFor<O>) ──
+//
+// The 4 offerings whose cache-miss runs live-compute in M3.5 (the cache-or-live tier). Subset of
+// PaidOfferingSlug; the other 3 paid offerings (claim_history / quick_protocol_facts /
+// daily_tech_brief) are pure-DB-read and never invoke a pipeline variant. Authored as an explicit
+// union per the spec; a compile-time subset guard in test/request-type-map.test.ts keeps it ⊆
+// PaidOfferingSlug. No change to OfferingSlug / PaidOfferingSlug.
+
+export type ComputeOfferingSlug =
+  | 'legitimacy_scan'
+  | 'verify_whitepaper'
+  | 'verify_full_tech'
+  | 'claim_extraction';
+
+/** Maps a paid offering slug to its hand-authored request interface (the cacheOrLive input seam). */
+export type RequestFor<O extends PaidOfferingSlug> = O extends 'legitimacy_scan'
+  ? LegitimacyScanRequest
+  : O extends 'verify_whitepaper'
+    ? VerifyWhitepaperRequest
+    : O extends 'verify_full_tech'
+      ? VerifyFullTechRequest
+      : O extends 'claim_extraction'
+        ? ClaimExtractionRequest
+        : O extends 'claim_history'
+          ? ClaimHistoryRequest
+          : O extends 'quick_protocol_facts'
+            ? QuickProtocolFactsRequest
+            : O extends 'daily_tech_brief'
+              ? DailyTechBriefRequest
+              : never;

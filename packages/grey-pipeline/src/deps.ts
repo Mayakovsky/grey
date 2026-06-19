@@ -7,17 +7,26 @@ import type { AnthropicClient } from './clients/anthropic';
 import type { GreyDb } from './persistence/client';
 import type { Logger } from './logger';
 import type { SemanticScholarClient } from './evaluation/claimEvaluator';
+import type { CryptoContentResolver } from './discovery/CryptoContentResolver';
 import { createAnthropicClient } from './clients/anthropic';
 import { createDb } from './persistence/client';
 import { CostTracker } from './telemetry/costTracker';
 import { createLogger } from './logger';
 import { LLM_PRICING } from './constants';
+import { FetchContentResolver } from './discovery/FetchContentResolver';
+import { CryptoContentResolver as CryptoContentResolverImpl } from './discovery/CryptoContentResolver';
 
 export interface PipelineDeps {
   anthropic: AnthropicClient;
   db: GreyDb;
   cost: CostTracker;
   logger: Logger;
+  /**
+   * Whitepaper text acquisition (M3.5). The tier-bounded run variants (runL1 / runL1L2 /
+   * runFullPipeline) acquire text from a documentUrl via this resolver — `grey_two.whitepapers`
+   * has no text column, so text is re-fetched live each run (matches production JobRouter:488).
+   */
+  cryptoResolver: CryptoContentResolver;
   /** Model override; defaults to GREY_MODEL inside the stages. */
   model?: string;
   /** Optional citation-verification client (L3). */
@@ -44,6 +53,7 @@ export function createDeps(env: DepsEnv = {}): PipelineDeps {
     db: createDb(databaseUrl),
     cost: new CostTracker(LLM_PRICING.inputPerToken, LLM_PRICING.outputPerToken),
     logger: createLogger({ component: 'grey-pipeline' }),
+    cryptoResolver: new CryptoContentResolverImpl(new FetchContentResolver()),
     model: env.model ?? process.env.GREY_MODEL,
   };
 }

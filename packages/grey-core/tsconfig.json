@@ -2,7 +2,12 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // M3.5 Phase B: grey-core imports @grey/pipeline by SOURCE (D-RESOLVE: main/types → src), so tsc
+    // compiles the ported discovery files (HeadlessBrowserResolver's Playwright page.evaluate uses
+    // DOM globals) under grey-core's options. Mirror the pipeline package's lib until M5 builds it to
+    // dist (deferred-obs: DOM leaks to every @grey/pipeline source-consumer under D-RESOLVE).
+    "lib": ["ES2022", "DOM"]
   },
   "include": ["src"]
 }

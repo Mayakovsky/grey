@@ -10,6 +10,9 @@ export type {
   ClaimHistoryRequest,
   QuickProtocolFactsRequest,
   ClaimExtractionRequest,
+  // M3.5 (FDQ-1): additive request-side taxonomy + map
+  ComputeOfferingSlug,
+  RequestFor,
 } from './types';
 
 export { offeringRequestValidators } from '../validators';

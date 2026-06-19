@@ -11,7 +11,7 @@ import type { GreyDb } from '../src/persistence/client';
 import * as schema from '../src/persistence/schema';
 import { createLogger } from '../src/logger';
 import { Verdict } from '@grey/schemas';
-import { mockClient, tracker, emptyAnalysis, fixtureWhitepaper, makeClaims } from './_helpers';
+import { mockClient, tracker, emptyAnalysis, fixtureWhitepaper, makeClaims, fakeCryptoResolver } from './_helpers';
 
 // Stage functions don't touch the db; runFullPipeline's persistence is exercised by
 // the Phase D smoke against the live grey_two schema, not here (audit §11.2: this is a
@@ -22,6 +22,7 @@ function deps(toolInput: Record<string, unknown>): PipelineDeps {
     db: {} as unknown as GreyDb,
     cost: tracker(),
     logger: createLogger(),
+    cryptoResolver: fakeCryptoResolver(''),
   };
 }
 
@@ -72,6 +73,33 @@ describe('pipeline stage functions', () => {
     expect(out.report.confidenceScore).toBe(75);
     expect(out.report.focusAreaScores.tokenomics).toBe(75);
   });
+
+  it("synthesize(builder: 'tokenomics') dispatches to the TokenomicsAudit builder (no L3 fields)", () => {
+    const out = synthesize(
+      {
+        analysis: emptyAnalysis(),
+        structuralScore: 3,
+        hypeTechRatio: 1,
+        claims: makeClaims(2),
+        evaluations: [],
+        scores: new Map([
+          ['claim-1', 60],
+          ['claim-2', 80],
+        ]),
+        whitepaper: fixtureWhitepaper,
+        llmTokensUsed: 100,
+        computeCostUsd: 0.01,
+      },
+      'tokenomics',
+    );
+    // TokenomicsAuditReport carries claims/claimScores/logicSummary...
+    expect(out.report.claims).toHaveLength(2);
+    expect(out.report.claimScores['claim-2']).toBe(80);
+    expect(typeof out.report.logicSummary).toBe('string');
+    // ...but NOT the full-verification-only L3 fields.
+    expect((out.report as Record<string, unknown>).confidenceScore).toBeUndefined();
+    expect((out.report as Record<string, unknown>).evaluations).toBeUndefined();
+  });
 });
 
 // A minimal GreyDb stand-in: every insert(...).values(data).returning() echoes the
@@ -79,7 +107,15 @@ describe('pipeline stage functions', () => {
 // passed to the verifications insert so we can inspect the persisted verdict.
 function capturingDb(): { db: GreyDb; captured: { verification?: Record<string, unknown> } } {
   const captured: { verification?: Record<string, unknown> } = {};
+  // select()/from()/where()/limit()/orderBy() return a thenable resolving to [] (no existing rows),
+  // so the M3.5 dedupe-upsert finds no candidates and takes the create path. delete() is a no-op.
+  const emptyChain: Record<string, unknown> = {};
+  for (const m of ['from', 'where', 'limit', 'orderBy']) emptyChain[m] = () => emptyChain;
+  (emptyChain as { then: unknown }).then = (resolve: (v: unknown[]) => unknown) => resolve([]);
   const db = {
+    select() {
+      return emptyChain;
+    },
     insert(table: unknown) {
       return {
         values(data: Record<string, unknown>) {
@@ -90,6 +126,9 @@ function capturingDb(): { db: GreyDb; captured: { verification?: Record<string, 
     },
     update() {
       return { set: () => ({ where: async () => undefined }) };
+    },
+    delete() {
+      return { where: async () => undefined };
     },
   };
   return { db: db as unknown as GreyDb, captured };
@@ -132,10 +171,12 @@ describe('runFullPipeline persistence', () => {
       db,
       cost: tracker(),
       logger: createLogger(),
+      // M3.5: text is now acquired from documentUrl via cryptoResolver (no `text` input field).
+      cryptoResolver: fakeCryptoResolver(text),
     };
 
     const report = await runFullPipeline(
-      { projectName: 'TestProto', text, documentUrl: 'https://example.com/wp' },
+      { projectName: 'TestProto', documentUrl: 'https://example.com/wp' },
       deps,
     );
 
