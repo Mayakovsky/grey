@@ -15,4 +15,20 @@ describe('withTimeout', () => {
   it('exposes the production 4-minute bound', () => {
     expect(PIPELINE_TIMEOUT_MS).toBe(240_000);
   });
+
+  it('does not produce an unhandledRejection when an orphaned variant later rejects (§21)', async () => {
+    const rejections: unknown[] = [];
+    const handler = (reason: unknown) => rejections.push(reason);
+    process.on('unhandledRejection', handler);
+    try {
+      // Variant rejects AFTER the timeout has already won the race → orphaned rejection path.
+      const variant = new Promise<void>((_, reject) => setTimeout(() => reject(new Error('orphan')), 50));
+      await expect(withTimeout(variant, 10, 'unit')).rejects.toThrow(/unit timeout after 10ms/);
+      // Wait past the orphan rejection time so any unhandled rejection would have fired.
+      await new Promise((r) => setTimeout(r, 100));
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', handler);
+    }
+  });
 });
