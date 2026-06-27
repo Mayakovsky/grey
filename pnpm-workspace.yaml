@@ -14,6 +14,13 @@ packages:
 #     Inspected 2026-06-15: playwright-core ships the driver + JS; browser binaries are
 #     installed out-of-band (npx playwright install chromium) on dev machines, NOT in CI
 #     (CI mocks the discovery stack per Q7, FDQ-4). The allowBuild covers its install script.
+#
+#   argon2 — M4 @grey/ceremony KDF. Native binding (node-pre-gyp). Inspected
+#     2026-06-26: argon2 (ranisalt/node-argon2) is the maintained native Argon2id
+#     binding; ships prebuilt binaries, falls back to node-gyp compile. Used ONLY by
+#     the operator-only @grey/ceremony CLI (never on the VPS, never by grey-core).
+#     The allowBuild covers its install script. Ratified M4 Amendment 5 §A / Amendment 6 §G.
 allowBuilds:
   esbuild: true
   playwright-core: true
+  argon2: true

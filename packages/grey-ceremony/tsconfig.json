@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    // This package is a Node CLI: it imports node: builtins directly. The base
+    // config sets types:[] (so app packages stay DOM/node-ambient-free unless
+    // they opt in); pull node ambient types in here explicitly. @types/node is
+    // present in the workspace store via sibling packages.
+    "types": ["node"],
+    // Source imports sibling modules with explicit .ts extensions (ESM, run via
+    // tsx in dev / bundled at deploy); allow tsc to accept them under noEmit.
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["src"]
+}

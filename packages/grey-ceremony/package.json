@@ -1,22 +1,22 @@
 {
-  "name": "@grey/sweeper",
+  "name": "@grey/ceremony",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "grey-ceremony": "./dist/index.js"
+  },
   "scripts": {
-    "build": "echo \"@grey/sweeper: no dist build until M5 (source-consumed; systemd runs the built artifact at deploy)\"",
+    "build": "echo \"@grey/ceremony: no dist build until M5 (operator CLI; run via tsx in dev, built artifact at deploy)\"",
     "lint": "eslint . --no-error-on-unmatched-pattern",
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run"
   },
   "dependencies": {
-    "pg": "^8.22.0",
-    "undici": "^8.5.0",
+    "argon2": "^0.44.0",
+    "commander": "^15.0.0",
     "viem": "^2.53.1"
-  },
-  "devDependencies": {
-    "@types/pg": "^8.20.0"
   }
 }
