@@ -1,39 +1,18 @@
-// Layer 1 — masked passphrase prompt over a TTY via readline.
+// Layer 1 — passphrase prompt over a TTY via readline. Keystrokes echo to the
+// terminal (single-operator threat model; operator is responsible for terminal-
+// window hygiene per the §6.1 runbook). For the M4.5 public extraction, the
+// default should flip back to masked with an opt-in flag, since downstream users
+// will not share the single-operator threat model. See the M4.5 scope discussion.
 
 import process from 'node:process';
 import { createInterface } from 'node:readline';
-import type { ReadLine } from 'node:readline';
 
 /**
- * Prompt for a passphrase on the TTY, masking keystrokes so the secret is not
- * echoed. Falls back to reading a plain line when stdin is not a TTY.
+ * Prompt for a passphrase on the TTY. Keystrokes echo normally — no masking
+ * (single-operator threat model; see the module header).
  */
 export async function promptPassphrase(query = 'Passphrase: '): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-
-  // Mask each emitted character with '*'. readline still receives the real
-  // input; only the visible echo is replaced.
-  const muteOutput = (rlAny: ReadLine): void => {
-    const r = rlAny as unknown as {
-      output?: { write: (s: string) => void };
-      _writeToOutput?: (s: string) => void;
-    };
-    r._writeToOutput = (stringToWrite: string): void => {
-      if (!r.output) return;
-      if (stringToWrite.includes(query)) {
-        r.output.write(query);
-      } else if (stringToWrite === '\r\n' || stringToWrite === '\n') {
-        r.output.write('\n');
-      } else {
-        r.output.write('*');
-      }
-    };
-  };
-
-  if (process.stdin.isTTY) {
-    muteOutput(rl);
-  }
-
   try {
     const answer: string = await new Promise((resolve) => rl.question(query, resolve));
     return answer;
