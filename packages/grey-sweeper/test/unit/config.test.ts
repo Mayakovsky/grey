@@ -32,8 +32,8 @@ describe('constants', () => {
 });
 
 describe('BASE_POOL_WALLET_ADDRESS — invariant #16 literal', () => {
-  it('is the hardcoded test placeholder literal', () => {
-    expect(BASE_POOL_WALLET_ADDRESS).toBe('0xdead00000000000000000000000000000000dead');
+  it('is the hardcoded canonical Tier-B address literal', () => {
+    expect(BASE_POOL_WALLET_ADDRESS).toBe('0x9324525D2Af0B0636F438B1A85f67F89AF821d74');
   });
   it('is a valid 40-hex address', () => {
     expect(BASE_POOL_WALLET_ADDRESS).toMatch(/^0x[0-9a-fA-F]{40}$/);
@@ -79,6 +79,6 @@ describe('loadConfig', () => {
       BASE_POOL_WALLET_ADDRESS: '0x0000000000000000000000000000000000000bad',
     };
     loadConfig(env);
-    expect(BASE_POOL_WALLET_ADDRESS).toBe('0xdead00000000000000000000000000000000dead');
+    expect(BASE_POOL_WALLET_ADDRESS).toBe('0x9324525D2Af0B0636F438B1A85f67F89AF821d74');
   });
 });

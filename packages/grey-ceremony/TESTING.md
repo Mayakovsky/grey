@@ -1,5 +1,29 @@
 # Testing `@grey/ceremony`
 
+## Running the CLI in dev
+
+`@grey/ceremony` is source-consumed (no real `dist/` until M5 D-RESOLVE), so the
+`bin` shim at `./dist/index.js` does not resolve in dev. Invoke the CLI via the
+`dev:cli` script, which wraps `tsx`:
+
+```bash
+pnpm -F @grey/ceremony dev:cli <subcommand> [args...]
+```
+
+Examples:
+
+```bash
+pnpm -F @grey/ceremony dev:cli --help
+pnpm -F @grey/ceremony dev:cli genphrase
+pnpm -F @grey/ceremony dev:cli genkey --out /path/to/keystore.json
+```
+
+**Do NOT insert a `--` separator before the subcommand.** In this pnpm 11
+workspace the `--` token is forwarded literally to the CLI (commander then sees
+it as an unknown command and errors); arguments after the script name pass
+through directly. Equivalent no-script form:
+`pnpm -F @grey/ceremony exec tsx src/index.ts <subcommand> [args...]`.
+
 ## Unit tests (CI default — no network, no anvil)
 
 ```bash

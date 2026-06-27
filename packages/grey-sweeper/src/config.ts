@@ -6,10 +6,11 @@ type Env = Record<string, string | undefined>;
  * Tier-B sweep destination — the Base pool wallet.
  *
  * Invariant #16: Tier-B destination is a source literal; env CANNOT redirect the
- * sweep destination. This is a clearly-test placeholder; the real address is
- * swapped in post-Phase-A. NEVER read this from env.
+ * sweep destination. This is the canonical Tier-B pool address from the §6.1
+ * ceremony (EIP-55 self-checksum verified via viem getAddress). NEVER read this
+ * from env — changing the destination requires a code change + review.
  */
-export const BASE_POOL_WALLET_ADDRESS = '0xdead00000000000000000000000000000000dead' as const;
+export const BASE_POOL_WALLET_ADDRESS = '0x9324525D2Af0B0636F438B1A85f67F89AF821d74' as const;
 
 /** 200 USDC, 6 decimals. */
 export const THRESHOLD_USDC = 200_000_000n;
