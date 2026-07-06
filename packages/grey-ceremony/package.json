@@ -1,0 +1,23 @@
+{
+  "name": "@grey/ceremony",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "grey-ceremony": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "echo \"@grey/ceremony: no dist build until M5 (operator CLI; run via tsx in dev, built artifact at deploy)\"",
+    "lint": "eslint . --no-error-on-unmatched-pattern",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "dev:cli": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "argon2": "^0.44.0",
+    "commander": "^15.0.0",
+    "viem": "^2.53.1"
+  }
+}

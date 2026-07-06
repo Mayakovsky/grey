@@ -6,9 +6,17 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "echo \"@grey/sweeper: no build in Step 1\"",
+    "build": "echo \"@grey/sweeper: no dist build until M5 (source-consumed; systemd runs the built artifact at deploy)\"",
     "lint": "eslint . --no-error-on-unmatched-pattern",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "pg": "^8.22.0",
+    "undici": "^8.5.0",
+    "viem": "^2.53.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0"
   }
 }

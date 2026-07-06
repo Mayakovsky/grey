@@ -21,11 +21,11 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Established by:** M1.
 
 ## 2. `pnpm11-allowbuilds-discipline`
-- **Statement:** pnpm 11 dependency build/postinstall scripts are blocked by default; approved individually via the `allowBuilds:` map (NOT pre-11's `onlyBuiltDependencies`). Only `esbuild` is approved.
-- **Verification:** `grep -qE '^allowBuilds:' pnpm-workspace.yaml && grep -qE '^[[:space:]]+esbuild: true' pnpm-workspace.yaml`
+- **Statement:** pnpm 11 dependency build/postinstall scripts are blocked by default; approved individually via the `allowBuilds:` map (NOT pre-11's `onlyBuiltDependencies`). The approved set is `{esbuild, playwright-core, argon2}` — each inspected + justified inline in `pnpm-workspace.yaml` (esbuild: M1; playwright-core: M3.5; argon2: M4 @grey/ceremony KDF).
+- **Verification:** `grep -qE '^allowBuilds:' pnpm-workspace.yaml && grep -qE '^[[:space:]]+esbuild: true' pnpm-workspace.yaml && grep -qE '^[[:space:]]+playwright-core: true' pnpm-workspace.yaml && grep -qE '^[[:space:]]+argon2: true' pnpm-workspace.yaml`
 - **Expected:** exit 0.
-- **Rationale:** supply-chain hygiene — each native postinstall is inspected before it can run; never `dangerouslyAllowAllBuilds`.
-- **Established by:** M1.
+- **Rationale:** supply-chain hygiene — each native postinstall is inspected before it can run; never `dangerouslyAllowAllBuilds`. (Amendment 6 §G named `onlyBuiltDependencies` and the set `{esbuild, argon2}`; the repo uses the pnpm-11 `allowBuilds:` map and already carried `playwright-core` from M3.5 — codebase wins per HC16, so the real managed set is the three above.)
+- **Established by:** M1 (esbuild); M3.5 (playwright-core); M4 (argon2).
 
 ## 3. `flat-barrel-and-d-resolve`
 - **Statement:** `@grey/schemas`'s `.` export + `main`/`types` resolve to `./src/index.ts` (no `dist/`), and `@grey/pipeline` consumes it via `export * from '@grey/schemas'`. The M2 flat barrel is preserved (M2.5 added sub-paths but never touched `.`).
