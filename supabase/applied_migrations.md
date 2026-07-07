@@ -22,3 +22,16 @@ This is grey's canonical pattern from Step 2 forward (Movement 4 `sweep_log`, CI
 - Cost columns: `numeric(12,6)` — `cost_events.cost_usd`, `verifications.{compute_cost_usd,l2_cost_usd,l3_cost_usd}` (verified)
 - `supabase_migrations.schema_migrations` on remote: **untouched**. `20260601161838` (`movement_1_buyer_reputation_gating`, plugin-wpv / Movement 0 Extension) still present; no `20260610001048` row added (correct — psql apply, not CLI push).
 - Anomalies: none. (One operator note: the first apply attempt used a bare connection-string positional, which made psql 16 stop option-parsing and ignore `-f` → it hung on stdin and was killed; nothing was applied. Re-run with `-d <url>` + `-w` succeeded cleanly. No partial state at any point — verified empty before the successful apply.)
+
+## 0001__sweep_log (Movement 4 sweeper)
+
+- File: `packages/grey-sweeper/migrations/0001__sweep_log.sql`
+- sha256: `bf59744ec92794b90ce6fcc4c4e03d84be579785e98fcacb04794ab7f2019a5c`
+- Applied at: ~2026-07-07T03:28Z (UTC)
+- Applied by: Kov (Claude Code CLI) via `psql -w -v ON_ERROR_STOP=1 --single-transaction -d <WPV_DATABASE_URL> -f packages/grey-sweeper/migrations/0001__sweep_log.sql` (Forces-authorized at M4 Phase-B directive §4.1 Option A, 2026-07-06)
+- Purpose: audit trail for sweeper activity; required by Phase B exit criterion §6.9 (`grey_two.sweep_log` row written for the smoke sweep).
+- Tables created: `grey_two.sweep_log` (1) — 10 columns (`id BIGSERIAL PK, swept_at TIMESTAMPTZ, tx_hash, amount_wei NUMERIC(78,0), source, destination, status CHECK ok/failed/skipped, error_class, error_msg, chain_id INTEGER`). Additive; zero contact with any existing `grey_two` table or any `wpv_*`/`autognostic` table.
+- Indices: `sweep_log_pkey` + `idx_sweep_log_swept_at` (2, verified).
+- Grants: `grey_pipeline_rw` → USAGE on schema `grey_two`, INSERT+SELECT on `sweep_log`, USAGE+SELECT on `sweep_log_id_seq`; REVOKE UPDATE/DELETE/TRUNCATE on `sweep_log` (append-only for the runtime role, verified INSERT+SELECT present).
+- `supabase_migrations.schema_migrations` on remote: **untouched** (5 rows, all plugin-wpv/autognostic: `20260601161838` … `20260613022829`; no grey row added — psql apply, not CLI push).
+- Anomalies: none. Preflight verified `grey_two` schema + `grey_pipeline_rw` role present and `sweep_log` absent before apply; all 6 DDL statements (CREATE TABLE, CREATE INDEX, 3× GRANT, REVOKE) returned success under `--single-transaction`.
