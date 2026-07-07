@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   BASE_POOL_WALLET_ADDRESS,
+  SEPOLIA_TEST_POOL_WALLET_ADDRESS,
+  POOL_WALLET_BY_CHAIN_ID,
+  poolWalletFor,
   CADENCE_MS,
   DEFAULT_TICK_MS,
   THRESHOLD_USDC,
@@ -37,6 +40,29 @@ describe('BASE_POOL_WALLET_ADDRESS — invariant #16 literal', () => {
   });
   it('is a valid 40-hex address', () => {
     expect(BASE_POOL_WALLET_ADDRESS).toMatch(/^0x[0-9a-fA-F]{40}$/);
+  });
+});
+
+describe('POOL_WALLET_BY_CHAIN_ID + poolWalletFor — FDQ-23 (fail-closed)', () => {
+  it('maps mainnet 8453 to the canonical Tier-B literal', () => {
+    expect(POOL_WALLET_BY_CHAIN_ID[8453]).toBe(BASE_POOL_WALLET_ADDRESS);
+    expect(poolWalletFor(8453)).toBe(BASE_POOL_WALLET_ADDRESS);
+  });
+
+  it('maps Sepolia 84532 to the test pool literal', () => {
+    expect(POOL_WALLET_BY_CHAIN_ID[84532]).toBe(SEPOLIA_TEST_POOL_WALLET_ADDRESS);
+    expect(poolWalletFor(84532)).toBe(SEPOLIA_TEST_POOL_WALLET_ADDRESS);
+  });
+
+  it('the two destinations are distinct (Sepolia never routes to mainnet)', () => {
+    expect(SEPOLIA_TEST_POOL_WALLET_ADDRESS.toLowerCase()).not.toBe(
+      BASE_POOL_WALLET_ADDRESS.toLowerCase(),
+    );
+  });
+
+  it('fails closed on an unlisted chainId — throws, never defaults to mainnet', () => {
+    expect(() => poolWalletFor(1)).toThrow(/no sweep destination configured for chainId 1/);
+    expect(() => poolWalletFor(0)).toThrow(/refusing to sweep/);
   });
 });
 

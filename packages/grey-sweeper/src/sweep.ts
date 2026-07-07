@@ -1,6 +1,6 @@
 import { encodeFunctionData, erc20Abi } from 'viem';
 import type { Address, Hash } from 'viem';
-import { BASE_POOL_WALLET_ADDRESS } from './config.js';
+import { poolWalletFor } from './config.js';
 import { BroadcastRevertError, NonAllowlistError } from './errors.js';
 
 /** Encoded `transfer(to, amount)` calldata for an ERC-20 USDC move. */
@@ -38,7 +38,8 @@ export interface SweepResult {
  * Construct, sign, and broadcast a USDC `transfer` to the hard-coded pool wallet.
  *
  * Defensive allowlist guard: refuses to broadcast unless `destination` is the
- * source literal {@link BASE_POOL_WALLET_ADDRESS} (invariant #16).
+ * source literal for `chainId` ({@link poolWalletFor}, invariant #16). An
+ * unlisted chainId throws (fail-closed) — never routes to mainnet by default.
  */
 export async function executeSweep(params: {
   walletClient: WalletClientLike;
@@ -46,12 +47,14 @@ export async function executeSweep(params: {
   usdcAddress: Address;
   destination: Address;
   amount: bigint;
+  chainId: number;
 }): Promise<SweepResult> {
-  const { walletClient, publicClient, usdcAddress, destination, amount } = params;
+  const { walletClient, publicClient, usdcAddress, destination, amount, chainId } = params;
 
-  if (destination.toLowerCase() !== BASE_POOL_WALLET_ADDRESS.toLowerCase()) {
+  const allowlisted = poolWalletFor(chainId);
+  if (destination.toLowerCase() !== allowlisted.toLowerCase()) {
     throw new NonAllowlistError(
-      `refusing to sweep: destination ${destination} != allowlist ${BASE_POOL_WALLET_ADDRESS}`,
+      `refusing to sweep: destination ${destination} != allowlist ${allowlisted} for chainId ${chainId}`,
     );
   }
 

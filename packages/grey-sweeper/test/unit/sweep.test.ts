@@ -2,11 +2,15 @@ import { describe, it, expect, vi } from 'vitest';
 import { decodeFunctionData, erc20Abi } from 'viem';
 import type { Address, Hash } from 'viem';
 import { encodeUsdcTransfer, executeSweep } from '../../src/sweep.js';
-import { BASE_POOL_WALLET_ADDRESS } from '../../src/config.js';
+import {
+  BASE_POOL_WALLET_ADDRESS,
+  SEPOLIA_TEST_POOL_WALLET_ADDRESS,
+} from '../../src/config.js';
 import { BroadcastRevertError, NonAllowlistError } from '../../src/errors.js';
 
 const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as Address;
 const ALLOWLIST = BASE_POOL_WALLET_ADDRESS as Address;
+const SEPOLIA_POOL = SEPOLIA_TEST_POOL_WALLET_ADDRESS as Address;
 const TXHASH = ('0x' + 'ab'.repeat(32)) as Hash;
 
 describe('encodeUsdcTransfer', () => {
@@ -36,6 +40,7 @@ describe('executeSweep — allowlist enforcement', () => {
         usdcAddress: USDC,
         destination: '0x0000000000000000000000000000000000000bad' as Address,
         amount: 1n,
+        chainId: 8453,
       }),
     ).rejects.toBeInstanceOf(NonAllowlistError);
     expect(sendTransaction).not.toHaveBeenCalled();
@@ -50,10 +55,60 @@ describe('executeSweep — allowlist enforcement', () => {
       usdcAddress: USDC,
       destination: ALLOWLIST,
       amount: 200_000_000n,
+      chainId: 8453,
     });
     expect(res.txHash).toBe(TXHASH);
     expect(res.destination).toBe(ALLOWLIST);
     expect(res.amount).toBe(200_000_000n);
+  });
+});
+
+describe('executeSweep — chain-keyed allowlist (FDQ-23)', () => {
+  it('broadcasts to the Sepolia test pool on chainId 84532', async () => {
+    const sendTransaction = vi.fn(async () => TXHASH);
+    const waitForTransactionReceipt = vi.fn(async () => ({ status: 'success' as const }));
+    const res = await executeSweep({
+      walletClient: { sendTransaction },
+      publicClient: { waitForTransactionReceipt },
+      usdcAddress: USDC,
+      destination: SEPOLIA_POOL,
+      amount: 200_000_000n,
+      chainId: 84532,
+    });
+    expect(res.destination).toBe(SEPOLIA_POOL);
+    expect(sendTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects the mainnet literal on chainId 84532 (cross-chain mismatch)', async () => {
+    const sendTransaction = vi.fn();
+    const waitForTransactionReceipt = vi.fn();
+    await expect(
+      executeSweep({
+        walletClient: { sendTransaction },
+        publicClient: { waitForTransactionReceipt },
+        usdcAddress: USDC,
+        destination: ALLOWLIST,
+        amount: 1n,
+        chainId: 84532,
+      }),
+    ).rejects.toBeInstanceOf(NonAllowlistError);
+    expect(sendTransaction).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on an unlisted chainId (never defaults to mainnet)', async () => {
+    const sendTransaction = vi.fn();
+    const waitForTransactionReceipt = vi.fn();
+    await expect(
+      executeSweep({
+        walletClient: { sendTransaction },
+        publicClient: { waitForTransactionReceipt },
+        usdcAddress: USDC,
+        destination: ALLOWLIST,
+        amount: 1n,
+        chainId: 1,
+      }),
+    ).rejects.toThrow(/no sweep destination configured for chainId 1/);
+    expect(sendTransaction).not.toHaveBeenCalled();
   });
 });
 
@@ -71,6 +126,7 @@ describe('executeSweep — tx construction', () => {
       usdcAddress: USDC,
       destination: ALLOWLIST,
       amount: 555n,
+      chainId: 8453,
     });
     expect(captured?.to).toBe(USDC);
     const decoded = decodeFunctionData({ abi: erc20Abi, data: captured!.data });
@@ -89,6 +145,7 @@ describe('executeSweep — tx construction', () => {
         usdcAddress: USDC,
         destination: ALLOWLIST,
         amount: 1n,
+        chainId: 8453,
       }),
     ).rejects.toBeInstanceOf(BroadcastRevertError);
   });
