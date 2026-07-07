@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import process from 'node:process';
 import type { Address } from 'viem';
-import { BASE_POOL_WALLET_ADDRESS } from './config.js';
+import { poolWalletFor } from './config.js';
 import type { ChainId } from './config.js';
 import { readUsdcBalance } from './balance.js';
 import type { PublicClientLike as BalanceClient } from './balance.js';
@@ -45,7 +45,7 @@ export type TickOutcome = 'swept' | 'skipped' | 'failed' | 'blocked';
 export async function runTick(deps: TickDeps): Promise<TickOutcome> {
   const now = (deps.now ?? Date.now)();
   const source = deps.agentWallet;
-  const destination = BASE_POOL_WALLET_ADDRESS as Address;
+  const destination = poolWalletFor(deps.chainId) as Address;
 
   let balance: bigint;
   let lastSweepAt: number | null;
@@ -81,11 +81,11 @@ export async function runTick(deps: TickDeps): Promise<TickOutcome> {
     return 'skipped';
   }
 
-  // Defensive: destination MUST be the hard-coded allowlist literal.
-  if (destination.toLowerCase() !== BASE_POOL_WALLET_ADDRESS.toLowerCase()) {
+  // Defensive: destination MUST be the hard-coded allowlist literal for the chain.
+  if (destination.toLowerCase() !== poolWalletFor(deps.chainId).toLowerCase()) {
     await alertCritical(
       'sweeper: destination does not match allowlist — refusing to broadcast',
-      { destination, allowlist: BASE_POOL_WALLET_ADDRESS },
+      { destination, allowlist: poolWalletFor(deps.chainId) },
       deps.alertDeps,
     );
     await safeLog(deps, {
@@ -108,6 +108,7 @@ export async function runTick(deps: TickDeps): Promise<TickOutcome> {
       usdcAddress: deps.usdcAddress,
       destination,
       amount: balance,
+      chainId: deps.chainId,
     });
     await safeLog(deps, {
       txHash: result.txHash,

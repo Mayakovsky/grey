@@ -13,6 +13,7 @@ import { makePublicClient, makeWalletClient, resolveRpcUrl, sendAndAwait } from 
 import { encodeSetAgentWallet } from '../transactions/index.ts';
 import { unlockKeystore } from './address.ts';
 import { confirmYes } from './confirm.ts';
+import { deadlineWarning } from './deadline.ts';
 
 export interface LinkAgentParams {
   tokenId: bigint;
@@ -78,6 +79,9 @@ export async function linkAgentAction(opts: {
     registry: opts.registry,
   };
   const { newWallet, verifyingContract } = validateLinkAgent(params);
+
+  const dw = deadlineWarning(params.deadline, Math.floor(Date.now() / 1000));
+  if (dw) process.stderr.write(dw + '\n');
 
   const keystore = parseKeystore(readFileSync(opts.ownerKeyfile, 'utf8'));
   const passphrase = await promptPassphrase();

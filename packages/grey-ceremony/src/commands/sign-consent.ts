@@ -20,6 +20,7 @@ import { zero } from '../memory/index.ts';
 import { promptPassphrase } from '../prompt/index.ts';
 import { unlockKeystore } from './address.ts';
 import { confirmYes } from './confirm.ts';
+import { deadlineWarning } from './deadline.ts';
 
 export interface SignConsentParams {
   tokenId: bigint;
@@ -189,6 +190,8 @@ export async function signConsentAction(opts: {
     chainId: Number(opts.chainId),
     registry: opts.registry,
   };
+  const dw = deadlineWarning(params.deadline, Math.floor(Date.now() / 1000));
+  if (dw) process.stderr.write(dw + '\n');
   const passphrase = await promptPassphrase();
   const r = await runSignConsent(keystore, passphrase, params);
 

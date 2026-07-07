@@ -2,7 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Address, Hash } from 'viem';
 import { runTick } from '../../src/index.js';
 import type { TickDeps } from '../../src/index.js';
-import { BASE_POOL_WALLET_ADDRESS, THRESHOLD_USDC, CADENCE_MS } from '../../src/config.js';
+import {
+  BASE_POOL_WALLET_ADDRESS,
+  SEPOLIA_TEST_POOL_WALLET_ADDRESS,
+  THRESHOLD_USDC,
+  CADENCE_MS,
+} from '../../src/config.js';
+import type { ChainId } from '../../src/config.js';
 import { GasLowError, NonAllowlistError } from '../../src/errors.js';
 
 const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as Address;
@@ -23,6 +29,7 @@ function harness(opts: {
   lastSweepAt?: number | null;
   receiptStatus?: 'success' | 'reverted';
   sendThrows?: Error;
+  chainId?: ChainId;
 }): Harness {
   const logRows: Array<ReadonlyArray<unknown>> = [];
   const opsAlerts: string[] = [];
@@ -63,7 +70,7 @@ function harness(opts: {
     },
     agentWallet: WALLET,
     usdcAddress: USDC,
-    chainId: 8453,
+    chainId: opts.chainId ?? 8453,
     now: () => NOW,
   };
 
@@ -87,6 +94,17 @@ describe('runTick — happy path (threshold met)', () => {
     expect(ok![3]).toBe(BASE_POOL_WALLET_ADDRESS);
     expect(h.opsAlerts.length).toBeGreaterThanOrEqual(1);
     expect(h.critAlerts.length).toBe(0);
+  });
+});
+
+describe('runTick — Sepolia (chainId 84532) routes to the test pool (FDQ-23)', () => {
+  it('sweeps to the Sepolia test pool, not the mainnet literal', async () => {
+    const h = harness({ balance: THRESHOLD_USDC, chainId: 84532 });
+    const outcome = await runTick(h.deps);
+    expect(outcome).toBe('swept');
+    const ok = h.logRows.find((r) => r[4] === 'ok');
+    expect(ok![3]).toBe(SEPOLIA_TEST_POOL_WALLET_ADDRESS);
+    expect(ok![3]).not.toBe(BASE_POOL_WALLET_ADDRESS);
   });
 });
 

@@ -12,6 +12,41 @@ type Env = Record<string, string | undefined>;
  */
 export const BASE_POOL_WALLET_ADDRESS = '0x9324525D2Af0B0636F438B1A85f67F89AF821d74' as const;
 
+/**
+ * Base Sepolia (84532) test pool wallet — Phase B smoke ONLY. Throwaway testnet
+ * address; no real funds depend on it. Kept as a documented testnet entry so the
+ * sweeper can be proved end-to-end on Sepolia without ever routing to the mainnet
+ * Tier-B destination.
+ */
+export const SEPOLIA_TEST_POOL_WALLET_ADDRESS =
+  '0x9a1fCfCA9f5F396295e903CB64b561a1415a441f' as const;
+
+/**
+ * chainId → hard-coded sweep destination. Every entry is a SOURCE LITERAL; env
+ * CANNOT redirect the destination (invariant #16). Typed `Record<number, …>`
+ * (mirrors REGISTRY_BY_CHAIN_ID) so an unlisted chainId reads back falsy and
+ * {@link poolWalletFor} fails closed rather than silently defaulting to mainnet.
+ */
+export const POOL_WALLET_BY_CHAIN_ID: Record<number, `0x${string}`> = {
+  8453: BASE_POOL_WALLET_ADDRESS,
+  84532: SEPOLIA_TEST_POOL_WALLET_ADDRESS,
+};
+
+/**
+ * Resolve the sweep destination for a chain. FAILS CLOSED (FDQ-23 hardening,
+ * ruled by Forces 2026-07-06): throws on any chainId not explicitly listed —
+ * NEVER defaults to the mainnet entry.
+ */
+export function poolWalletFor(chainId: number): `0x${string}` {
+  const dest = POOL_WALLET_BY_CHAIN_ID[chainId];
+  if (!dest) {
+    throw new Error(
+      `grey-sweeper: no sweep destination configured for chainId ${chainId} — refusing to sweep`,
+    );
+  }
+  return dest;
+}
+
 /** 200 USDC, 6 decimals. */
 export const THRESHOLD_USDC = 200_000_000n;
 

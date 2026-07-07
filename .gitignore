@@ -16,6 +16,10 @@ coverage/
 .env.local
 .env.*.local
 
+# M4 Phase B — Base Sepolia smoke fixture: throwaway testnet keystores +
+# extracted keys. Worthless-by-design but NEVER committed (keys stay off git).
+.sepolia/
+
 # logs
 *.log
 
