@@ -4,7 +4,7 @@ import type { HandlerDeps, GreyCoreConfig } from '../src/deps';
 
 const CONFIG: GreyCoreConfig = {
   version: '0.1.0-test',
-  did: 'did:placeholder:grey',
+  did: 'did:erc8004:8453:58618',
   name: 'Whitepaper Grey',
   runtime: 'grey-core',
 };
@@ -40,12 +40,12 @@ describe('probes (app.inject)', () => {
     await app.close();
   });
 
-  it('GET /identity → placeholder DID + agent shape', async () => {
+  it('GET /identity → DID + agent shape', async () => {
     const app = buildServer(fakeDeps());
     const res = await app.inject({ method: 'GET', url: '/identity' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
-      did: 'did:placeholder:grey',
+      did: 'did:erc8004:8453:58618',
       name: 'Whitepaper Grey',
       runtime: 'grey-core',
       version: '0.1.0-test',

@@ -13,7 +13,7 @@ route handlers, consuming `@grey/pipeline`'s repos for DB-backed reads (Q3 proxy
   cache lookups; on cache-miss (always, while `grey_two` is empty) they return a typed-empty /
   `NOT_IN_DATABASE` response. Live-compute (discovery + pipeline + persist) is deferred to a
   later movement (M3.5). No `runFullPipeline`, no Anthropic, in M3.
-- **Probes:** `GET /health`, `GET /identity` (`did:placeholder:grey` until M4), `GET /openapi`
+- **Probes:** `GET /health`, `GET /identity` (`did:erc8004:8453:58618` — minted M4 Phase C), `GET /openapi`
   (serves `@grey/schemas/openapi/openapi.yaml`). No auth (Q9).
 - **`narrowEnvelope<O>`** — runtime+compile-time bridge for the envelope's `{}`-typed payload.
 - **`mapToRecord`** — Map→Record projection seam (Q5).
