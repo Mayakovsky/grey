@@ -12,7 +12,7 @@ import type { TieredDiscoveryResult } from '@grey/pipeline';
 
 export const TEST_CONFIG: GreyCoreConfig = {
   version: '0.1.0-test',
-  did: 'did:placeholder:grey',
+  did: 'did:erc8004:8453:58618',
   name: 'Whitepaper Grey',
   runtime: 'grey-core',
 };

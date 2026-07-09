@@ -3,7 +3,7 @@
   "offering": "claim_history",
   "requestId": "req-0001",
   "agent": {
-    "did": "did:placeholder:grey",
+    "did": "did:erc8004:8453:58618",
     "name": "Whitepaper Grey",
     "runtime": "grey-core"
   },

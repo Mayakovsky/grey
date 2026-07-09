@@ -59,7 +59,7 @@ export interface CreateHandlerDepsEnv {
 const GREY_CORE_VERSION = '0.1.0';
 
 const IDENTITY: Omit<GreyCoreConfig, 'version'> = {
-  did: 'did:placeholder:grey', // M4 swaps this for a deps-injected DID resolver
+  did: 'did:erc8004:8453:58618', // Grey's on-chain ERC-8004 DID — Base mainnet, tokenId 58618 (Movement 4 Phase C mint)
   name: 'Whitepaper Grey',
   runtime: 'grey-core',
 };
