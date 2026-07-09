@@ -118,6 +118,29 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Expected:** lock-check intact at every gate; any anchor move surfaced in chat with diff + new SHAs.
 - **Established by:** M3.5 (HC-C lock-in).
 
+## 16. `sweeper-allowlist-hardcoded`
+- **Statement:** the `@grey/sweeper` sweep DESTINATION is a source-code literal — `BASE_POOL_WALLET_ADDRESS` (Base 8453) in `packages/grey-sweeper/src/config.ts`, keyed through `POOL_WALLET_BY_CHAIN_ID`. Env CANNOT redirect the destination, and `poolWalletFor(chainId)` FAILS CLOSED (throws) on any unlisted chainId rather than defaulting to the mainnet entry (FDQ-23).
+- **Verification (literal present):** `git grep -nE "^export const BASE_POOL_WALLET_ADDRESS = '0x[0-9a-fA-F]{40}' as const" -- packages/grey-sweeper/src/config.ts`
+- **Verification (anti-pattern, must be empty):** `! git grep -qE "BASE_POOL_WALLET_ADDRESS\s*=\s*process\.env" -- packages/grey-sweeper/src/`
+- **Expected:** literal grep returns exactly 1 line; anti-pattern grep exit 0 (zero env-redirect of the destination).
+- **Rationale:** the sweep moves real USDC; a hostile or fat-fingered env var must never redirect funds. Shape-based (any 40-hex literal) so it passed identically against the Phase-A `0xdead…dead` placeholder and the real `0x9324…1d74` (§6.1). The colon-typed regex in spec §10.1 predated the `as const` form the code actually uses — codebase wins (HC16), so the verification matches the real declaration.
+- **Established by:** M4 Phase A (placeholder literal); real address + fail-closed chainId map M4 Phase B (FDQ-23).
+
+## 17. `sweeper-key-isolated-from-core`
+- **Statement:** no file under `packages/grey-core/src/` imports from `@grey/sweeper` or `@grey/ceremony`, nor references `GREY_AGENT_WALLET_PRIVATE_KEY`. The sweeper's signing key is loaded only inside `packages/grey-sweeper/src/wallet.ts` (from env, in the sweeper process); grey-core has no path to construct it.
+- **Verification:** `! git grep -qE "from ['\"]@grey/(sweeper|ceremony)" -- packages/grey-core/src/ && ! git grep -qE "GREY_AGENT_WALLET_PRIVATE_KEY" -- packages/grey-core/src/`
+- **Expected:** exit 0 (zero matches from both greps).
+- **Rationale:** grey-core is the buyer-facing HTTP surface; a hot signing key reachable from it would put fund-moving authority behind the public API. Confining the key's import graph to `@grey/sweeper` means a grey-core compromise cannot sign a sweep. Targets import/identifier SYNTAX (HC-B) — descriptive comments do not false-positive. Extended beyond spec §10.2's `@grey/sweeper`-only shape to also bar `@grey/ceremony` (the other key-holding package).
+- **Established by:** M4 Phase A.
+
+## 18. `no-placeholder-did-after-M4`
+- **Statement:** after the Phase D flip, `did:placeholder:grey` appears nowhere in grey code paths EXCEPT the two sanctioned `did`-field schema-DESCRIPTION lines (`envelope.schema.json` + its generated `.d.ts`) — documentation of the envelope's `did:*` tolerance (FDQ-25, ruled leave). Grey's production identity is the on-chain DID `did:erc8004:8453:58618` in `packages/grey-core/src/deps/index.ts`.
+- **Verification (exclusion grep — verbatim from Phase-D completion §4):** `! git grep -nF 'did:placeholder:grey' -- packages/ ':(exclude)packages/grey-schemas/src/responses/v1/envelope.schema.json' ':(exclude)packages/grey-schemas/src/generated/v1/GreyResponseEnvelope.d.ts'`
+- **Verification (positive companion):** `git grep -qF 'did:erc8004:8453:58618' -- packages/grey-core/src/deps/index.ts`
+- **Expected:** exclusion grep exit 0 (zero placeholder in code paths outside the two sanctioned schema-description lines); companion exit 0 (real DID live in production identity).
+- **Rationale:** the flip removed every placeholder USAGE; the residual two hits document a permanent design property and already cite `did:erc8004:` — editing the frozen schema layer + regenerating for a doc example is scope creep the Phase-D directive §1.4 fences out. Scoping the grep to exclude them by exact path keeps #18 a true "no placeholder DID after M4" assertion, stronger than spec §10.3's `deps/index.ts`-only form (guards against re-introduction anywhere in `packages/`). Targets the string in code paths, not prose (M3 §7.1 bare-word lesson).
+- **Established by:** M4 Phase D.
+
 ---
 
-*Invariants 11–13 established at M3 close (grey-core); #11 replaced + #14/#15 appended at M3.5 close (live-compute fill). Future movements append at their close, not mid-flight.*
+*Invariants 11–13 established at M3 close (grey-core); #11 replaced + #14/#15 appended at M3.5 close (live-compute fill). #16/#17/#18 appended at M4 close (ERC-8004 DID mint + sweeper). Future movements append at their close, not mid-flight.*
