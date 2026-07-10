@@ -11,8 +11,8 @@ info:
 servers:
   - url: https://whitepapergrey.com
     description: Live domain
-  - url: http://localhost:3001
-    description: Local dev (NEW_GREY_PORT)
+  - url: http://localhost:3002
+    description: Local dev (GREY_CORE_PORT)
 
 components:
   securitySchemes:
