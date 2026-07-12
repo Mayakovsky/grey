@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // FDQ-36 (Forces-ruled): ceremony builds via tsc, not esbuild — bundling would collapse the
+    // src/diceware -> dist depth and break the import.meta.url-relative `../../data` wordlist read.
+    // Emitting per-file preserves the src tree in dist so the path math stays valid. rewrite… turns
+    // the source's explicit .ts import specifiers into .js in the emitted JS + declarations.
+    "noEmit": false,
+    "rewriteRelativeImportExtensions": true
+  }
+}

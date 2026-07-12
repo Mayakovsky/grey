@@ -5,8 +5,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": ["dist"],
   "scripts": {
-    "build": "echo \"@grey/sweeper: no dist build until M5 (source-consumed; systemd runs the built artifact at deploy)\"",
+    "build": "tsc -p tsconfig.json",
     "lint": "eslint . --no-error-on-unmatched-pattern",
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run"
