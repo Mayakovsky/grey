@@ -8,8 +8,9 @@
   "bin": {
     "grey-ceremony": "./dist/index.js"
   },
+  "files": ["dist", "data"],
   "scripts": {
-    "build": "echo \"@grey/ceremony: no dist build until M5 (operator CLI; run via tsx in dev, built artifact at deploy)\"",
+    "build": "tsc -p tsconfig.build.json",
     "lint": "eslint . --no-error-on-unmatched-pattern",
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
