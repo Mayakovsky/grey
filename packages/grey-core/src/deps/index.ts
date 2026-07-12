@@ -21,6 +21,11 @@ export interface GreyCoreConfig {
   did: string;
   name: string;
   runtime: string;
+  /** x402 receiver address (read-only). The relayer signing key lives ONLY in
+   *  @grey/x402-middleware (invariant #19) — grey-core never holds a private key. */
+  payTo: string;
+  /** x402 network (CAIP-2, e.g. `eip155:8453`). */
+  network: string;
 }
 
 /** grey-core DI shape. Ingress-agnostic (no Fastify coupling) so the M5 ACP adapter reuses it. */
@@ -58,7 +63,7 @@ export interface CreateHandlerDepsEnv {
 // Keep in sync with package.json `version`.
 const GREY_CORE_VERSION = '0.1.0';
 
-const IDENTITY: Omit<GreyCoreConfig, 'version'> = {
+const IDENTITY: Omit<GreyCoreConfig, 'version' | 'payTo' | 'network'> = {
   did: 'did:erc8004:8453:58618', // Grey's on-chain ERC-8004 DID — Base mainnet, tokenId 58618 (Movement 4 Phase C mint)
   name: 'Whitepaper Grey',
   runtime: 'grey-core',
@@ -81,7 +86,16 @@ export function createHandlerDeps(env: CreateHandlerDepsEnv = {}): HandlerDeps {
     claims: new ClaimsRepo(db),
     logger: createLogger({ component: 'grey-core' }),
     clock: env.clock ?? ((): Date => new Date()),
-    config: { version: env.version ?? GREY_CORE_VERSION, ...IDENTITY },
+    config: {
+      version: env.version ?? GREY_CORE_VERSION,
+      ...IDENTITY,
+      // Informational read-only x402 context. Authoritative validation of these (plus the
+      // relayer key + RPC) happens in @grey/x402-middleware's loadX402Config, used by start.ts
+      // to build the paid-route gate. A plain env read here avoids requiring the key just to
+      // populate the config surface.
+      payTo: process.env.BASE_X402_PAY_TO ?? '',
+      network: process.env.X402_NETWORK ?? '',
+    },
     pipeline,
     discovery: createDiscoveryStack({
       githubToken: process.env.GITHUB_TOKEN,

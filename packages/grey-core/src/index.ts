@@ -10,7 +10,6 @@ export type { BuildEnvelopeArgs, EnvelopeSubject, EnvelopeMetadata } from './env
 
 export { mapToRecord } from './projection';
 
-export { x402Placeholder } from './server/x402-placeholder';
 export { installValidatorCompiler } from './server/validators';
 export type { GreySchemaMarker } from './server/validators';
 
