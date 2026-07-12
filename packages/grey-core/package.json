@@ -6,9 +6,14 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "node build.mjs",
     "lint": "eslint . --no-error-on-unmatched-pattern",
@@ -20,8 +25,9 @@
     "parity-diff": "tsx scripts/parity-diff.ts"
   },
   "dependencies": {
-    "@grey/schemas": "workspace:*",
     "@grey/pipeline": "workspace:*",
+    "@grey/schemas": "workspace:*",
+    "@grey/x402-middleware": "workspace:*",
     "fastify": "^5.0.0"
   },
   "devDependencies": {

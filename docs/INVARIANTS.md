@@ -27,12 +27,12 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Rationale:** supply-chain hygiene — each native postinstall is inspected before it can run; never `dangerouslyAllowAllBuilds`. (Amendment 6 §G named `onlyBuiltDependencies` and the set `{esbuild, argon2}`; the repo uses the pnpm-11 `allowBuilds:` map and already carried `playwright-core` from M3.5 — codebase wins per HC16, so the real managed set is the three above.)
 - **Established by:** M1 (esbuild); M3.5 (playwright-core); M4 (argon2).
 
-## 3. `flat-barrel-and-d-resolve`
-- **Statement:** `@grey/schemas`'s `.` export + `main`/`types` resolve to `./src/index.ts` (no `dist/`), and `@grey/pipeline` consumes it via `export * from '@grey/schemas'`. The M2 flat barrel is preserved (M2.5 added sub-paths but never touched `.`).
-- **Verification:** `grep -qE '"\.": *"\./src/index\.ts"' packages/grey-schemas/package.json && grep -qE "^export \* from '@grey/schemas'" packages/grey-pipeline/src/index.ts`
-- **Expected:** exit 0.
-- **Rationale:** D-RESOLVE — packages are consumed via source (no build until M5); breaking `.` or the pipeline re-export breaks every consumer's type resolution.
-- **Established by:** M2 (preserved through M2.5).
+## 3. `flat-barrel-dist-resolution`
+- **Statement:** `@grey/schemas`'s `.` export resolves to the **built `dist/`** (`types` → `./dist/index.d.ts`, `default` → `./dist/index.js`) — the M5 Phase B D-RESOLVE-closure flip — while `@grey/pipeline` still consumes it via `export * from '@grey/schemas'`. The flat barrel (single `.` entry) is preserved; production Node resolves dist, and dev/test/typecheck resolve source (vitest alias → src; typecheck via `^build` → the built `.d.ts`).
+- **Verification:** `grep -qE '"\.":[[:space:]]*\{[^}]*"\./dist/index\.js"' packages/grey-schemas/package.json && ! grep -qE '"\.":[[:space:]]*"\./src/index\.ts"' packages/grey-schemas/package.json && grep -qE "^export \* from '@grey/schemas'" packages/grey-pipeline/src/index.ts`
+- **Expected:** exit 0 (`.` maps to `dist/index.js` under a conditional-exports object, NOT to `src`; pipeline re-export intact).
+- **Rationale:** Pre-M5 this was D-RESOLVE (source-consumed, `.` → `./src/index.ts`) because nothing built to dist. M5 Phase B introduced real builds and flipped every package's `exports` to dist; breaking `.` or the pipeline re-export still breaks every consumer's resolution — the property is the same, only the target moved src → dist.
+- **Established by:** M2 (flat barrel, src-resolve); **retargeted to dist at M5 Phase B** (real builds); statement corrected at M5 Phase C (Phase B's close ran only a partial invariant check and missed this).
 
 ## 4. `anti-cycle-one-way-dependency`
 - **Statement:** `@grey/schemas` MUST NOT import from `@grey/pipeline` or `@grey/core` (schemas is the leaf; pipeline + core consume it, never the reverse).
@@ -141,6 +141,20 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Rationale:** the flip removed every placeholder USAGE; the residual two hits document a permanent design property and already cite `did:erc8004:` — editing the frozen schema layer + regenerating for a doc example is scope creep the Phase-D directive §1.4 fences out. Scoping the grep to exclude them by exact path keeps #18 a true "no placeholder DID after M4" assertion, stronger than spec §10.3's `deps/index.ts`-only form (guards against re-introduction anywhere in `packages/`). Targets the string in code paths, not prose (M3 §7.1 bare-word lesson).
 - **Established by:** M4 Phase D.
 
+## 19. `receiver-key-isolation` (extends #17)
+- **Statement:** the x402 settlement relayer key `X402_RELAYER_PRIVATE_KEY` is referenced ONLY under `adapters/x402-middleware/src/` — never in `packages/grey-core/src/`. Together with #17 (sweeper key `GREY_AGENT_WALLET_PRIVATE_KEY` only under `packages/grey-sweeper/`), NO signing key is reachable from grey-core's runtime source. The relayer is a gas-only EOA (FDQ-31(a)) that structurally cannot redirect funds — the buyer's EIP-3009 signature fixes `to` = `payTo`, so a relayer or grey-core compromise costs at most the relayer's gas balance.
+- **Verification:** `! git grep -qE --untracked "X402_RELAYER_PRIVATE_KEY" -- packages/grey-core/src/ && ! git grep -qE --untracked "GREY_AGENT_WALLET_PRIVATE_KEY" -- packages/grey-core/src/ && git grep -lE --untracked "X402_RELAYER_PRIVATE_KEY" -- adapters/x402-middleware/src/ | grep -q .`
+- **Expected:** exit 0 (neither key string in `grey-core/src`; the relayer key IS present in `x402-middleware/src`). Scoped to `src/` like #17 — test fixtures that name the env var to exercise `loadX402Config` are not source handling of the key.
+- **Rationale:** grey-core is the buyer-facing HTTP surface; confining each signing key's import graph to its owning package means a grey-core compromise can neither sweep (sweeper key) nor sign a redirected settlement (relayer key, and the buyer's signature pins the destination regardless).
+- **Established by:** M5 Phase C.
+
+## 20. `single-price-source`
+- **Statement:** the 7 paid-route prices exist as exactly ONE literal table — `PRICE_TABLE` in `adapters/x402-middleware/src/prices.ts` (USD label + USDC atomic units), with `USDC_BY_NETWORK` the sole per-network asset literals. grey-core's paid-route envelope `costUsd` and the 402 `maxAmountRequired` both derive from it (`priceUsdFor` / `priceAtomicFor`) — no price is duplicated as a literal in grey-core's paid routes. (The 2 free resource routes legitimately carry `costUsd: 0`.)
+- **Verification:** `git grep -qE --untracked "^export const PRICE_TABLE" -- adapters/x402-middleware/src/prices.ts && git grep -q --untracked "priceUsdFor" -- packages/grey-core/src/server/routes/offerings.ts && ! git grep -qE --untracked "costUsd:\s*[0-9]" -- packages/grey-core/src/server/routes/offerings.ts`
+- **Expected:** exit 0 (table present; paid routes derive `costUsd` via `priceUsdFor`; no numeric price literal in the paid-route file).
+- **Rationale:** a hardcoded price drifting from the table would let the 402 challenge charge one amount while the envelope reports another. Single source keeps the challenge (`maxAmountRequired`), the settlement floor (verify `value >=`), and the receipt (`costUsd`) mutually consistent. Closes the M3 `costUsd: 0` hardcode on paid routes.
+- **Established by:** M5 Phase C.
+
 ---
 
-*Invariants 11–13 established at M3 close (grey-core); #11 replaced + #14/#15 appended at M3.5 close (live-compute fill). #16/#17/#18 appended at M4 close (ERC-8004 DID mint + sweeper). Future movements append at their close, not mid-flight.*
+*Invariants 11–13 established at M3 close (grey-core); #11 replaced + #14/#15 appended at M3.5 close (live-compute fill). #16/#17/#18 appended at M4 close (ERC-8004 DID mint + sweeper). #19/#20 appended at M5 Phase C close (x402 middleware). Future movements append at their close, not mid-flight. Invariant #3 was retargeted src → dist at M5 Phase C (FDQ-37) to reflect the Phase B real-build flip — Phase B's close should have done this but ran only a partial invariant check (#13/#16–#18).*

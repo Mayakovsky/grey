@@ -2,12 +2,12 @@
 // $grey marker (→ offeringRequestValidators), runs behind the x402 no-op preHandler, calls the
 // cache-read handler, and wraps the payload in a GreyResponseEnvelope.
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, preHandlerHookHandler } from 'fastify';
 import type { PaidOfferingSlug } from '@grey/schemas/responses';
+import { priceUsdFor } from '@grey/x402-middleware';
 import type { HandlerDeps } from '../../deps';
 import { offeringHandlers } from '../../handlers';
 import { buildEnvelope } from '../../envelope/build';
-import { x402Placeholder } from '../x402-placeholder';
 
 const PAID: PaidOfferingSlug[] = [
   'legitimacy_scan',
@@ -19,13 +19,17 @@ const PAID: PaidOfferingSlug[] = [
   'daily_tech_brief',
 ];
 
-export function registerOfferingRoutes(app: FastifyInstance, deps: HandlerDeps): void {
+export function registerOfferingRoutes(
+  app: FastifyInstance,
+  deps: HandlerDeps,
+  x402PreHandler: preHandlerHookHandler,
+): void {
   for (const slug of PAID) {
     app.post(
       `/v1/offerings/${slug}`,
       {
         schema: { body: { $grey: { kind: 'request', offering: slug } } },
-        preHandler: x402Placeholder,
+        preHandler: x402PreHandler,
       },
       async (req, reply) => {
         const start = deps.clock().getTime();
@@ -37,7 +41,7 @@ export function registerOfferingRoutes(app: FastifyInstance, deps: HandlerDeps):
           config: deps.config,
           subject: result.subject,
           metadata: {
-            costUsd: 0,
+            costUsd: priceUsdFor(slug),
             model: 'none',
             latencyMs: deps.clock().getTime() - start,
             timestamp: deps.clock().toISOString(),

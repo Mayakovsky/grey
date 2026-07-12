@@ -68,7 +68,7 @@ describe('buildEnvelope + narrowEnvelope round-trip', () => {
       offering: slug,
       payload: original.payload as never,
       requestId: 'req-test',
-      config: { version: 'x', did: 'did:erc8004:8453:58618', name: 'Whitepaper Grey', runtime: 'grey-core' },
+      config: { version: 'x', did: 'did:erc8004:8453:58618', name: 'Whitepaper Grey', runtime: 'grey-core', payTo: '0x0000000000000000000000000000000000000000', network: 'eip155:84532' },
       subject: { tokenAddress: null, projectName: 'Test' },
       metadata: { costUsd: 0, model: 'none', latencyMs: 0, timestamp: '2026-06-14T00:00:00.000Z', cacheHit: true },
     });

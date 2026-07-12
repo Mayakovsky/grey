@@ -3,7 +3,7 @@
 // AND binds the payload to the offering's response schema (allOf[if/then]). So a malformed handler
 // payload fails here. (Internal-impl test organization per Pattern 1 Tier B / spec §4.3 fixtures.)
 import { expect } from 'vitest';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, preHandlerHookHandler } from 'fastify';
 import { envelopeValidator } from '@grey/schemas/validators';
 import { buildServer } from '../src/server';
 import type { HandlerDeps, GreyCoreConfig } from '../src/deps';
@@ -15,7 +15,13 @@ export const TEST_CONFIG: GreyCoreConfig = {
   did: 'did:erc8004:8453:58618',
   name: 'Whitepaper Grey',
   runtime: 'grey-core',
+  payTo: '0x0000000000000000000000000000000000000000',
+  network: 'eip155:84532',
 };
+
+/** Pass-through x402 gate for handler-logic tests — lets paid routes through so they test the
+ *  handler/envelope, not payment. The real gate is exercised separately in x402-routes.test.ts. */
+export const passThroughX402: preHandlerHookHandler = async () => {};
 
 const TS = new Date('2026-06-14T00:00:00.000Z');
 
@@ -125,8 +131,11 @@ export function fakeDeps(stubs: RepoStubs = {}): HandlerDeps {
   };
 }
 
-export function makeApp(stubs: RepoStubs = {}): FastifyInstance {
-  return buildServer(fakeDeps(stubs));
+export function makeApp(
+  stubs: RepoStubs = {},
+  gate: preHandlerHookHandler = passThroughX402,
+): FastifyInstance {
+  return buildServer(fakeDeps(stubs), gate);
 }
 
 /** Loose envelope shape for reading inject() response bodies in tests. */
