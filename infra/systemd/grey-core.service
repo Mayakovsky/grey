@@ -1,0 +1,24 @@
+# grey-core — Grey's buyer-facing HTTP API + x402 payment gate (Movement 5 Phase D).
+# Runs as its OWN unit alongside ElizaOS Grey's pm2 process — NO Requires=/Wants= coupling to it
+# or to grey-sweeper. Copied to /etc/systemd/system/ by the deploy runbook (infra/deploy/deploy.md).
+[Unit]
+Description=Grey core (HTTP API + x402 payment gate)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=grey
+WorkingDirectory=/opt/grey/grey
+ExecStart=/usr/bin/node packages/grey-core/dist/start.js
+EnvironmentFile=/etc/grey/grey-core.env
+Restart=on-failure
+RestartSec=5
+
+# Hardening (drop if a probe shows it breaks node/pg; report before removing).
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

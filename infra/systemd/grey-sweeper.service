@@ -1,0 +1,24 @@
+# grey-sweeper — Tier-A → Tier-B USDC sweeper (Movement 5). Holds the Tier-A signing key, so it
+# runs as its OWN unit and must fail independently of grey-core (no mutual coupling, no pm2 coupling).
+# Ships INSTALLED-BUT-DISABLED — enabling/starting it is Phase E's final act, NOT Phase D.
+[Unit]
+Description=Grey sweeper (Tier-A -> Tier-B USDC sweep)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=grey
+WorkingDirectory=/opt/grey/grey
+ExecStart=/usr/bin/node packages/grey-sweeper/dist/main.js
+EnvironmentFile=/etc/grey/sweeper.env
+Restart=on-failure
+RestartSec=5
+
+# Hardening (drop if a probe shows it breaks node/pg; report before removing).
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
