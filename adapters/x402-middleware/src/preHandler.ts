@@ -70,22 +70,29 @@ export function makeX402PreHandler(cfg: X402Config, deps: X402PreHandlerDeps): p
       return;
     }
 
-    let txHash: string;
+    let outcome;
     try {
-      ({ txHash } = await settle(cfg, verdict.authorization, verdict.signature, {
+      outcome = await settle(cfg, verdict.authorization, verdict.signature, {
         wallet: deps.wallet,
         publicClient: deps.publicClient,
-      }));
+      });
     } catch (err) {
-      deps.logger?.error('x402: settlement failed', {
+      // Genuine infra/post-simulation failure (RPC error, race revert) → 502.
+      deps.logger?.error('x402: settlement infra error', {
         slug,
         reason: err instanceof Error ? err.message : String(err),
       });
       reply.code(502).send({ x402Version: 1, error: 'settlement failed' });
       return;
     }
+    if (!outcome.ok) {
+      // FDQ-40: pre-broadcast simulation caught a doomed settlement (e.g., a replayed/spent nonce) —
+      // nothing was broadcast and no relayer gas was spent. Return a clean 402.
+      reply.code(402).send(buildPaymentRequirements(cfg, slug, resource, outcome.reason));
+      return;
+    }
 
     // Settlement stands. Header persists through a later handler error → payment survives.
-    reply.header('X-PAYMENT-RESPONSE', encodePaymentResponse(txHash, cfg.network));
+    reply.header('X-PAYMENT-RESPONSE', encodePaymentResponse(outcome.txHash, cfg.network));
   };
 }

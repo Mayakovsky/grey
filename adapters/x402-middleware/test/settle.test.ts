@@ -25,6 +25,8 @@ describe('settle — DIRECT via relayer', () => {
       wallet,
       publicClient: mockPublicClient({ status: 'success' }),
     });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('expected ok');
     expect(r.txHash).toMatch(/^0x[0-9a-f]{64}$/);
     expect(wallet.calls).toHaveLength(1);
     const call = wallet.calls[0] as { functionName: string; args: unknown[]; address: string };
@@ -43,5 +45,16 @@ describe('settle — DIRECT via relayer', () => {
         publicClient: mockPublicClient({ status: 'reverted' }),
       }),
     ).rejects.toThrow(/reverted/);
+  });
+
+  it('FDQ-40: returns {ok:false} and does NOT broadcast when simulation reverts', async () => {
+    const { auth, signature } = await authAndSig();
+    const wallet = mockWallet();
+    const r = await settle(TEST_CFG, auth, signature, {
+      wallet,
+      publicClient: mockPublicClient({ simRevert: true }),
+    });
+    expect(r).toMatchObject({ ok: false });
+    expect(wallet.calls).toHaveLength(0); // nothing broadcast → zero relayer gas
   });
 });

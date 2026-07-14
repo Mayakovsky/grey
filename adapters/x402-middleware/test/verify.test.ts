@@ -87,6 +87,7 @@ describe('verifyPayment — every branch', () => {
       readContract: async () => {
         throw new Error('rpc down');
       },
+      simulateContract: async () => ({}),
       waitForTransactionReceipt: async () => ({ status: 'success' as const }),
     };
     const r = await verifyPayment(TEST_CFG, payload, PRICE, failing, NOW);

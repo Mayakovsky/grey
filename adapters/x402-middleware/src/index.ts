@@ -18,7 +18,7 @@ export { buildPaymentRequirements } from './challenge.js';
 export { decodePaymentHeader, verifyPayment } from './verify.js';
 export type { VerifyResult } from './verify.js';
 export { settle } from './settle.js';
-export type { SettleResult } from './settle.js';
+export type { SettleOutcome } from './settle.js';
 export { USDC_EIP3009_ABI } from './usdc-abi.js';
 export type {
   X402Config,

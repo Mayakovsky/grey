@@ -18,6 +18,7 @@ const gate = makeX402PreHandler(cfg, {
   wallet: { writeContract: async () => ('0x' + 'ee'.repeat(32)) as `0x${string}` },
   publicClient: {
     readContract: async () => false,
+    simulateContract: async () => ({ request: {} }),
     waitForTransactionReceipt: async () => ({ status: 'success' as const }),
   },
   now: () => 1_000_000_000_000,

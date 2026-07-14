@@ -98,9 +98,12 @@ d('x402 anvil integration (fork Base, real USDC)', () => {
     expect(verdict.ok).toBe(true);
     if (!verdict.ok) return;
 
-    // Relayer settles on-chain.
+    // Relayer settles on-chain (real viem clients — simulateContract runs against the fork first).
     const auth: TransferAuthorization = verdict.authorization;
-    const { txHash } = await settle(cfg, auth, verdict.signature as Hex, { wallet: wallet as never, publicClient: publicClient as never });
+    const res = await settle(cfg, auth, verdict.signature as Hex, { wallet: wallet as never, publicClient: publicClient as never });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const txHash = res.txHash;
     expect(txHash).toMatch(/^0x/);
 
     const payToAfter = await balanceOf(PAY_TO);
