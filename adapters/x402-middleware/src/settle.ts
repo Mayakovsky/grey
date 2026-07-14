@@ -37,10 +37,39 @@ export async function settle(
     return { ok: false, reason: 'settlement would revert (authorization spent or invalid)' };
   }
 
-  const txHash = await clients.wallet.writeContract(call);
+  // Broadcast. If simulation missed a spent nonce because its RPC read was stale (a load-balanced
+  // node behind head), the sequencer rejects the doomed submission here — pre-inclusion, so no gas.
+  // Classify CONSERVATIVELY: only a provable EIP-3009 auth-state rejection maps to a clean 402;
+  // anything ambiguous (generic revert, RPC/network fault) re-throws → 502, never masking infra.
+  let txHash: Hex;
+  try {
+    txHash = await clients.wallet.writeContract(call);
+  } catch (err) {
+    if (isAuthStateRejection(err)) {
+      return { ok: false, reason: 'settlement rejected: authorization spent or invalid' };
+    }
+    throw err;
+  }
+
   const receipt = await clients.publicClient.waitForTransactionReceipt({ hash: txHash, confirmations: 1 });
   if (receipt.status !== 'success') {
     throw new Error(`x402: settlement reverted (${txHash})`);
   }
   return { ok: true, txHash };
+}
+
+/**
+ * Conservative classifier: does a writeContract error PROVE the settlement was rejected for
+ * EIP-3009 authorization state (spent nonce / bad signature) rather than an infra fault? Only
+ * these map to a clean 402; anything ambiguous (generic "execution reverted", RPC/network errors)
+ * stays a 502 so we never mask an infrastructure failure as a payment rejection.
+ */
+function isAuthStateRejection(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes('authorization is used') || // FiatTokenV2: authorization is used or canceled (spent nonce)
+    msg.includes('invalid signature') || // EIP-3009 signature mismatch
+    msg.includes('authorization is not yet valid') ||
+    msg.includes('authorization is expired')
+  );
 }
