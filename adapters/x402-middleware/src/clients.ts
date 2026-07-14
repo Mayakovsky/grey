@@ -6,6 +6,8 @@ import type { X402Config } from './types.js';
 
 export interface PublicClientLike {
   readContract(args: unknown): Promise<unknown>;
+  /** FDQ-40: dry-run a settlement; throws if it would revert (so we never broadcast a doomed tx). */
+  simulateContract(args: unknown): Promise<unknown>;
   waitForTransactionReceipt(args: {
     hash: Hex;
     confirmations?: number;

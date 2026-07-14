@@ -90,10 +90,17 @@ export async function signedPayment(
   return { payload, header: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64') };
 }
 
-/** A public client whose authorizationState returns `used` and receipts return `status`. */
-export function mockPublicClient(opts: { used?: boolean; status?: 'success' | 'reverted' } = {}) {
+/** A public client whose authorizationState returns `used`, simulateContract throws when
+ *  `simRevert`, and receipts return `status`. */
+export function mockPublicClient(
+  opts: { used?: boolean; status?: 'success' | 'reverted'; simRevert?: boolean } = {},
+) {
   return {
     readContract: async () => opts.used ?? false,
+    simulateContract: async () => {
+      if (opts.simRevert) throw new Error('execution reverted: authorization is used');
+      return { request: {} };
+    },
     waitForTransactionReceipt: async () => ({ status: opts.status ?? 'success' }),
   };
 }

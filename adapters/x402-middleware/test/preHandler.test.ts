@@ -102,4 +102,14 @@ describe('makeX402PreHandler — orchestration', () => {
     expect(m.statusCode).toBe(502);
     expect(m.headers['X-PAYMENT-RESPONSE']).toBeUndefined();
   });
+
+  it('FDQ-40: 402 + zero broadcast when simulation reverts (replayed/spent nonce)', async () => {
+    const { header } = await signedPayment(TEST_CFG);
+    const { req, reply, m } = reqReply('/v1/offerings/legitimacy_scan', header);
+    const wallet = mockWallet();
+    await gate({ wallet, publicClient: mockPublicClient({ used: false, simRevert: true }) })(req, reply);
+    expect(m.statusCode).toBe(402); // clean 402, not a 502 after a wasted reverted tx
+    expect(wallet.calls).toHaveLength(0); // nothing broadcast → zero relayer gas
+    expect(m.headers['X-PAYMENT-RESPONSE']).toBeUndefined();
+  });
 });
