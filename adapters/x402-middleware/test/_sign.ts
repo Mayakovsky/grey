@@ -105,12 +105,13 @@ export function mockPublicClient(
   };
 }
 
-export function mockWallet(txHash = ('0x' + 'cd'.repeat(32))) {
+export function mockWallet(txHash = ('0x' + 'cd'.repeat(32)), opts: { throwOn?: string } = {}) {
   const calls: unknown[] = [];
   return {
     calls,
     writeContract: async (args: unknown) => {
       calls.push(args);
+      if (opts.throwOn) throw new Error(opts.throwOn);
       return txHash as Hex;
     },
   };

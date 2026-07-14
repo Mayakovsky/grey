@@ -57,4 +57,25 @@ describe('settle — DIRECT via relayer', () => {
     expect(r).toMatchObject({ ok: false });
     expect(wallet.calls).toHaveLength(0); // nothing broadcast → zero relayer gas
   });
+
+  it('FDQ-40: writeContract auth-state rejection (spent nonce) → {ok:false} clean 402, not a throw', async () => {
+    const { auth, signature } = await authAndSig();
+    // Simulation passes (a stale RPC node missed the spent nonce), but the sequencer rejects the
+    // submission with the EIP-3009 auth-used revert → classified as a payment rejection (402).
+    const r = await settle(TEST_CFG, auth, signature, {
+      wallet: mockWallet('0x' + 'ee'.repeat(32), { throwOn: 'FiatTokenV2: authorization is used or canceled' }),
+      publicClient: mockPublicClient(),
+    });
+    expect(r).toMatchObject({ ok: false });
+  });
+
+  it('FDQ-40: writeContract ambiguous/infra rejection → re-throws (→ 502), never masked as 402', async () => {
+    const { auth, signature } = await authAndSig();
+    await expect(
+      settle(TEST_CFG, auth, signature, {
+        wallet: mockWallet('0x' + 'ee'.repeat(32), { throwOn: 'HTTP request failed: connection reset' }),
+        publicClient: mockPublicClient(),
+      }),
+    ).rejects.toThrow(/connection reset/);
+  });
 });
