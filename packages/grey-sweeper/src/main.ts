@@ -49,14 +49,22 @@ async function main(): Promise<void> {
   const transport = http(config.rpcUrl);
   const publicClient = createPublicClient({ chain, transport });
   const walletClient = createWalletClient({ account, chain, transport });
-  const pool = new Pool({ connectionString: config.pgUrl });
+  // FDQ-44: the Supabase pooler (:6543 / Supavisor) presents a self-signed cert that node's default
+  // verify-full rejects. rejectUnauthorized:false accepts it (encrypted, un-verified) — the documented
+  // Supabase pooler posture, matching grey-core's postgres-js connection to the same DB.
+  const pool = new Pool({ connectionString: config.pgUrl, ssl: { rejectUnauthorized: false } });
 
   const deps: TickDeps = {
     balanceClient: publicClient as unknown as TickDeps['balanceClient'],
     walletClient: walletClient as unknown as TickDeps['walletClient'],
     receiptClient: publicClient as unknown as TickDeps['receiptClient'],
     pool: pool as unknown as TickDeps['pool'],
-    alertDeps: { opsUrl: config.ntfyOpsUrl, critUrl: config.ntfyCritUrl },
+    alertDeps: {
+      opsUrl: config.ntfyOpsUrl,
+      critUrl: config.ntfyCritUrl,
+      user: config.ntfyUser,
+      pass: config.ntfyPass,
+    },
     agentWallet: account.address,
     usdcAddress: config.usdcAddress,
     chainId: config.chainId,
