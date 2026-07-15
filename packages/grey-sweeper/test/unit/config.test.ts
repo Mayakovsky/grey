@@ -19,6 +19,8 @@ function baseEnv(): Record<string, string> {
     GREY_PG_URL: 'postgres://localhost/grey_two',
     GREY_NTFY_OPS_URL: 'https://ntfy.example/ops',
     GREY_NTFY_CRIT_URL: 'https://ntfy.example/crit',
+    GREY_NTFY_USER: 'grey-sweeper',
+    GREY_NTFY_PASS: 's3cr3t-P@ss!42',
   };
 }
 
@@ -72,6 +74,32 @@ describe('loadConfig', () => {
     expect(cfg.rpcUrl).toBe('https://rpc.example');
     expect(cfg.chainId).toBe(8453);
     expect(cfg.tickMs).toBe(DEFAULT_TICK_MS);
+  });
+
+  it('loads ntfy Basic-auth creds from separate env vars (FDQ-43)', () => {
+    const cfg = loadConfig(baseEnv());
+    expect(cfg.ntfyOpsUrl).toBe('https://ntfy.example/ops');
+    expect(cfg.ntfyCritUrl).toBe('https://ntfy.example/crit');
+    expect(cfg.ntfyUser).toBe('grey-sweeper');
+    expect(cfg.ntfyPass).toBe('s3cr3t-P@ss!42');
+  });
+
+  it('the credential-free topic URLs carry no embedded userinfo', () => {
+    const cfg = loadConfig(baseEnv());
+    expect(cfg.ntfyOpsUrl).not.toContain('@');
+    expect(cfg.ntfyCritUrl).not.toContain('@');
+  });
+
+  it('throws when GREY_NTFY_USER is missing', () => {
+    const env = baseEnv();
+    delete (env as Record<string, string | undefined>)['GREY_NTFY_USER'];
+    expect(() => loadConfig(env)).toThrow(/GREY_NTFY_USER/);
+  });
+
+  it('throws when GREY_NTFY_PASS is missing', () => {
+    const env = baseEnv();
+    delete (env as Record<string, string | undefined>)['GREY_NTFY_PASS'];
+    expect(() => loadConfig(env)).toThrow(/GREY_NTFY_PASS/);
   });
 
   it('parses tick override', () => {

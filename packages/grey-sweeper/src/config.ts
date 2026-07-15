@@ -64,8 +64,11 @@ export interface SweeperConfig {
   agentWalletPrivateKey: `0x${string}`;
   usdcAddress: `0x${string}`;
   pgUrl: string;
+  /** Credential-free ntfy topic URLs; auth is carried separately (FDQ-43). */
   ntfyOpsUrl: string;
   ntfyCritUrl: string;
+  ntfyUser: string;
+  ntfyPass: string;
   tickMs: number;
 }
 
@@ -115,6 +118,8 @@ export function loadConfig(env: Env = process.env): SweeperConfig {
     pgUrl: required(env, 'GREY_PG_URL'),
     ntfyOpsUrl: required(env, 'GREY_NTFY_OPS_URL'),
     ntfyCritUrl: required(env, 'GREY_NTFY_CRIT_URL'),
+    ntfyUser: required(env, 'GREY_NTFY_USER'),
+    ntfyPass: required(env, 'GREY_NTFY_PASS'),
     tickMs: parseTickMs(env['GREY_SWEEPER_TICK_MS']),
   };
 }

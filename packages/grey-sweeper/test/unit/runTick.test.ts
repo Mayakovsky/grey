@@ -61,6 +61,8 @@ function harness(opts: {
     alertDeps: {
       opsUrl: 'ops',
       critUrl: 'crit',
+      user: 'grey-sweeper',
+      pass: 'test-pass',
       delay: async () => {},
       post: async (url, o) => {
         if (url === 'ops') opsAlerts.push(o.body);
