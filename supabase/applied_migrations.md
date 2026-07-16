@@ -35,3 +35,33 @@ This is grey's canonical pattern from Step 2 forward (Movement 4 `sweep_log`, CI
 - Grants: `grey_pipeline_rw` → USAGE on schema `grey_two`, INSERT+SELECT on `sweep_log`, USAGE+SELECT on `sweep_log_id_seq`; REVOKE UPDATE/DELETE/TRUNCATE on `sweep_log` (append-only for the runtime role, verified INSERT+SELECT present).
 - `supabase_migrations.schema_migrations` on remote: **untouched** (5 rows, all plugin-wpv/autognostic: `20260601161838` … `20260613022829`; no grey row added — psql apply, not CLI push).
 - Anomalies: none. Preflight verified `grey_two` schema + `grey_pipeline_rw` role present and `sweep_log` absent before apply; all 6 DDL statements (CREATE TABLE, CREATE INDEX, 3× GRANT, REVOKE) returned success under `--single-transaction`.
+
+## 20260715120000_create_refuel_log  (+ 20260716090000 append-only corrective)
+
+Movement 5 Phase F — the relayer gas-refuel audit table. Create and its FDQ-52
+append-only corrective are recorded together: they form one logical unit (the
+corrective closes an over-broad grant surface the create left open). Both applied
+Forces-lane (psql + `WPV_DATABASE_URL`); Kov-verified.
+
+### Create — `20260715120000_create_refuel_log`
+
+- File: `supabase/migrations/20260715120000_create_refuel_log.sql`
+- sha256: `344c34fc5b0ac00f22595c60d90741b55f316c963f1fa1e580b5fc7f5b5c1bed`
+- Applied at: ~2026-07-15 (Phase F F3 create step)
+- Applied by: Forces (Forces-lane) via `psql -w -v ON_ERROR_STOP=1 --single-transaction -d <WPV_DATABASE_URL> -f supabase/migrations/20260715120000_create_refuel_log.sql` (Phase F §5 gate; PR #19). Kov-verified.
+- Tables created: `grey_two.refuel_log` (1) — 15 columns (`id BIGINT GENERATED ALWAYS AS IDENTITY PK`, `ticked_at TIMESTAMPTZ DEFAULT now()`, `chain_id INT NOT NULL`, `relayer_balance_before_wei NUMERIC(38,0) NOT NULL`, `deficit_wei`/`usdc_in`/`quote_out_wei`/`min_out_wei`/`eth_delivered_wei NUMERIC(38,0)`, `swap_tx`/`unwrap_tx`/`transfer_tx`/`error_class`/`error_detail_redacted TEXT`, `status TEXT NOT NULL CHECK ok/skipped/insufficient_usdc/quote_oob/failed`). Additive; zero contact with any existing `grey_two`/`wpv_*`/`autognostic` table.
+- Indices: `refuel_log_pkey` + `refuel_log_ticked_at_idx` (ticked_at DESC) + `refuel_log_status_idx` (3, verified).
+- Grants (as authored): `INSERT, SELECT` to `grey_pipeline_rw`. **NOTE (FDQ-52):** `grey_two`'s `ALTER DEFAULT PRIVILEGES` leaked `UPDATE`/`DELETE` onto the new table; effective grants were `INSERT+SELECT+UPDATE+DELETE` until the corrective below. Uses IDENTITY (no sequence grant needed).
+- `supabase_migrations.schema_migrations` on remote: **untouched** (5 rows, all plugin-wpv/autognostic: `20260601161838` … `20260613022829`; no grey row — psql apply, not CLI push). Verified.
+
+### Corrective — `20260716090000_refuel_log_append_only` (FDQ-52)
+
+- File: `supabase/migrations/20260716090000_refuel_log_append_only.sql`
+- sha256: `1241bb7ec20ecad4fdef7153371e0f6fc1d4f3b95117417b6056923785ec9a21`
+- Applied at: ~2026-07-16T04:19Z (between PR #20 merge 2026-07-16T04:16:56Z and the grant re-verify)
+- Applied by: Forces (Forces-lane) via `psql -w -v ON_ERROR_STOP=1 --single-transaction -d <WPV_DATABASE_URL> -f supabase/migrations/20260716090000_refuel_log_append_only.sql` (PR #20). Kov-verified.
+- Reason (FDQ-52, Desktop authoring defect): the create copied `sweep_log`'s `GRANT` without `sweep_log`'s companion `REVOKE`, so the schema default privileges (`UPDATE`/`DELETE`) stood. Caught by Kov's F3 grant verify (effective grants read `INSERT+SELECT+UPDATE+DELETE`, not the intended append-only pair).
+- Statement: `REVOKE UPDATE, DELETE, TRUNCATE ON grey_two.refuel_log FROM grey_pipeline_rw;` + table `COMMENT` update. Idempotent (REVOKE of an absent privilege is a no-op).
+- Grants after corrective (**verified**): `grey_pipeline_rw` → `INSERT, SELECT` **only** (UPDATE/DELETE removed; TRUNCATE never present). `postgres` (owner) retains full. Append-only restored — matches the `sweep_log` posture.
+- `supabase_migrations.schema_migrations` on remote: **untouched** (no grey row added). Verified.
+- Anomalies: FDQ-52 (create's missing REVOKE), remediated same-lane by this corrective. No partial/broken state at any point — the table was fully created and functional throughout; only the grant surface was over-broad between the two applies.
