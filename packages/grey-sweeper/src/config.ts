@@ -60,6 +60,12 @@ export type ChainId = 8453 | 84532;
 
 export interface SweeperConfig {
   rpcUrl: string;
+  /**
+   * Optional fallback RPC (Phase F nit 3 — platform-death rail): viem fallback
+   * transport tries this when the primary errors. Empty/unset → a chain-matched
+   * public default is used in main.ts.
+   */
+  rpcUrlFallback: string | null;
   chainId: ChainId;
   agentWalletPrivateKey: `0x${string}`;
   usdcAddress: `0x${string}`;
@@ -109,6 +115,7 @@ function asHex(value: string, key: string): `0x${string}` {
 export function loadConfig(env: Env = process.env): SweeperConfig {
   return {
     rpcUrl: required(env, 'GREY_SWEEPER_RPC_URL'),
+    rpcUrlFallback: env['GREY_SWEEPER_RPC_URL_FALLBACK'] || null,
     chainId: parseChainId(required(env, 'GREY_SWEEPER_CHAIN_ID')),
     agentWalletPrivateKey: asHex(
       required(env, 'GREY_AGENT_WALLET_PRIVATE_KEY'),

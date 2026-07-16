@@ -18,6 +18,8 @@ export interface X402Config {
   network: X402Network;
   chainId: number;
   rpcUrl: string;
+  /** Optional fallback RPC (Phase F nit 3): tried when the primary errors. Absent/null → chain-matched public default. */
+  rpcUrlFallback?: string | null;
   /** Gas-only relayer EOA (FDQ-31(a)). Referenced ONLY here — never in grey-core (invariant #19). */
   relayerPrivateKey: Hex;
   maxTimeoutSeconds: number;
