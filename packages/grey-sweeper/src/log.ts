@@ -40,14 +40,15 @@ export async function appendSweepLog(pool: PoolLike, row: SweepLogRow): Promise<
   ]);
 }
 
-const LAST_SWEEP_SQL = `SELECT MAX(swept_at) AS last FROM grey_two.sweep_log WHERE status = 'ok'`;
+const LAST_SWEEP_SQL = `SELECT MAX(swept_at) AS last FROM grey_two.sweep_log WHERE status = 'ok' AND chain_id = $1`;
 
 /**
- * Read the epoch-ms timestamp of the most recent successful sweep, or null if
- * there has never been one.
+ * Read the epoch-ms timestamp of the most recent successful sweep ON THIS CHAIN,
+ * or null if there has never been one. FDQ-42: chain-filtered so a testnet 'ok'
+ * row can never satisfy (or suppress) the mainnet cadence, and vice versa.
  */
-export async function getLastSweepTimestamp(pool: PoolLike): Promise<number | null> {
-  const { rows } = await pool.query(LAST_SWEEP_SQL);
+export async function getLastSweepTimestamp(pool: PoolLike, chainId: number): Promise<number | null> {
+  const { rows } = await pool.query(LAST_SWEEP_SQL, [chainId]);
   const last = rows[0]?.['last'];
   if (last === null || last === undefined) return null;
   if (last instanceof Date) return last.getTime();

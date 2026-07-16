@@ -46,6 +46,7 @@ export function loadX402Config(env: Env = process.env): X402Config {
   }
 
   const rpcUrl = required(env, 'BASE_RPC_URL');
+  const rpcUrlFallback = env['BASE_RPC_URL_FALLBACK']?.trim() || null;
 
   const keyRaw = required(env, 'X402_RELAYER_PRIVATE_KEY');
   const relayerPrivateKey = (keyRaw.startsWith('0x') ? keyRaw : `0x${keyRaw}`) as Hex;
@@ -66,6 +67,7 @@ export function loadX402Config(env: Env = process.env): X402Config {
     network,
     chainId: NETWORK_CHAIN_ID[network],
     rpcUrl,
+    rpcUrlFallback,
     relayerPrivateKey,
     maxTimeoutSeconds,
     usdc: USDC_BY_NETWORK[network],

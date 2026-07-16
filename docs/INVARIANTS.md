@@ -155,6 +155,23 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Rationale:** a hardcoded price drifting from the table would let the 402 challenge charge one amount while the envelope reports another. Single source keeps the challenge (`maxAmountRequired`), the settlement floor (verify `value >=`), and the receipt (`costUsd`) mutually consistent. Closes the M3 `costUsd: 0` hardcode on paid routes.
 - **Established by:** M5 Phase C.
 
+## 21. `refuel-eth-destination-pinned` (mirrors #16)
+- **Statement:** the Phase F refuel's ETH DESTINATION is a source-code literal — `RELAYER_ADDRESS` in `packages/grey-sweeper/src/refuel/addresses.ts` (the FDQ-31(a) gas-only relayer EOA). Env CANNOT redirect where unwrapped ETH is sent; `executeRefuel` carries a runtime guard that refuses any non-literal destination; and value-bearing `sendTransaction` calls exist NOWHERE in the sweeper outside `refuel/execute.ts`.
+- **Verification (literal present):** `git grep --untracked -nE "^export const RELAYER_ADDRESS = '0x[0-9a-fA-F]{40}' as const" -- packages/grey-sweeper/src/refuel/addresses.ts`
+- **Verification (anti-pattern, must be empty):** `! git grep --untracked -qE "RELAYER_ADDRESS\s*=\s*process\.env" -- packages/grey-sweeper/src/`
+- **Verification (ETH-send confinement):** `! git grep --untracked -qE "sendTransaction\(\{[^}]*value" -- packages/grey-sweeper/src/ ':(exclude)packages/grey-sweeper/src/refuel/execute.ts'`
+- **Expected:** literal grep returns exactly 1 line; both anti-pattern greps exit 0.
+- **Rationale:** the refuel moves real value out of the agent wallet; a hostile or fat-fingered env var must never redirect the ETH leg. Same defense shape as #16's sweep-destination pinning — the two literals (Tier-B pool for USDC, relayer for ETH) are the ONLY places the sweeper's funds may go.
+- **Established by:** M5 Phase F.
+
+## 22. `refuel-swap-bounds-single-source`
+- **Statement:** every refuel amount constant — floor/target/hard-floor defaults, per-tick USDC cap, slippage, minimum-viable input — exists as ONE literal block in `packages/grey-sweeper/src/refuel/settings.ts`; every `exactInputSingle` call carries the quote-derived `amountOutMinimum` (never `0n`), so no swap can execute unbounded.
+- **Verification (single block):** `test "$(git grep --untracked -E '^export const (DEFAULT_FLOOR_WEI|DEFAULT_TARGET_WEI|DEFAULT_HARDFLOOR_WEI|DEFAULT_MAX_USDC|SLIPPAGE_PPT|MIN_USDC_IN)' -- packages/grey-sweeper/src/refuel/settings.ts | wc -l)" = "6"`
+- **Verification (bound wired):** `git grep --untracked -q "amountOutMinimum: quote.minOut" -- packages/grey-sweeper/src/refuel/execute.ts && ! git grep --untracked -qE "amountOutMinimum:\s*0n" -- packages/grey-sweeper/src/`
+- **Expected:** count = 6; bound greps exit 0.
+- **Rationale:** an unbounded (`amountOutMinimum: 0`) swap is the classic sandwich-attack surface; scattered amount literals are how a cap or slippage constant silently drifts. One block, grep-countable, keeps the sizing math, the on-chain bound, and the sanity band mutually consistent.
+- **Established by:** M5 Phase F.
+
 ---
 
-*Invariants 11–13 established at M3 close (grey-core); #11 replaced + #14/#15 appended at M3.5 close (live-compute fill). #16/#17/#18 appended at M4 close (ERC-8004 DID mint + sweeper). #19/#20 appended at M5 Phase C close (x402 middleware). Future movements append at their close, not mid-flight. Invariant #3 was retargeted src → dist at M5 Phase C (FDQ-37) to reflect the Phase B real-build flip — Phase B's close should have done this but ran only a partial invariant check (#13/#16–#18).*
+*Invariants 11–13 established at M3 close (grey-core); #11 replaced + #14/#15 appended at M3.5 close (live-compute fill). #16/#17/#18 appended at M4 close (ERC-8004 DID mint + sweeper). #19/#20 appended at M5 Phase C close (x402 middleware). #21/#22 appended at M5 Phase F close (relayer refuel loop). Future movements append at their close, not mid-flight. Invariant #3 was retargeted src → dist at M5 Phase C (FDQ-37) to reflect the Phase B real-build flip — Phase B's close should have done this but ran only a partial invariant check (#13/#16–#18).*

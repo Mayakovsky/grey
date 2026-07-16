@@ -13,6 +13,9 @@ import type { PoolLike } from './log.js';
 import { alertCritical, alertOperational } from './alert.js';
 import type { AlertDeps } from './alert.js';
 import { errorClass, isRecoverable } from './errors.js';
+import { runRefuel } from './refuel/index.js';
+import type { RefuelDeps } from './refuel/index.js';
+import type { RefuelSettings } from './refuel/settings.js';
 
 export * from './config.js';
 export * from './errors.js';
@@ -31,6 +34,15 @@ export interface TickDeps {
   agentWallet: Address;
   usdcAddress: Address;
   chainId: ChainId;
+  /**
+   * Phase F refuel wiring. Optional: absent (older tests / refuel-disabled
+   * paths) → the tick is byte-for-byte pre-F behavior (spec §5.3).
+   */
+  refuel?: {
+    settings: RefuelSettings;
+    publicClient: RefuelDeps['publicClient'];
+    walletClient: RefuelDeps['walletClient'];
+  };
   /** Override for deterministic tests. */
   now?: () => number;
 }
@@ -51,7 +63,7 @@ export async function runTick(deps: TickDeps): Promise<TickOutcome> {
   let lastSweepAt: number | null;
   try {
     balance = await readUsdcBalance(deps.balanceClient, deps.usdcAddress, deps.agentWallet);
-    lastSweepAt = await getLastSweepTimestamp(deps.pool);
+    lastSweepAt = await getLastSweepTimestamp(deps.pool, deps.chainId);
   } catch (err) {
     await safeLog(deps, {
       txHash: null,
@@ -65,6 +77,33 @@ export async function runTick(deps: TickDeps): Promise<TickOutcome> {
     });
     await alertCritical('sweeper: failed to read balance/state', { error: errMsg(err) }, deps.alertDeps);
     return 'failed';
+  }
+
+  // Phase F (F-Q4(a)): refuel BEFORE the sweep decision — the USDC must still be
+  // in the agent wallet. runRefuel never throws; EVERY outcome falls through to
+  // the sweep. On an 'ok' refuel, re-read the balance (USDC was spent on ETH) so
+  // the sweep decision sees reality.
+  if (deps.refuel && deps.refuel.settings.enabled) {
+    const outcome = await runRefuel({
+      publicClient: deps.refuel.publicClient,
+      walletClient: deps.refuel.walletClient,
+      pool: deps.pool,
+      alertDeps: deps.alertDeps,
+      agent: deps.agentWallet,
+      usdcAddress: deps.usdcAddress,
+      agentUsdcBalance: balance,
+      chainId: deps.chainId,
+      settings: deps.refuel.settings,
+    });
+    if (outcome.status === 'ok') {
+      try {
+        balance = await readUsdcBalance(deps.balanceClient, deps.usdcAddress, deps.agentWallet);
+      } catch {
+        // Non-fatal: fall back to arithmetic (pre-refuel balance minus spend).
+        balance = balance - outcome.usdcIn;
+        if (balance < 0n) balance = 0n;
+      }
+    }
   }
 
   if (!shouldSweep(balance, lastSweepAt, now)) {

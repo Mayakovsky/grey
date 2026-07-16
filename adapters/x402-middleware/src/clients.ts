@@ -1,6 +1,6 @@
 // Structural viem client shapes — mirrors grey-sweeper's *Like interfaces so tests inject
 // plain mocks and production passes real viem clients (built by makeRelayerClients).
-import { createWalletClient, createPublicClient, http, defineChain, type Address, type Hex } from 'viem';
+import { createWalletClient, createPublicClient, fallback, http, defineChain, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { X402Config } from './types.js';
 
@@ -34,7 +34,12 @@ export function makeRelayerClients(cfg: X402Config): RelayerClients {
     nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
     rpcUrls: { default: { http: [cfg.rpcUrl] } },
   });
-  const transport = http(cfg.rpcUrl);
+  const transport = fallback([
+    http(cfg.rpcUrl),
+    // Phase F nit 3 (platform-death rail): a dead/rate-limited primary degrades to
+    // the fallback instead of failing verify/settle. Chain-matched public default.
+    http(cfg.rpcUrlFallback ?? (cfg.chainId === 84532 ? 'https://sepolia.base.org' : 'https://mainnet.base.org')),
+  ]);
   const wallet = createWalletClient({ account, chain, transport });
   const publicClient = createPublicClient({ chain, transport });
   return {

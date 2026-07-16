@@ -72,19 +72,21 @@ describe('appendSweepLog', () => {
 });
 
 describe('getLastSweepTimestamp', () => {
-  it('returns epoch ms for a Date value', async () => {
+  it('returns epoch ms for a Date value and passes the chain filter (FDQ-42)', async () => {
     const d = new Date('2026-06-01T00:00:00Z');
-    const { pool } = mockPool([{ last: d }]);
-    expect(await getLastSweepTimestamp(pool)).toBe(d.getTime());
+    const { pool, calls } = mockPool([{ last: d }]);
+    expect(await getLastSweepTimestamp(pool, 8453)).toBe(d.getTime());
+    expect(calls[0]!.text).toContain('AND chain_id = $1');
+    expect(calls[0]!.params).toEqual([8453]);
   });
 
   it('returns null when there has never been a sweep', async () => {
     const { pool } = mockPool([{ last: null }]);
-    expect(await getLastSweepTimestamp(pool)).toBeNull();
+    expect(await getLastSweepTimestamp(pool, 8453)).toBeNull();
   });
 
   it('parses a timestamp string', async () => {
     const { pool } = mockPool([{ last: '2026-06-01T00:00:00Z' }]);
-    expect(await getLastSweepTimestamp(pool)).toBe(new Date('2026-06-01T00:00:00Z').getTime());
+    expect(await getLastSweepTimestamp(pool, 84532)).toBe(new Date('2026-06-01T00:00:00Z').getTime());
   });
 });
