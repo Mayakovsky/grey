@@ -12,7 +12,7 @@ import {
 } from './settings.js';
 import { QuoteOutOfBandError, quoteUsdcToWeth, readSpot, usdcForDeficit } from './quote.js';
 import type { QuoteClientLike } from './quote.js';
-import { executeRefuel } from './execute.js';
+import { executeRefuel, recoverStrandedWeth, RefuelStepError } from './execute.js';
 import type { RefuelPublicLike, RefuelWalletLike } from './execute.js';
 import { appendRefuelLog } from './log.js';
 
@@ -68,6 +68,43 @@ export async function runRefuel(deps: RefuelDeps): Promise<RefuelResult> {
     const detail = msg(err);
     await safeRefuelLog(deps, baseRow(deps, 0n, null, 'failed', errorClass(err), detail));
     await alertCritical('refuel: failed to read relayer balance', { error: detail }, deps.alertDeps);
+    return { status: 'failed', errorClass: errorClass(err), errorDetail: detail };
+  }
+
+  // FDQ-55 B: recover any stranded WETH from a prior partial (a swap that mined,
+  // then a stale-read/unwrap/transfer failure) BEFORE the floor decision. The
+  // agent holds no WETH by design, so a nonzero balance is orphaned refuel output
+  // still owed to the relayer — deliver it regardless of the floor. The recovery
+  // is idempotent per-tick and never blocks the sweep (F-Q4(a)).
+  try {
+    const rec = await recoverStrandedWeth({
+      walletClient: deps.walletClient,
+      publicClient: deps.publicClient,
+      agent: deps.agent,
+      chainId: deps.chainId,
+    });
+    if (rec.recovered) {
+      await safeRefuelLog(deps, {
+        ...baseRow(deps, relayerEth, null, 'ok', null, null),
+        unwrapTx: rec.unwrapTx,
+        transferTx: rec.transferTx,
+        ethDeliveredWei: rec.ethDeliveredWei,
+      });
+      await alertOperational(
+        `refuel: recovered ${rec.ethDeliveredWei} wei stranded WETH → relayer (${rec.transferTx})`,
+        deps.alertDeps,
+      );
+      // the delivery raised the relayer — re-read for an accurate floor decision
+      relayerEth = await deps.publicClient.getBalance({ address: RELAYER_ADDRESS });
+    }
+  } catch (err) {
+    const detail = msg(err);
+    const partial = err instanceof RefuelStepError ? err.partial : {};
+    await safeRefuelLog(deps, {
+      ...baseRow(deps, relayerEth, null, 'failed', errorClass(err), detail),
+      unwrapTx: partial.unwrapTx ?? null,
+    });
+    await alertCritical('refuel: stranded-WETH recovery failed', { error: detail }, deps.alertDeps);
     return { status: 'failed', errorClass: errorClass(err), errorDetail: detail };
   }
 
@@ -136,7 +173,15 @@ export async function runRefuel(deps: RefuelDeps): Promise<RefuelResult> {
     const isOob = err instanceof QuoteOutOfBandError;
     const status = isOob ? 'quote_oob' : 'failed';
     const detail = msg(err);
-    await safeRefuelLog(deps, baseRow(deps, relayerEth, deficit, status, errorClass(err), detail));
+    // FDQ-55 C: a swap that mined before a later step failed MUST record its
+    // swapTx — the audit row can never say "failed, swap_tx=null" while real USDC
+    // moved on-chain. executeRefuel re-throws carrying the completed hashes.
+    const partial = err instanceof RefuelStepError ? err.partial : {};
+    await safeRefuelLog(deps, {
+      ...baseRow(deps, relayerEth, deficit, status, errorClass(err), detail),
+      swapTx: partial.swapTx ?? null,
+      unwrapTx: partial.unwrapTx ?? null,
+    });
     if (isOob && !belowHardFloor) {
       await alertOperational(`refuel: quote out of band, retrying next tick (${detail})`, deps.alertDeps);
     } else {

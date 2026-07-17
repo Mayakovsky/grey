@@ -22,7 +22,12 @@ function buildChain(chainId: number, rpcUrl: string) {
   });
 }
 
-/** Chain-matched public fallback when GREY_SWEEPER_RPC_URL_FALLBACK is unset. */
+/**
+ * Chain-matched PUBLIC Base RPC. As of FDQ-55 D this is NO LONGER auto-wired as a
+ * fallback (a public node rejected the swap broadcast and laundered the primary
+ * error); retained as a documented reference an operator could set explicitly via
+ * GREY_SWEEPER_RPC_URL_FALLBACK if they accept the write-path caveat.
+ */
 export function defaultFallbackRpc(chainId: number): string {
   return chainId === 84532 ? 'https://sepolia.base.org' : 'https://mainnet.base.org';
 }
@@ -72,12 +77,16 @@ async function main(): Promise<void> {
   const refuelSettings = loadRefuelSettings(); // fail-closed on malformed refuel env
   const account = loadAgentAccount(config.agentWalletPrivateKey);
   const chain = buildChain(config.chainId, config.rpcUrl);
-  // Phase F nit 3 (platform-death rail): keyed primary → public fallback. A dead
-  // or rate-limited primary degrades to the backup instead of failing the tick.
-  const transport = fallback([
-    http(config.rpcUrl),
-    http(config.rpcUrlFallback ?? defaultFallbackRpc(config.chainId)),
-  ]);
+  // FDQ-55 D: the keyed primary is AUTHORITATIVE for writes. A fallback is added
+  // ONLY when a second endpoint is explicitly configured (GREY_SWEEPER_RPC_URL_
+  // FALLBACK, expected keyed). We NO LONGER silently inject a public node: the
+  // public Base RPC rejected eth_sendRawTransaction (the swap-broadcast failures)
+  // and viem's fallback laundered the real primary error behind the public one. A
+  // single transport surfaces the true error; transient primary blips are absorbed
+  // by viem's per-transport retry + the FDQ-55 A read-consistency loop.
+  const transport = config.rpcUrlFallback
+    ? fallback([http(config.rpcUrl), http(config.rpcUrlFallback)])
+    : http(config.rpcUrl);
   const publicClient = createPublicClient({ chain, transport });
   const walletClient = createWalletClient({ account, chain, transport });
   // FDQ-44/46: SSL posture lives HERE, and stripSslParams guarantees the URL
