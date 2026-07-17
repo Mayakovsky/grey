@@ -74,12 +74,20 @@ async function writeGated(
 ): Promise<Hash> {
   // Simulate immediately before write: a doomed call surfaces here without
   // broadcasting (zero gas), mirroring the x402 settle posture (FDQ-40).
+  // The simulation NEEDS account (the agent address) for a correct msg.sender.
   try {
     await publicClient.simulateContract(call);
   } catch (err) {
     throw new RefuelStepError(step, `simulation failed: ${err instanceof Error ? err.message : String(err)}`);
   }
-  const hash = await walletClient.writeContract(call);
+  // FDQ-53: the WRITE must NOT carry the bare address — passing account as an
+  // address string makes viem treat it as a node-managed JSON-RPC account and
+  // emit eth_sendTransaction, which no RPC provider supports. Stripping it makes
+  // the wallet client sign LOCALLY with its configured agent account
+  // (eth_sendRawTransaction), matching RefuelWalletLike's declared surface.
+  const { account: _simOnly, ...writeCall } = call;
+  void _simOnly;
+  const hash = await walletClient.writeContract(writeCall);
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== 'success') {
     throw new RefuelStepError(step, `${step} tx ${hash} reverted`);
