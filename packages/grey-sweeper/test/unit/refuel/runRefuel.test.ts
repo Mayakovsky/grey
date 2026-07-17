@@ -32,14 +32,20 @@ interface H {
 function harness(opts: {
   relayerEth: bigint | Error;
   agentUsdc?: bigint;
-  quoteOut?: bigint;      // amountOut the quoter simulation returns
+  quoteOut?: bigint;      // amountOut the quoter simulation returns (== post-swap WETH)
+  strandedWeth?: bigint;  // WETH held by the agent BEFORE any swap (FDQ-55 B recovery)
   settings?: Partial<RefuelSettings>;
   simulateThrowsOn?: string;
+  transferRevertsOnReceipt?: number; // Nth waitForTransactionReceipt reverts (FDQ-55 C)
 }): H {
   const logRows: Array<ReadonlyArray<unknown>> = [];
   const opsAlerts: string[] = [];
   const critAlerts: string[] = [];
   const writes: string[] = [];
+  // The recovery pre-swap balanceOf is the FIRST WETH read; the post-swap output
+  // read is the rest. Models reality: agent holds no WETH until a swap mints it.
+  let balanceOfCalls = 0;
+  let receiptCalls = 0;
 
   const publicClient = {
     getBalance: vi.fn(async () => {
@@ -50,7 +56,10 @@ function harness(opts: {
       if (args.functionName === 'getPool') return POOL;
       if (args.functionName === 'token0') return WETH;
       if (args.functionName === 'slot0') return [Q96, 0, 0, 0, 0, 0, true] as const;
-      if (args.functionName === 'balanceOf') return opts.quoteOut ?? 0n;
+      if (args.functionName === 'balanceOf') {
+        balanceOfCalls += 1;
+        return balanceOfCalls === 1 ? (opts.strandedWeth ?? 0n) : (opts.quoteOut ?? 0n);
+      }
       throw new Error(`unexpected read ${args.functionName}`);
     }),
     simulateContract: vi.fn(async (args: { functionName: string }) => {
@@ -60,7 +69,12 @@ function harness(opts: {
       }
       return { result: undefined };
     }),
-    waitForTransactionReceipt: vi.fn(async () => ({ status: 'success' as const })),
+    waitForTransactionReceipt: vi.fn(async () => {
+      receiptCalls += 1;
+      return {
+        status: receiptCalls === opts.transferRevertsOnReceipt ? ('reverted' as const) : ('success' as const),
+      };
+    }),
   };
   const walletClient = {
     writeContract: vi.fn(async (args: { functionName: string }) => {
@@ -186,6 +200,50 @@ describe('runRefuel — execution failure', () => {
     const h = harness({ relayerEth: new Error('rpc 500') });
     expect((await runRefuel(h.deps)).status).toBe('failed');
     expect(h.critAlerts.some((m) => m.includes('failed to read relayer balance'))).toBe(true);
+  });
+});
+
+describe('runRefuel — FDQ-55 B: stranded-WETH recovery', () => {
+  it('delivers orphaned WETH to the relayer BEFORE any swap; logs ok (swap_tx null), ops alert', async () => {
+    // agent holds stranded WETH from a prior partial; relayer AT floor → no new swap
+    const h = harness({ relayerEth: DEFAULT_FLOOR_WEI, strandedWeth: 500_000_000_000_000n });
+    const r = await runRefuel(h.deps);
+    expect(r.status).toBe('skipped'); // relayer at floor after recovery → no top-up swap
+    expect(h.writes).toEqual(['withdraw']); // unwrap ONLY — no approve/exactInputSingle
+    const send = (h.deps.walletClient.sendTransaction as ReturnType<typeof vi.fn>).mock.calls[0]![0] as {
+      to: Address;
+      value: bigint;
+    };
+    expect(send.to).toBe(RELAYER_ADDRESS);
+    expect(send.value).toBe(500_000_000_000_000n);
+    const ok = h.logRows.find((row) => statusOf(row) === 'ok');
+    expect(ok).toBeDefined();
+    expect(ok![6]).toBeNull(); // swap_tx — honest: recovery had no swap
+    expect(ok![8]).toBe(HASH); // transfer_tx present
+    expect(ok![9]).toBe((500_000_000_000_000n).toString()); // eth_delivered
+    expect(h.opsAlerts.some((m) => m.includes('recovered'))).toBe(true);
+  });
+
+  it('steady state (no stranded WETH) writes no recovery row and no writes', async () => {
+    const h = harness({ relayerEth: DEFAULT_FLOOR_WEI }); // strandedWeth defaults to 0
+    await runRefuel(h.deps);
+    expect(h.logRows).toHaveLength(0);
+    expect(h.writes).toHaveLength(0);
+  });
+});
+
+describe('runRefuel — FDQ-55 C: partial execution is logged truthfully', () => {
+  it('a swap that mined then a transfer failure logs status=failed WITH swap_tx (never null)', async () => {
+    // relayer below floor → swap; receipts approve(1) swap(2) unwrap(3) transfer(4)
+    // → transfer receipt reverts. The audit row must carry the swap that moved USDC.
+    const h = harness({ relayerEth: 300_000_000_000_000n, quoteOut: 9_950_000n, transferRevertsOnReceipt: 4 });
+    const r = await runRefuel(h.deps);
+    expect(r.status).toBe('failed');
+    const failed = h.logRows.find((row) => statusOf(row) === 'failed');
+    expect(failed).toBeDefined();
+    expect(failed![6]).toBe(HASH); // swap_tx RECORDED — money moved on-chain, the row says so
+    expect(failed![7]).toBe(HASH); // unwrap_tx recorded too
+    expect(h.critAlerts.length).toBeGreaterThanOrEqual(1);
   });
 });
 

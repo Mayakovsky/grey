@@ -24,11 +24,13 @@ function harness(opts?: {
   simulateThrowsOn?: string;
   receiptRevertsOn?: number; // Nth receipt (1-based) reverts
   wethBalance?: bigint;
+  wethBalances?: bigint[]; // successive post-swap balanceOf reads (FDQ-55 A retry)
 }): H {
   const writes: H['writes'] = [];
   const sends: H['sends'] = [];
   const simulated: string[] = [];
   let receiptCount = 0;
+  let balanceReads = 0;
 
   const publicClient: RefuelPublicLike = {
     simulateContract: vi.fn(async (args: { functionName: string }) => {
@@ -41,7 +43,11 @@ function harness(opts?: {
       return { status: receiptCount === opts?.receiptRevertsOn ? ('reverted' as const) : ('success' as const) };
     }),
     readContract: vi.fn(async (args: { functionName: string }) => {
-      if (args.functionName === 'balanceOf') return opts?.wethBalance ?? 995_000n;
+      if (args.functionName === 'balanceOf') {
+        const seq = opts?.wethBalances;
+        if (seq) return seq[Math.min(balanceReads++, seq.length - 1)]!;
+        return opts?.wethBalance ?? 995_000n;
+      }
       throw new Error(`unexpected read ${args.functionName}`);
     }) as RefuelPublicLike['readContract'],
   };
@@ -70,6 +76,7 @@ const base = (h: H) => ({
   usdcAddress: USDC,
   chainId: 8453,
   quote: QUOTE,
+  sleep: async () => {}, // no-op backoff so the retry loop doesn't wall-clock the suite
 });
 
 describe('executeRefuel — happy path', () => {
@@ -130,15 +137,32 @@ describe('executeRefuel — step gating', () => {
     expect(h.sends).toHaveLength(0);
   });
 
-  it('refuses to unwrap when the post-swap WETH balance is below minOut', async () => {
-    const h = harness({ wethBalance: 1n });
-    await expect(executeRefuel(base(h))).rejects.toMatchObject({ step: 'unwrap' });
+  it('FDQ-55 A: retries a stale post-swap read and COMPLETES once consistent (never strands)', async () => {
+    // the confirmed swap yields >= minOut; the first reads are stale zeros (the
+    // id48 failure). Retry, then finish — a single stale zero is never grounds to
+    // abandon the swapped funds mid-flight (Forces' ruling).
+    const h = harness({ wethBalances: [0n, 0n, 995_000n] });
+    const r = await executeRefuel(base(h));
+    expect(h.writes.map((w) => w.functionName)).toEqual(['approve', 'exactInputSingle', 'withdraw']);
+    expect(h.sends).toEqual([{ to: RELAYER_ADDRESS, value: 995_000n }]);
+    expect(r.ethDeliveredWei).toBe(995_000n);
+  });
+
+  it('FDQ-55 A/C: a balance that never reaches minOut after all retries throws unwrap, carrying swapTx', async () => {
+    const h = harness({ wethBalance: 1n }); // stays below minOut across every retry
+    await expect(executeRefuel(base(h))).rejects.toMatchObject({
+      step: 'unwrap',
+      partial: { swapTx: HASH },
+    });
     expect(h.writes.map((w) => w.functionName)).toEqual(['approve', 'exactInputSingle']);
     expect(h.sends).toHaveLength(0);
   });
 
-  it('a reverted ETH transfer receipt throws (transfer step)', async () => {
+  it('FDQ-55 C: a reverted ETH transfer throws transfer, carrying swapTx AND unwrapTx', async () => {
     const h = harness({ receiptRevertsOn: 4 }); // approve, swap, unwrap ok; transfer receipt reverts
-    await expect(executeRefuel(base(h))).rejects.toMatchObject({ step: 'transfer' });
+    await expect(executeRefuel(base(h))).rejects.toMatchObject({
+      step: 'transfer',
+      partial: { swapTx: HASH, unwrapTx: HASH },
+    });
   });
 });

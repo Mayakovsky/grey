@@ -1,4 +1,5 @@
 import { erc20Abi } from 'viem';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { Address, Hash } from 'viem';
 import { swapRouter02Abi, weth9Abi } from './abi.js';
 import { RELAYER_ADDRESS, POOL_FEE, uniswapFor } from './addresses.js';
@@ -36,10 +37,22 @@ export interface RefuelPublicLike {
   }): Promise<unknown>;
 }
 
+/**
+ * FDQ-55 C (observability): step hashes completed BEFORE a later step failed, so
+ * a partial execution is never logged as a clean failure with a null audit spine.
+ * A swap that mined then a stale-read/unwrap/transfer failure carries `swapTx`.
+ */
+export interface RefuelPartial {
+  swapTx?: Hash;
+  unwrapTx?: Hash;
+}
+
 export class RefuelStepError extends Error {
   constructor(
     public readonly step: 'approve' | 'swap' | 'unwrap' | 'transfer',
     msg: string,
+    /** What already executed on-chain when this step failed (FDQ-55 C). */
+    public readonly partial: RefuelPartial = {},
   ) {
     super(msg);
     this.name = 'RefuelStepError';
@@ -58,6 +71,41 @@ export interface ExecuteRefuelResult {
   unwrapTx: Hash;
   transferTx: Hash;
   ethDeliveredWei: bigint;
+}
+
+/** Recovery outcome for stranded WETH (FDQ-55 B). */
+export type RecoverResult =
+  | { recovered: false }
+  | { recovered: true; wethBefore: bigint; unwrapTx: Hash; transferTx: Hash; ethDeliveredWei: bigint };
+
+/**
+ * FDQ-55 A: a confirmed swap guarantees ≥ minOut WETH on-chain (amountOutMinimum
+ * enforced by the router). A post-swap read below that is a lagging/load-balanced
+ * node returning stale state (the id48 `balance 0` that stranded real funds), NOT
+ * grounds to abandon the swapped USDC. Re-read until the balance is consistent.
+ */
+const POST_SWAP_READ_ATTEMPTS = 8;
+const POST_SWAP_READ_DELAY_MS = 750;
+
+async function readWethConsistent(
+  publicClient: RefuelPublicLike,
+  weth9: Address,
+  agent: Address,
+  atLeast: bigint,
+  sleep: (ms: number) => Promise<void>,
+): Promise<bigint> {
+  let bal = 0n;
+  for (let attempt = 0; attempt < POST_SWAP_READ_ATTEMPTS; attempt++) {
+    bal = (await publicClient.readContract({
+      address: weth9,
+      abi: weth9Abi,
+      functionName: 'balanceOf',
+      args: [agent],
+    })) as bigint;
+    if (bal >= atLeast) return bal;
+    if (attempt < POST_SWAP_READ_ATTEMPTS - 1) await sleep(POST_SWAP_READ_DELAY_MS);
+  }
+  return bal;
 }
 
 async function writeGated(
@@ -96,6 +144,75 @@ async function writeGated(
 }
 
 /**
+ * Unwrap `wethAmount` WETH → ETH and deliver EXACTLY that to the pinned relayer.
+ * Shared by the normal refuel tail and the FDQ-55 B recovery path. Throws
+ * RefuelStepError('unwrap'|'transfer'); on a transfer failure it carries the
+ * completed unwrapTx so the caller can log a truthful partial.
+ */
+async function deliverWeth(
+  publicClient: RefuelPublicLike,
+  walletClient: RefuelWalletLike,
+  agent: Address,
+  weth9: Address,
+  relayer: Address,
+  wethAmount: bigint,
+): Promise<{ unwrapTx: Hash; transferTx: Hash; ethDeliveredWei: bigint }> {
+  const unwrapTx = await writeGated(publicClient, walletClient, 'unwrap', {
+    address: weth9,
+    abi: weth9Abi,
+    functionName: 'withdraw',
+    args: [wethAmount],
+    account: agent,
+  });
+  const transferTx = await walletClient.sendTransaction({ to: relayer, value: wethAmount });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: transferTx });
+  if (receipt.status !== 'success') {
+    throw new RefuelStepError('transfer', `ETH transfer ${transferTx} reverted`, { unwrapTx });
+  }
+  return { unwrapTx, transferTx, ethDeliveredWei: wethAmount };
+}
+
+/**
+ * FDQ-55 B — recover stranded WETH. The agent holds no WETH by design; any
+ * balance is orphaned refuel output (a swap that mined, then a later step failed)
+ * that is still owed to the relayer. Delivers the full balance and returns what
+ * moved, or {recovered:false} when there is nothing to recover. Idempotent across
+ * ticks — a single stale zero read here just defers recovery to the next tick.
+ */
+export async function recoverStrandedWeth(params: {
+  walletClient: RefuelWalletLike;
+  publicClient: RefuelPublicLike;
+  agent: Address;
+  chainId: number;
+  relayer?: Address;
+}): Promise<RecoverResult> {
+  const { walletClient, publicClient, agent, chainId } = params;
+  const relayer = params.relayer ?? RELAYER_ADDRESS;
+  if (!isRelayer(relayer, RELAYER_ADDRESS)) {
+    throw new NonRelayerDestinationError(
+      `refusing recovery: ETH destination ${relayer} != pinned relayer ${RELAYER_ADDRESS}`,
+    );
+  }
+  const dep = uniswapFor(chainId);
+  const wethBal = (await publicClient.readContract({
+    address: dep.weth9,
+    abi: weth9Abi,
+    functionName: 'balanceOf',
+    args: [agent],
+  })) as bigint;
+  if (wethBal === 0n) return { recovered: false };
+  const { unwrapTx, transferTx, ethDeliveredWei } = await deliverWeth(
+    publicClient,
+    walletClient,
+    agent,
+    dep.weth9,
+    relayer,
+    wethBal,
+  );
+  return { recovered: true, wethBefore: wethBal, unwrapTx, transferTx, ethDeliveredWei };
+}
+
+/**
  * Execute one refuel: approve-exact → exactInputSingle (USDC→WETH, recipient =
  * agent) → WETH.withdraw(full received) → plain ETH transfer to the PINNED
  * relayer (invariant #21: destination is the source literal; a runtime guard
@@ -103,6 +220,10 @@ async function writeGated(
  *
  * No unlimited approvals — the allowance is exactly `quote.amountIn` per refuel
  * (spec §1.3; F0 recon confirmed current allowance = 0).
+ *
+ * FDQ-55: the post-swap balance read retries until consistent (A), and every
+ * failure after the swap mines re-throws carrying `swapTx` (C) so a partial can
+ * never be logged as a clean, swap-less failure.
  */
 export async function executeRefuel(params: {
   walletClient: RefuelWalletLike;
@@ -113,9 +234,12 @@ export async function executeRefuel(params: {
   quote: Quote;
   /** Test seam; production callers omit it and the literal applies. */
   relayer?: Address;
+  /** Test seam for the post-swap read backoff; production uses a real delay. */
+  sleep?: (ms: number) => Promise<void>;
 }): Promise<ExecuteRefuelResult> {
   const { walletClient, publicClient, agent, usdcAddress, chainId, quote } = params;
   const relayer = params.relayer ?? RELAYER_ADDRESS;
+  const sleep = params.sleep ?? ((ms: number) => delay(ms));
   const dep = uniswapFor(chainId);
 
   // Invariant #21 runtime gate — mirrors the sweep's allowlist guard exactly.
@@ -154,31 +278,31 @@ export async function executeRefuel(params: {
     account: agent,
   });
 
-  // 3) unwrap the FULL received WETH (balance-read, not simulate-result: robust
-  // to any rounding between quote and execution; agent otherwise holds no WETH)
-  const wethBal = (await publicClient.readContract({
-    address: dep.weth9,
-    abi: weth9Abi,
-    functionName: 'balanceOf',
-    args: [agent],
-  })) as bigint;
-  if (wethBal < quote.minOut) {
-    throw new RefuelStepError('unwrap', `post-swap WETH balance ${wethBal} below minOut ${quote.minOut}`);
+  // Past the swap: USDC has moved. ANY failure below must carry swapTx (FDQ-55 C).
+  try {
+    // 3) unwrap the FULL received WETH — retry-consistent read (FDQ-55 A): a
+    // confirmed swap yields ≥ minOut; a lower read is stale, not a reason to strand.
+    const wethBal = await readWethConsistent(publicClient, dep.weth9, agent, quote.minOut, sleep);
+    if (wethBal < quote.minOut) {
+      throw new RefuelStepError(
+        'unwrap',
+        `post-swap WETH balance ${wethBal} below minOut ${quote.minOut} after ${POST_SWAP_READ_ATTEMPTS} reads`,
+      );
+    }
+    // 4) unwrap + deliver exactly the unwrapped amount to the pinned relayer
+    const { unwrapTx, transferTx, ethDeliveredWei } = await deliverWeth(
+      publicClient,
+      walletClient,
+      agent,
+      dep.weth9,
+      relayer,
+      wethBal,
+    );
+    return { swapTx, unwrapTx, transferTx, ethDeliveredWei };
+  } catch (err) {
+    if (err instanceof RefuelStepError) {
+      throw new RefuelStepError(err.step, err.message, { swapTx, ...err.partial });
+    }
+    throw err;
   }
-  const unwrapTx = await writeGated(publicClient, walletClient, 'unwrap', {
-    address: dep.weth9,
-    abi: weth9Abi,
-    functionName: 'withdraw',
-    args: [wethBal],
-    account: agent,
-  });
-
-  // 4) deliver exactly the unwrapped amount to the pinned relayer
-  const transferTx = await walletClient.sendTransaction({ to: relayer, value: wethBal });
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: transferTx });
-  if (receipt.status !== 'success') {
-    throw new RefuelStepError('transfer', `ETH transfer ${transferTx} reverted`);
-  }
-
-  return { swapTx, unwrapTx, transferTx, ethDeliveredWei: wethBal };
 }
