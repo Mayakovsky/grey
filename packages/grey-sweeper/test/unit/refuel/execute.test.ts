@@ -47,6 +47,11 @@ function harness(opts?: {
   };
   const walletClient: RefuelWalletLike = {
     writeContract: vi.fn(async (args: { functionName: string; address: Address; args?: readonly unknown[] }) => {
+      // FDQ-53 tripwire: mirror real viem's behavior instead of accepting any
+      // shape — a bare address in `account` means the JSON-RPC signing path.
+      if ('account' in args && typeof (args as { account?: unknown }).account === 'string') {
+        throw new Error('FDQ-53: eth_sendTransaction does not exist — write carried a bare account address');
+      }
       writes.push(args);
       return HASH;
     }) as RefuelWalletLike['writeContract'],
@@ -84,6 +89,18 @@ describe('executeRefuel — happy path', () => {
     expect(r.ethDeliveredWei).toBe(995_000n);
     // every write simulated first (FDQ-40)
     expect(h.simulated).toEqual(['approve', 'exactInputSingle', 'withdraw']);
+  });
+
+  it('FDQ-53 regression: writes NEVER carry a bare account address (local signing only)', async () => {
+    const h = harness();
+    await executeRefuel(base(h));
+    // Passing account:<address> to a real viem writeContract selects the
+    // node-managed JSON-RPC path (eth_sendTransaction), which no provider
+    // supports — the live FDQ-53 failure. Simulations DO carry account (correct
+    // msg.sender); writes must not.
+    for (const w of h.writes) {
+      expect('account' in w).toBe(false);
+    }
   });
 });
 
