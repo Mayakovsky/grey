@@ -1,4 +1,5 @@
 import type { PoolLike } from '../log.js';
+import { redactError } from '../errors.js';
 import type { RefuelLogRow } from './settings.js';
 
 /**
@@ -24,6 +25,8 @@ export async function appendRefuelLog(pool: PoolLike, row: RefuelLogRow): Promis
     row.ethDeliveredWei === null ? null : row.ethDeliveredWei.toString(),
     row.status,
     row.errorClass,
-    row.errorDetail,
+    // FDQ-56 DB choke point: error text is redacted at the sink, so no caller can
+    // persist an RPC URL / key into refuel_log.error_detail_redacted.
+    row.errorDetail === null ? null : redactError(row.errorDetail),
   ]);
 }

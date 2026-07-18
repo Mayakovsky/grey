@@ -10,6 +10,7 @@ import { loadConfig } from './config.js';
 import { loadAgentAccount } from './wallet.js';
 import { runLoop, type TickDeps } from './index.js';
 import { loadRefuelSettings } from './refuel/settings.js';
+import { logError } from './errors.js';
 
 const { Pool } = pg;
 
@@ -141,7 +142,7 @@ async function main(): Promise<void> {
 // Run only when executed directly (systemd), never when imported by a test.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().catch((err: unknown) => {
-    process.stderr.write(`grey-sweeper: fatal: ${err instanceof Error ? err.message : String(err)}\n`);
+    logError('grey-sweeper: fatal: ', err);
     process.exit(1);
   });
 }

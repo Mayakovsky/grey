@@ -156,21 +156,22 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Established by:** M5 Phase C.
 
 ## 21. `refuel-eth-destination-pinned` (mirrors #16)
-- **Statement:** the Phase F refuel's ETH DESTINATION is a source-code literal — `RELAYER_ADDRESS` in `packages/grey-sweeper/src/refuel/addresses.ts` (the FDQ-31(a) gas-only relayer EOA). Env CANNOT redirect where unwrapped ETH is sent; `executeRefuel` carries a runtime guard that refuses any non-literal destination; and value-bearing `sendTransaction` calls exist NOWHERE in the sweeper outside `refuel/execute.ts`.
+- **Statement:** the Phase F refuel's ETH DESTINATION is a source-code literal — `RELAYER_ADDRESS` in `packages/grey-sweeper/src/refuel/addresses.ts` (the FDQ-31(a) gas-only relayer EOA). Env CANNOT redirect where ETH is sent; value-bearing `sendTransaction` calls exist NOWHERE in the sweeper outside `refuel/execute.ts`; and ALL of them flow through the single `transferEth` choke-point, which gates on the pinned literal via `isRelayer(relayer, RELAYER_ADDRESS)` — so BOTH value-send paths (the refuel transfer AND the FDQ-58 native-ETH recovery sweep) are guarded, and a future send site cannot dodge the check.
 - **Verification (literal present):** `git grep --untracked -nE "^export const RELAYER_ADDRESS = '0x[0-9a-fA-F]{40}' as const" -- packages/grey-sweeper/src/refuel/addresses.ts`
 - **Verification (anti-pattern, must be empty):** `! git grep --untracked -qE "RELAYER_ADDRESS\s*=\s*process\.env" -- packages/grey-sweeper/src/`
 - **Verification (ETH-send confinement):** `! git grep --untracked -qE "sendTransaction\(\{[^}]*value" -- packages/grey-sweeper/src/ ':(exclude)packages/grey-sweeper/src/refuel/execute.ts'`
-- **Expected:** literal grep returns exactly 1 line; both anti-pattern greps exit 0.
-- **Rationale:** the refuel moves real value out of the agent wallet; a hostile or fat-fingered env var must never redirect the ETH leg. Same defense shape as #16's sweep-destination pinning — the two literals (Tier-B pool for USDC, relayer for ETH) are the ONLY places the sweeper's funds may go.
-- **Established by:** M5 Phase F.
+- **Verification (choke-point guarded):** exactly ONE value-bearing `sendTransaction` exists in `refuel/execute.ts`, and it is preceded by the `isRelayer` gate — `test "$(git grep --untracked -E "await walletClient\.sendTransaction\(\{ to: relayer, value" -- packages/grey-sweeper/src/refuel/execute.ts | wc -l)" = "1"` && `git grep --untracked -q "if (!isRelayer(relayer, RELAYER_ADDRESS))" -- packages/grey-sweeper/src/refuel/execute.ts`
+- **Expected:** literal grep returns exactly 1 line; the two anti-pattern greps exit 0; the choke-point count is 1 and the guard grep exits 0.
+- **Rationale:** the refuel moves real value out of the agent wallet; a hostile or fat-fingered env var — or a new ETH-send site — must never redirect the ETH leg. Same defense shape as #16's sweep-destination pinning — the two literals (Tier-B pool for USDC, relayer for ETH) are the ONLY places the sweeper's funds may go. The single-choke-point guard (FDQ-58) means the invariant holds for every value-bearing send, present and future.
+- **Established by:** M5 Phase F; choke-point guard added at FDQ-58 (second value-send path).
 
 ## 22. `refuel-swap-bounds-single-source`
-- **Statement:** every refuel amount constant — floor/target/hard-floor defaults, per-tick USDC cap, slippage, minimum-viable input — exists as ONE literal block in `packages/grey-sweeper/src/refuel/settings.ts`; every `exactInputSingle` call carries the quote-derived `amountOutMinimum` (never `0n`), so no swap can execute unbounded.
-- **Verification (single block):** `test "$(git grep --untracked -E '^export const (DEFAULT_FLOOR_WEI|DEFAULT_TARGET_WEI|DEFAULT_HARDFLOOR_WEI|DEFAULT_MAX_USDC|SLIPPAGE_PPT|MIN_USDC_IN)' -- packages/grey-sweeper/src/refuel/settings.ts | wc -l)" = "6"`
+- **Statement:** every refuel amount constant — floor/target/hard-floor defaults, per-tick USDC cap, slippage, minimum-viable input, and the FDQ-58 gas reserve — exists as ONE literal block in `packages/grey-sweeper/src/refuel/settings.ts`; every `exactInputSingle` call carries the quote-derived `amountOutMinimum` (never `0n`), so no swap can execute unbounded.
+- **Verification (single block):** `test "$(git grep --untracked -E '^export const (DEFAULT_FLOOR_WEI|DEFAULT_TARGET_WEI|DEFAULT_HARDFLOOR_WEI|DEFAULT_MAX_USDC|SLIPPAGE_PPT|MIN_USDC_IN|DEFAULT_GAS_RESERVE_WEI)' -- packages/grey-sweeper/src/refuel/settings.ts | wc -l)" = "7"`
 - **Verification (bound wired):** `git grep --untracked -q "amountOutMinimum: quote.minOut" -- packages/grey-sweeper/src/refuel/execute.ts && ! git grep --untracked -qE "amountOutMinimum:\s*0n" -- packages/grey-sweeper/src/`
-- **Expected:** count = 6; bound greps exit 0.
-- **Rationale:** an unbounded (`amountOutMinimum: 0`) swap is the classic sandwich-attack surface; scattered amount literals are how a cap or slippage constant silently drifts. One block, grep-countable, keeps the sizing math, the on-chain bound, and the sanity band mutually consistent.
-- **Established by:** M5 Phase F.
+- **Expected:** count = 7; bound greps exit 0.
+- **Rationale:** an unbounded (`amountOutMinimum: 0`) swap is the classic sandwich-attack surface; scattered amount literals are how a cap or slippage constant silently drifts. One block, grep-countable, keeps the sizing math, the on-chain bound, and the sanity band mutually consistent. **`DEFAULT_GAS_RESERVE_WEI` joined the block at M5 Phase F FDQ-58 (native-ETH recovery reserve) — count 6 → 7.**
+- **Established by:** M5 Phase F (count 7 at FDQ-58).
 
 ---
 

@@ -23,6 +23,12 @@ export const DEFAULT_MAX_USDC = 10_000_000n;
 export const SLIPPAGE_PPT = 10n;
 /** Smallest refuel worth executing: $0.10 of USDC (gas-proportionality guard). */
 export const MIN_USDC_IN = 100_000n;
+/**
+ * Native ETH the agent keeps for its own gas float. Recovery (FDQ-58) sweeps any
+ * ETH ABOVE this to the relayer — a recovered-but-undelivered unwrap, or ordinary
+ * excess. 0.002 ETH comfortably covers many 4-tx refuel cycles on Base.
+ */
+export const DEFAULT_GAS_RESERVE_WEI = 2_000_000_000_000_000n;
 
 export interface RefuelSettings {
   /** Master switch (GREY_REFUEL_ENABLED, default true). false = module fully inert. */
@@ -31,6 +37,8 @@ export interface RefuelSettings {
   targetWei: bigint;
   hardFloorWei: bigint;
   maxUsdcPerTick: bigint;
+  /** FDQ-58: native ETH the agent keeps; recovery sweeps the rest to the relayer. */
+  gasReserveWei: bigint;
 }
 
 function parseBigint(env: Env, key: string, fallback: bigint): bigint {
@@ -61,6 +69,7 @@ export function loadRefuelSettings(env: Env = process.env): RefuelSettings {
     targetWei: parseBigint(env, 'GREY_REFUEL_TARGET_WEI', DEFAULT_TARGET_WEI),
     hardFloorWei: parseBigint(env, 'GREY_REFUEL_HARDFLOOR_WEI', DEFAULT_HARDFLOOR_WEI),
     maxUsdcPerTick: parseBigint(env, 'GREY_REFUEL_MAX_USDC', DEFAULT_MAX_USDC),
+    gasReserveWei: parseBigint(env, 'GREY_REFUEL_GAS_RESERVE_WEI', DEFAULT_GAS_RESERVE_WEI),
   };
   if (settings.targetWei <= settings.floorWei) {
     throw new Error('grey-sweeper refuel: GREY_REFUEL_TARGET_WEI must exceed GREY_REFUEL_FLOOR_WEI');

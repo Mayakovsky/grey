@@ -1,5 +1,4 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import process from 'node:process';
 import type { Address } from 'viem';
 import { poolWalletFor } from './config.js';
 import type { ChainId } from './config.js';
@@ -12,7 +11,7 @@ import { appendSweepLog, getLastSweepTimestamp } from './log.js';
 import type { PoolLike } from './log.js';
 import { alertCritical, alertOperational } from './alert.js';
 import type { AlertDeps } from './alert.js';
-import { errorClass, isRecoverable } from './errors.js';
+import { errorClass, isRecoverable, logError } from './errors.js';
 import { runRefuel } from './refuel/index.js';
 import type { RefuelDeps } from './refuel/index.js';
 import type { RefuelSettings } from './refuel/settings.js';
@@ -195,7 +194,7 @@ async function safeLog(deps: TickDeps, row: Parameters<typeof appendSweepLog>[1]
   try {
     await appendSweepLog(deps.pool, row);
   } catch (err) {
-    process.stderr.write(`grey-sweeper: failed to write sweep_log row: ${errMsg(err)}\n`);
+    logError('grey-sweeper: failed to write sweep_log row: ', err);
   }
 }
 
@@ -213,7 +212,7 @@ export async function runLoop(
     try {
       await runTick(deps);
     } catch (err) {
-      process.stderr.write(`grey-sweeper: unexpected tick error: ${errMsg(err)}\n`);
+      logError('grey-sweeper: unexpected tick error: ', err);
     }
     try {
       await sleep(tickMs, undefined, { signal });

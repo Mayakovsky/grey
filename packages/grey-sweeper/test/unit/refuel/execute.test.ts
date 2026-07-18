@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Address, Hash } from 'viem';
-import { executeRefuel, RefuelStepError, NonRelayerDestinationError } from '../../../src/refuel/execute.js';
+import {
+  executeRefuel,
+  recoverStranded,
+  RefuelStepError,
+  NonRelayerDestinationError,
+} from '../../../src/refuel/execute.js';
 import type { RefuelPublicLike, RefuelWalletLike } from '../../../src/refuel/execute.js';
 import { RELAYER_ADDRESS } from '../../../src/refuel/addresses.js';
 import type { Quote } from '../../../src/refuel/quote.js';
@@ -9,14 +14,16 @@ const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as Address;
 const AGENT = '0x394e81DA28799b578620803772FAeE403dE2d3f6' as Address;
 const POOL = '0xd0b53D9277642d899DF5C87A3966A349A798F224' as Address;
 const HASH = ('0x' + 'ab'.repeat(32)) as Hash;
+const START_NONCE = 10;
+const GAS_RESERVE = 2_000_000_000_000_000n;
 
 const QUOTE: Quote = { amountIn: 1_000_000n, amountOut: 995_000n, minOut: 985_050n, pool: POOL };
 
 interface H {
   publicClient: RefuelPublicLike;
   walletClient: RefuelWalletLike;
-  writes: Array<{ functionName: string; address: Address; args?: readonly unknown[] }>;
-  sends: Array<{ to: Address; value: bigint }>;
+  writes: Array<{ functionName: string; address: Address; args?: readonly unknown[]; nonce?: number }>;
+  sends: Array<{ to: Address; value: bigint; nonce?: number }>;
   simulated: string[];
 }
 
@@ -25,6 +32,8 @@ function harness(opts?: {
   receiptRevertsOn?: number; // Nth receipt (1-based) reverts
   wethBalance?: bigint;
   wethBalances?: bigint[]; // successive post-swap balanceOf reads (FDQ-55 A retry)
+  agentEth?: bigint; // native ETH (FDQ-58 recoverStranded sweep source)
+  startNonce?: number;
 }): H {
   const writes: H['writes'] = [];
   const sends: H['sends'] = [];
@@ -50,18 +59,22 @@ function harness(opts?: {
       }
       throw new Error(`unexpected read ${args.functionName}`);
     }) as RefuelPublicLike['readContract'],
+    getBalance: vi.fn(async () => opts?.agentEth ?? 0n),
+    getTransactionCount: vi.fn(async () => opts?.startNonce ?? START_NONCE),
   };
   const walletClient: RefuelWalletLike = {
-    writeContract: vi.fn(async (args: { functionName: string; address: Address; args?: readonly unknown[] }) => {
-      // FDQ-53 tripwire: mirror real viem's behavior instead of accepting any
-      // shape — a bare address in `account` means the JSON-RPC signing path.
-      if ('account' in args && typeof (args as { account?: unknown }).account === 'string') {
-        throw new Error('FDQ-53: eth_sendTransaction does not exist — write carried a bare account address');
-      }
-      writes.push(args);
-      return HASH;
-    }) as RefuelWalletLike['writeContract'],
-    sendTransaction: vi.fn(async (args: { to: Address; value: bigint }) => {
+    writeContract: vi.fn(
+      async (args: { functionName: string; address: Address; args?: readonly unknown[]; nonce?: number }) => {
+        // FDQ-53 tripwire: mirror real viem's behavior instead of accepting any
+        // shape — a bare address in `account` means the JSON-RPC signing path.
+        if ('account' in args && typeof (args as { account?: unknown }).account === 'string') {
+          throw new Error('FDQ-53: eth_sendTransaction does not exist — write carried a bare account address');
+        }
+        writes.push(args);
+        return HASH;
+      },
+    ) as RefuelWalletLike['writeContract'],
+    sendTransaction: vi.fn(async (args: { to: Address; value: bigint; nonce?: number }) => {
       sends.push(args);
       return HASH;
     }),
@@ -92,7 +105,7 @@ describe('executeRefuel — happy path', () => {
     expect(swapParams.amountOutMinimum).toBe(QUOTE.minOut);
     expect(swapParams.recipient).toBe(AGENT);
     // ETH leg: exactly the unwrapped amount, exactly to the literal
-    expect(h.sends).toEqual([{ to: RELAYER_ADDRESS, value: 995_000n }]);
+    expect(h.sends).toEqual([{ to: RELAYER_ADDRESS, value: 995_000n, nonce: START_NONCE + 3 }]);
     expect(r.ethDeliveredWei).toBe(995_000n);
     // every write simulated first (FDQ-40)
     expect(h.simulated).toEqual(['approve', 'exactInputSingle', 'withdraw']);
@@ -144,7 +157,7 @@ describe('executeRefuel — step gating', () => {
     const h = harness({ wethBalances: [0n, 0n, 995_000n] });
     const r = await executeRefuel(base(h));
     expect(h.writes.map((w) => w.functionName)).toEqual(['approve', 'exactInputSingle', 'withdraw']);
-    expect(h.sends).toEqual([{ to: RELAYER_ADDRESS, value: 995_000n }]);
+    expect(h.sends).toEqual([{ to: RELAYER_ADDRESS, value: 995_000n, nonce: START_NONCE + 3 }]);
     expect(r.ethDeliveredWei).toBe(995_000n);
   });
 
@@ -164,5 +177,66 @@ describe('executeRefuel — step gating', () => {
       step: 'transfer',
       partial: { swapTx: HASH, unwrapTx: HASH },
     });
+  });
+});
+
+describe('executeRefuel — FDQ-57 explicit sequential nonce', () => {
+  it('fetches the nonce ONCE and assigns n, n+1, n+2 to writes and n+3 to the transfer', async () => {
+    const h = harness();
+    await executeRefuel(base(h));
+    expect(h.publicClient.getTransactionCount as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
+    expect(h.writes.map((w) => w.nonce)).toEqual([START_NONCE, START_NONCE + 1, START_NONCE + 2]);
+    expect(h.sends.map((s) => s.nonce)).toEqual([START_NONCE + 3]);
+  });
+});
+
+describe('recoverStranded — FDQ-55 B + FDQ-58 native-ETH sweep', () => {
+  const recover = (h: H) =>
+    recoverStranded({
+      walletClient: h.walletClient,
+      publicClient: h.publicClient,
+      agent: AGENT,
+      chainId: 8453,
+      gasReserveWei: GAS_RESERVE,
+    });
+
+  it('unwraps orphaned WETH then sweeps native ETH above the reserve (sequential nonce)', async () => {
+    const h = harness({ wethBalance: 400_000_000_000_000n, agentEth: GAS_RESERVE + 400_000_000_000_000n });
+    const r = await recover(h);
+    expect(h.writes.map((w) => w.functionName)).toEqual(['withdraw']); // unwrap only
+    expect(h.writes[0]!.nonce).toBe(START_NONCE);
+    expect(h.sends).toEqual([{ to: RELAYER_ADDRESS, value: 400_000_000_000_000n, nonce: START_NONCE + 1 }]);
+    expect(r.recovered).toBe(true);
+    if (r.recovered) expect(r.ethDeliveredWei).toBe(400_000_000_000_000n);
+  });
+
+  it('FDQ-58: native ETH above reserve with NO WETH is swept — no unwrap, nonce n', async () => {
+    const h = harness({ wethBalance: 0n, agentEth: GAS_RESERVE + 123_000n });
+    const r = await recover(h);
+    expect(h.writes).toHaveLength(0); // nothing to unwrap
+    expect(h.sends).toEqual([{ to: RELAYER_ADDRESS, value: 123_000n, nonce: START_NONCE }]);
+    if (r.recovered) expect(r.unwrapTx).toBeNull();
+  });
+
+  it('no WETH, native ETH at/below reserve → recovered:false, no writes/sends', async () => {
+    const h = harness({ wethBalance: 0n, agentEth: GAS_RESERVE });
+    const r = await recover(h);
+    expect(r.recovered).toBe(false);
+    expect(h.writes).toHaveLength(0);
+    expect(h.sends).toHaveLength(0);
+  });
+
+  it('refuses a non-relayer destination before any call', async () => {
+    const h = harness({ agentEth: GAS_RESERVE + 1n });
+    await expect(
+      recoverStranded({
+        walletClient: h.walletClient,
+        publicClient: h.publicClient,
+        agent: AGENT,
+        chainId: 8453,
+        gasReserveWei: GAS_RESERVE,
+        relayer: AGENT,
+      }),
+    ).rejects.toBeInstanceOf(NonRelayerDestinationError);
   });
 });

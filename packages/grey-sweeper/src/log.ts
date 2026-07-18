@@ -1,3 +1,5 @@
+import { redactError } from './errors.js';
+
 export type SweepStatus = 'ok' | 'failed' | 'skipped';
 
 export interface SweepLogRow {
@@ -35,7 +37,9 @@ export async function appendSweepLog(pool: PoolLike, row: SweepLogRow): Promise<
     row.destination,
     row.status,
     row.errorClass,
-    row.errorMsg,
+    // FDQ-56 DB choke point: error text is redacted at the sink, so no caller can
+    // persist an RPC URL / key into sweep_log.error_msg.
+    row.errorMsg === null ? null : redactError(row.errorMsg),
     row.chainId,
   ]);
 }

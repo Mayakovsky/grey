@@ -3,7 +3,13 @@ import type { Address, Hash } from 'viem';
 import { runRefuel } from '../../../src/refuel/index.js';
 import type { RefuelDeps } from '../../../src/refuel/index.js';
 import { RELAYER_ADDRESS } from '../../../src/refuel/addresses.js';
-import { DEFAULT_FLOOR_WEI, DEFAULT_TARGET_WEI, DEFAULT_HARDFLOOR_WEI, DEFAULT_MAX_USDC } from '../../../src/refuel/settings.js';
+import {
+  DEFAULT_FLOOR_WEI,
+  DEFAULT_TARGET_WEI,
+  DEFAULT_HARDFLOOR_WEI,
+  DEFAULT_MAX_USDC,
+  DEFAULT_GAS_RESERVE_WEI,
+} from '../../../src/refuel/settings.js';
 import type { RefuelSettings } from '../../../src/refuel/settings.js';
 
 const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as Address;
@@ -19,6 +25,7 @@ const SETTINGS: RefuelSettings = {
   targetWei: DEFAULT_TARGET_WEI,
   hardFloorWei: DEFAULT_HARDFLOOR_WEI,
   maxUsdcPerTick: DEFAULT_MAX_USDC,
+  gasReserveWei: DEFAULT_GAS_RESERVE_WEI,
 };
 
 interface H {
@@ -32,6 +39,7 @@ interface H {
 function harness(opts: {
   relayerEth: bigint | Error;
   agentUsdc?: bigint;
+  agentEth?: bigint;      // agent NATIVE ETH (FDQ-58 native-recovery sweep source)
   quoteOut?: bigint;      // amountOut the quoter simulation returns (== post-swap WETH)
   strandedWeth?: bigint;  // WETH held by the agent BEFORE any swap (FDQ-55 B recovery)
   settings?: Partial<RefuelSettings>;
@@ -48,10 +56,12 @@ function harness(opts: {
   let receiptCalls = 0;
 
   const publicClient = {
-    getBalance: vi.fn(async () => {
+    getBalance: vi.fn(async (args: { address: Address }) => {
+      if (args.address === AGENT) return opts.agentEth ?? 0n; // native ETH (recovery source)
       if (opts.relayerEth instanceof Error) throw opts.relayerEth;
       return opts.relayerEth;
     }),
+    getTransactionCount: vi.fn(async () => 7), // FDQ-57: explicit nonce source
     readContract: vi.fn(async (args: { functionName: string }) => {
       if (args.functionName === 'getPool') return POOL;
       if (args.functionName === 'token0') return WETH;
@@ -203,10 +213,15 @@ describe('runRefuel — execution failure', () => {
   });
 });
 
-describe('runRefuel — FDQ-55 B: stranded-WETH recovery', () => {
-  it('delivers orphaned WETH to the relayer BEFORE any swap; logs ok (swap_tx null), ops alert', async () => {
-    // agent holds stranded WETH from a prior partial; relayer AT floor → no new swap
-    const h = harness({ relayerEth: DEFAULT_FLOOR_WEI, strandedWeth: 500_000_000_000_000n });
+describe('runRefuel — FDQ-55 B + FDQ-58: stranded-value recovery', () => {
+  it('unwraps orphaned WETH then sweeps native ETH above the reserve to the relayer', async () => {
+    // agent holds stranded WETH (unwrapped → native) so native ETH = reserve + 5e14;
+    // relayer AT floor → no new swap. Recovery: unwrap, then sweep the 5e14 excess.
+    const h = harness({
+      relayerEth: DEFAULT_FLOOR_WEI,
+      strandedWeth: 500_000_000_000_000n,
+      agentEth: DEFAULT_GAS_RESERVE_WEI + 500_000_000_000_000n,
+    });
     const r = await runRefuel(h.deps);
     expect(r.status).toBe('skipped'); // relayer at floor after recovery → no top-up swap
     expect(h.writes).toEqual(['withdraw']); // unwrap ONLY — no approve/exactInputSingle
@@ -215,7 +230,7 @@ describe('runRefuel — FDQ-55 B: stranded-WETH recovery', () => {
       value: bigint;
     };
     expect(send.to).toBe(RELAYER_ADDRESS);
-    expect(send.value).toBe(500_000_000_000_000n);
+    expect(send.value).toBe(500_000_000_000_000n); // excess above the gas reserve
     const ok = h.logRows.find((row) => statusOf(row) === 'ok');
     expect(ok).toBeDefined();
     expect(ok![6]).toBeNull(); // swap_tx — honest: recovery had no swap
@@ -224,11 +239,31 @@ describe('runRefuel — FDQ-55 B: stranded-WETH recovery', () => {
     expect(h.opsAlerts.some((m) => m.includes('recovered'))).toBe(true);
   });
 
-  it('steady state (no stranded WETH) writes no recovery row and no writes', async () => {
-    const h = harness({ relayerEth: DEFAULT_FLOOR_WEI }); // strandedWeth defaults to 0
+  it('FDQ-58: native ETH above reserve (no WETH) is swept to the relayer — no unwrap', async () => {
+    // reproduces the live stuck position: unwrap already mined, native ETH stranded.
+    const h = harness({
+      relayerEth: DEFAULT_FLOOR_WEI,
+      agentEth: DEFAULT_GAS_RESERVE_WEI + 162_222_914_207_892n,
+    });
+    const r = await runRefuel(h.deps);
+    expect(r.status).toBe('skipped');
+    expect(h.writes).toHaveLength(0); // no WETH to unwrap — sweep only
+    const send = (h.deps.walletClient.sendTransaction as ReturnType<typeof vi.fn>).mock.calls[0]![0] as {
+      to: Address;
+      value: bigint;
+    };
+    expect(send.to).toBe(RELAYER_ADDRESS);
+    expect(send.value).toBe(162_222_914_207_892n);
+    const ok = h.logRows.find((row) => statusOf(row) === 'ok');
+    expect(ok![7]).toBeNull(); // unwrap_tx null — nothing to unwrap
+  });
+
+  it('steady state (no WETH, native ETH at/below reserve) writes no recovery row and no writes', async () => {
+    const h = harness({ relayerEth: DEFAULT_FLOOR_WEI, agentEth: DEFAULT_GAS_RESERVE_WEI });
     await runRefuel(h.deps);
     expect(h.logRows).toHaveLength(0);
     expect(h.writes).toHaveLength(0);
+    expect((h.deps.walletClient.sendTransaction as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
   });
 });
 
