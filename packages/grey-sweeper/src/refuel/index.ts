@@ -2,7 +2,7 @@ import type { Address } from 'viem';
 import type { PoolLike } from '../log.js';
 import type { AlertDeps } from '../alert.js';
 import { alertCritical, alertOperational } from '../alert.js';
-import { errorClass, redactError } from '../errors.js';
+import { errorClass, logError } from '../errors.js';
 import { RELAYER_ADDRESS } from './addresses.js';
 import {
   MIN_USDC_IN,
@@ -65,7 +65,7 @@ export async function runRefuel(deps: RefuelDeps): Promise<RefuelResult> {
   try {
     relayerEth = await deps.publicClient.getBalance({ address: RELAYER_ADDRESS });
   } catch (err) {
-    const detail = redactError(err);
+    const detail = msg(err);
     await safeRefuelLog(deps, baseRow(deps, 0n, null, 'failed', errorClass(err), detail));
     await alertCritical('refuel: failed to read relayer balance', { error: detail }, deps.alertDeps);
     return { status: 'failed', errorClass: errorClass(err), errorDetail: detail };
@@ -99,7 +99,7 @@ export async function runRefuel(deps: RefuelDeps): Promise<RefuelResult> {
       relayerEth = await deps.publicClient.getBalance({ address: RELAYER_ADDRESS });
     }
   } catch (err) {
-    const detail = redactError(err);
+    const detail = msg(err);
     const partial = err instanceof RefuelStepError ? err.partial : {};
     await safeRefuelLog(deps, {
       ...baseRow(deps, relayerEth, null, 'failed', errorClass(err), detail),
@@ -173,7 +173,7 @@ export async function runRefuel(deps: RefuelDeps): Promise<RefuelResult> {
   } catch (err) {
     const isOob = err instanceof QuoteOutOfBandError;
     const status = isOob ? 'quote_oob' : 'failed';
-    const detail = redactError(err);
+    const detail = msg(err);
     // FDQ-55 C: a swap that mined before a later step failed MUST record its
     // swapTx — the audit row can never say "failed, swap_tx=null" while real USDC
     // moved on-chain. executeRefuel re-throws carrying the completed hashes.
@@ -217,10 +217,14 @@ function baseRow(
   };
 }
 
+function msg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 async function safeRefuelLog(deps: RefuelDeps, row: RefuelLogRow): Promise<void> {
   try {
     await appendRefuelLog(deps.pool, row);
   } catch (err) {
-    process.stderr.write(`grey-sweeper: failed to write refuel_log row: ${redactError(err)}\n`);
+    logError('grey-sweeper: failed to write refuel_log row: ', err);
   }
 }

@@ -1,3 +1,5 @@
+import process from 'node:process';
+
 /** Gas balance too low to broadcast — recoverable (retry next tick). */
 export class GasLowError extends Error {
   override readonly name = 'GasLowError';
@@ -63,4 +65,13 @@ export function redactError(err: unknown): string {
   return raw
     .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[url-redacted]')
     .replace(/\b(api[_-]?key|key|token|secret|password|pass)\s*[=:]\s*\S+/gi, '$1=[redacted]');
+}
+
+/**
+ * The stderr/journal choke point (FDQ-56): every error bound for a log line goes
+ * through here so it is redacted by construction — callers never format raw error
+ * text for stderr themselves.
+ */
+export function logError(prefix: string, err: unknown): void {
+  process.stderr.write(`${prefix}${redactError(err)}\n`);
 }

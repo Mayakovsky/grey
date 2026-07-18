@@ -2,6 +2,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { Buffer } from 'node:buffer';
 import process from 'node:process';
 import { request } from 'undici';
+import { redactError } from './errors.js';
 
 /**
  * Injectable HTTP transport so tests don't hit the network. Matches the subset
@@ -58,9 +59,12 @@ async function postWithRetry(
   const delay = deps.delay ?? ((ms: number) => sleep(ms));
   const authHeader = `Basic ${Buffer.from(`${deps.user}:${deps.pass}`).toString('base64')}`;
   const authedHeaders = { ...headers, Authorization: authHeader };
+  // FDQ-56 alert choke point: every alert body — ops or crit — is redacted here,
+  // before it leaves the process, so no caller can push a raw RPC URL / key to ntfy.
+  const safeBody = redactError(body);
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      const { statusCode } = await post(url, { method: 'POST', headers: authedHeaders, body });
+      const { statusCode } = await post(url, { method: 'POST', headers: authedHeaders, body: safeBody });
       if (statusCode >= 200 && statusCode < 300) return true;
     } catch {
       // fall through to backoff
