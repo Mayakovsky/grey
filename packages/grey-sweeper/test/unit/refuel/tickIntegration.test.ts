@@ -3,7 +3,13 @@ import type { Address, Hash } from 'viem';
 import { runTick } from '../../../src/index.js';
 import type { TickDeps } from '../../../src/index.js';
 import { THRESHOLD_USDC } from '../../../src/config.js';
-import { DEFAULT_FLOOR_WEI, DEFAULT_TARGET_WEI, DEFAULT_HARDFLOOR_WEI, DEFAULT_MAX_USDC } from '../../../src/refuel/settings.js';
+import {
+  DEFAULT_FLOOR_WEI,
+  DEFAULT_TARGET_WEI,
+  DEFAULT_HARDFLOOR_WEI,
+  DEFAULT_MAX_USDC,
+  DEFAULT_GAS_RESERVE_WEI,
+} from '../../../src/refuel/settings.js';
 import type { RefuelSettings } from '../../../src/refuel/settings.js';
 
 const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as Address;
@@ -20,6 +26,7 @@ const SETTINGS: RefuelSettings = {
   targetWei: DEFAULT_TARGET_WEI,
   hardFloorWei: DEFAULT_HARDFLOOR_WEI,
   maxUsdcPerTick: DEFAULT_MAX_USDC,
+  gasReserveWei: DEFAULT_GAS_RESERVE_WEI,
 };
 
 interface H {
@@ -44,18 +51,28 @@ function harness(opts: {
   let usdcReads = 0;
 
   const sweepSend = vi.fn(async () => TXHASH);
+  // relayer-only balance read (the recovery agent read is dispatched separately)
   const refuelGetBalance = vi.fn(async () => {
     if (opts.relayerEth instanceof Error) throw opts.relayerEth;
     return opts.relayerEth;
   });
+  let refuelBalanceOfCalls = 0;
 
   const refuelPublic = {
-    getBalance: refuelGetBalance,
+    getBalance: vi.fn(async (args: { address: Address }) => {
+      if (args.address === WALLET) return 0n; // agent native ETH — no stranded value here
+      return refuelGetBalance(); // relayer
+    }),
+    getTransactionCount: vi.fn(async () => 5), // FDQ-57 explicit nonce source
     readContract: vi.fn(async (args: { functionName: string }) => {
       if (args.functionName === 'getPool') return POOL;
       if (args.functionName === 'token0') return WETH;
       if (args.functionName === 'slot0') return [Q96, 0, 0, 0, 0, 0, true] as const;
-      if (args.functionName === 'balanceOf') return opts.quoteOut ?? 0n;
+      if (args.functionName === 'balanceOf') {
+        // first balanceOf = recovery WETH check (no stranded); rest = post-swap output
+        refuelBalanceOfCalls += 1;
+        return refuelBalanceOfCalls === 1 ? 0n : (opts.quoteOut ?? 0n);
+      }
       throw new Error(`unexpected read ${args.functionName}`);
     }),
     simulateContract: vi.fn(async (args: { functionName: string }) => {

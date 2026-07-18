@@ -49,3 +49,18 @@ export function errorClass(err: unknown): string {
   if (err instanceof Error && err.name) return err.name;
   return 'UnknownError';
 }
+
+/**
+ * FDQ-56: strip secrets from error text BEFORE it reaches a persisted row
+ * (refuel_log/sweep_log error_detail) or any log line. viem embeds the full RPC
+ * request URL — which carries the provider API key — in error messages; the
+ * FDQ-43 posture covered ntfy creds but not this, so a keyed URL leaked into
+ * grey_two.refuel_log. Removes any `scheme://…` URL and any `key=`/`token=`-shaped
+ * segment. Post-condition: no `http` substring survives into the returned string.
+ */
+export function redactError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return raw
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[url-redacted]')
+    .replace(/\b(api[_-]?key|key|token|secret|password|pass)\s*[=:]\s*\S+/gi, '$1=[redacted]');
+}

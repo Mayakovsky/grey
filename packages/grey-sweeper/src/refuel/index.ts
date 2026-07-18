@@ -2,7 +2,7 @@ import type { Address } from 'viem';
 import type { PoolLike } from '../log.js';
 import type { AlertDeps } from '../alert.js';
 import { alertCritical, alertOperational } from '../alert.js';
-import { errorClass } from '../errors.js';
+import { errorClass, redactError } from '../errors.js';
 import { RELAYER_ADDRESS } from './addresses.js';
 import {
   MIN_USDC_IN,
@@ -12,7 +12,7 @@ import {
 } from './settings.js';
 import { QuoteOutOfBandError, quoteUsdcToWeth, readSpot, usdcForDeficit } from './quote.js';
 import type { QuoteClientLike } from './quote.js';
-import { executeRefuel, recoverStrandedWeth, RefuelStepError } from './execute.js';
+import { executeRefuel, recoverStranded, RefuelStepError } from './execute.js';
 import type { RefuelPublicLike, RefuelWalletLike } from './execute.js';
 import { appendRefuelLog } from './log.js';
 
@@ -65,23 +65,24 @@ export async function runRefuel(deps: RefuelDeps): Promise<RefuelResult> {
   try {
     relayerEth = await deps.publicClient.getBalance({ address: RELAYER_ADDRESS });
   } catch (err) {
-    const detail = msg(err);
+    const detail = redactError(err);
     await safeRefuelLog(deps, baseRow(deps, 0n, null, 'failed', errorClass(err), detail));
     await alertCritical('refuel: failed to read relayer balance', { error: detail }, deps.alertDeps);
     return { status: 'failed', errorClass: errorClass(err), errorDetail: detail };
   }
 
-  // FDQ-55 B: recover any stranded WETH from a prior partial (a swap that mined,
-  // then a stale-read/unwrap/transfer failure) BEFORE the floor decision. The
-  // agent holds no WETH by design, so a nonzero balance is orphaned refuel output
-  // still owed to the relayer — deliver it regardless of the floor. The recovery
-  // is idempotent per-tick and never blocks the sweep (F-Q4(a)).
+  // FDQ-55 B + FDQ-58: recover any stranded value BEFORE the floor decision — the
+  // agent holds no WETH and only a gas float by design, so orphaned WETH (a swap
+  // that mined, then a later step failed) and native ETH above the reserve (a
+  // recovered-but-undelivered unwrap) are both owed to the relayer. Delivered
+  // regardless of the floor; idempotent per-tick; never blocks the sweep (F-Q4(a)).
   try {
-    const rec = await recoverStrandedWeth({
+    const rec = await recoverStranded({
       walletClient: deps.walletClient,
       publicClient: deps.publicClient,
       agent: deps.agent,
       chainId: deps.chainId,
+      gasReserveWei: deps.settings.gasReserveWei,
     });
     if (rec.recovered) {
       await safeRefuelLog(deps, {
@@ -91,20 +92,20 @@ export async function runRefuel(deps: RefuelDeps): Promise<RefuelResult> {
         ethDeliveredWei: rec.ethDeliveredWei,
       });
       await alertOperational(
-        `refuel: recovered ${rec.ethDeliveredWei} wei stranded WETH → relayer (${rec.transferTx})`,
+        `refuel: recovered ${rec.ethDeliveredWei} wei → relayer (${rec.transferTx})`,
         deps.alertDeps,
       );
       // the delivery raised the relayer — re-read for an accurate floor decision
       relayerEth = await deps.publicClient.getBalance({ address: RELAYER_ADDRESS });
     }
   } catch (err) {
-    const detail = msg(err);
+    const detail = redactError(err);
     const partial = err instanceof RefuelStepError ? err.partial : {};
     await safeRefuelLog(deps, {
       ...baseRow(deps, relayerEth, null, 'failed', errorClass(err), detail),
       unwrapTx: partial.unwrapTx ?? null,
     });
-    await alertCritical('refuel: stranded-WETH recovery failed', { error: detail }, deps.alertDeps);
+    await alertCritical('refuel: stranded-value recovery failed', { error: detail }, deps.alertDeps);
     return { status: 'failed', errorClass: errorClass(err), errorDetail: detail };
   }
 
@@ -172,7 +173,7 @@ export async function runRefuel(deps: RefuelDeps): Promise<RefuelResult> {
   } catch (err) {
     const isOob = err instanceof QuoteOutOfBandError;
     const status = isOob ? 'quote_oob' : 'failed';
-    const detail = msg(err);
+    const detail = redactError(err);
     // FDQ-55 C: a swap that mined before a later step failed MUST record its
     // swapTx — the audit row can never say "failed, swap_tx=null" while real USDC
     // moved on-chain. executeRefuel re-throws carrying the completed hashes.
@@ -216,14 +217,10 @@ function baseRow(
   };
 }
 
-function msg(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
 async function safeRefuelLog(deps: RefuelDeps, row: RefuelLogRow): Promise<void> {
   try {
     await appendRefuelLog(deps.pool, row);
   } catch (err) {
-    process.stderr.write(`grey-sweeper: failed to write refuel_log row: ${msg(err)}\n`);
+    process.stderr.write(`grey-sweeper: failed to write refuel_log row: ${redactError(err)}\n`);
   }
 }

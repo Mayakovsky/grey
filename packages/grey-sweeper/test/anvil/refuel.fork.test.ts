@@ -17,7 +17,7 @@ import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import process from 'node:process';
 import { readSpot, quoteUsdcToWeth } from '../../src/refuel/quote.js';
 import type { QuoteClientLike } from '../../src/refuel/quote.js';
-import { executeRefuel, recoverStrandedWeth } from '../../src/refuel/execute.js';
+import { executeRefuel, recoverStranded } from '../../src/refuel/execute.js';
 import type { RefuelPublicLike, RefuelWalletLike } from '../../src/refuel/execute.js';
 import { RELAYER_ADDRESS } from '../../src/refuel/addresses.js';
 
@@ -115,10 +115,12 @@ describe.skipIf(!RUN)('anvil mainnet-fork — refuel round-trip', () => {
     expect(r.transferTx).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
-  it('FDQ-55 B: recovers stranded WETH — unwraps and delivers it to the pinned relayer', async () => {
-    await test.setBalance({ address: account.address, value: parseEther('1') }); // gas + wrap
+  it('FDQ-55 B + FDQ-58: recovers stranded WETH — unwraps + sweeps native ETH to the relayer', async () => {
     // reproduce id48's aftermath: the agent holds WETH (a swap that mined, then a
-    // later step failed), and NO USDC. A clean tick must sweep it to the relayer.
+    // later step failed) and NO USDC. Recovery unwraps it and sweeps everything
+    // above the gas reserve to the relayer, leaving the agent at ~reserve.
+    const RESERVE = 2_000_000_000_000_000n; // 0.002 ETH (DEFAULT_GAS_RESERVE_WEI)
+    await test.setBalance({ address: account.address, value: parseEther('1') });
     const stranded = 400_000_000_000_000n; // 0.0004 ETH
     const dep = await wallet.writeContract({
       address: WETH,
@@ -130,16 +132,24 @@ describe.skipIf(!RUN)('anvil mainnet-fork — refuel round-trip', () => {
     expect(await wethBal(account.address)).toBe(stranded);
 
     const relayerBefore = await pub.getBalance({ address: RELAYER_ADDRESS });
-    const rec = await recoverStrandedWeth({
+    const rec = await recoverStranded({
       walletClient: refuelWallet,
       publicClient: refuelPublic,
       agent: account.address,
       chainId: CHAIN,
+      gasReserveWei: RESERVE,
     });
 
     expect(rec.recovered).toBe(true);
-    if (rec.recovered) expect(rec.ethDeliveredWei).toBe(stranded);
-    expect((await pub.getBalance({ address: RELAYER_ADDRESS })) - relayerBefore).toBe(stranded);
-    expect(await wethBal(account.address)).toBe(0n); // fully swept — nothing left stranded
+    // the relayer receives EXACTLY what recovery reports it delivered
+    expect((await pub.getBalance({ address: RELAYER_ADDRESS })) - relayerBefore).toBe(
+      rec.recovered ? rec.ethDeliveredWei : 0n,
+    );
+    // WETH fully unwrapped; agent left at ~reserve (minus the transfer's own gas)
+    expect(await wethBal(account.address)).toBe(0n);
+    const agentAfter = await pub.getBalance({ address: account.address });
+    expect(agentAfter).toBeLessThanOrEqual(RESERVE);
+    expect(agentAfter).toBeGreaterThan(RESERVE - 100_000_000_000_000n); // within 0.0001 ETH gas
+    if (rec.recovered) expect(rec.ethDeliveredWei).toBeGreaterThan(parseEther('0.9')); // swept the excess
   });
 });
