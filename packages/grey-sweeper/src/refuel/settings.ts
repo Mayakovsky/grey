@@ -26,9 +26,12 @@ export const MIN_USDC_IN = 100_000n;
 /**
  * Native ETH the agent keeps for its own gas float. Recovery (FDQ-58) sweeps any
  * ETH ABOVE this to the relayer — a recovered-but-undelivered unwrap, or ordinary
- * excess. 0.002 ETH comfortably covers many 4-tx refuel cycles on Base.
+ * excess. 0.003 ETH: pinned to the agent's funded gas float so recovery only ever
+ * relocates genuine surplus (stranded unwrap output / real revenue), never the
+ * funded buffer itself (M5 Phase F, Forces funding-sensitivity ruling). Comfortably
+ * covers many 4-tx refuel cycles on Base.
  */
-export const DEFAULT_GAS_RESERVE_WEI = 2_000_000_000_000_000n;
+export const DEFAULT_GAS_RESERVE_WEI = 3_000_000_000_000_000n;
 
 export interface RefuelSettings {
   /** Master switch (GREY_REFUEL_ENABLED, default true). false = module fully inert. */

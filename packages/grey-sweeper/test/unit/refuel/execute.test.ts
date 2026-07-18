@@ -8,6 +8,7 @@ import {
 } from '../../../src/refuel/execute.js';
 import type { RefuelPublicLike, RefuelWalletLike } from '../../../src/refuel/execute.js';
 import { RELAYER_ADDRESS } from '../../../src/refuel/addresses.js';
+import { DEFAULT_GAS_RESERVE_WEI } from '../../../src/refuel/settings.js';
 import type { Quote } from '../../../src/refuel/quote.js';
 
 const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as Address;
@@ -15,7 +16,7 @@ const AGENT = '0x394e81DA28799b578620803772FAeE403dE2d3f6' as Address;
 const POOL = '0xd0b53D9277642d899DF5C87A3966A349A798F224' as Address;
 const HASH = ('0x' + 'ab'.repeat(32)) as Hash;
 const START_NONCE = 10;
-const GAS_RESERVE = 2_000_000_000_000_000n;
+const GAS_RESERVE = DEFAULT_GAS_RESERVE_WEI; // exercise the ratified reserve (single-source, invariant #22)
 
 const QUOTE: Quote = { amountIn: 1_000_000n, amountOut: 995_000n, minOut: 985_050n, pool: POOL };
 
