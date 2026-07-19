@@ -20,6 +20,7 @@ import type { QuoteClientLike } from '../../src/refuel/quote.js';
 import { executeRefuel, recoverStranded } from '../../src/refuel/execute.js';
 import type { RefuelPublicLike, RefuelWalletLike } from '../../src/refuel/execute.js';
 import { RELAYER_ADDRESS } from '../../src/refuel/addresses.js';
+import { DEFAULT_GAS_RESERVE_WEI } from '../../src/refuel/settings.js';
 
 /**
  * Anvil MAINNET-FORK refuel end-to-end (spec §5.2 — the ratified strategy).
@@ -119,7 +120,7 @@ describe.skipIf(!RUN)('anvil mainnet-fork — refuel round-trip', () => {
     // reproduce id48's aftermath: the agent holds WETH (a swap that mined, then a
     // later step failed) and NO USDC. Recovery unwraps it and sweeps everything
     // above the gas reserve to the relayer, leaving the agent at ~reserve.
-    const RESERVE = 2_000_000_000_000_000n; // 0.002 ETH (DEFAULT_GAS_RESERVE_WEI)
+    const RESERVE = DEFAULT_GAS_RESERVE_WEI; // 0.003 ETH — the ratified reserve (single-source, invariant #22)
     await test.setBalance({ address: account.address, value: parseEther('1') });
     const stranded = 400_000_000_000_000n; // 0.0004 ETH
     const dep = await wallet.writeContract({
