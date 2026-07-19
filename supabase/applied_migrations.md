@@ -35,3 +35,39 @@ This is grey's canonical pattern from Step 2 forward (Movement 4 `sweep_log`, CI
 - Grants: `grey_pipeline_rw` → USAGE on schema `grey_two`, INSERT+SELECT on `sweep_log`, USAGE+SELECT on `sweep_log_id_seq`; REVOKE UPDATE/DELETE/TRUNCATE on `sweep_log` (append-only for the runtime role, verified INSERT+SELECT present).
 - `supabase_migrations.schema_migrations` on remote: **untouched** (5 rows, all plugin-wpv/autognostic: `20260601161838` … `20260613022829`; no grey row added — psql apply, not CLI push).
 - Anomalies: none. Preflight verified `grey_two` schema + `grey_pipeline_rw` role present and `sweep_log` absent before apply; all 6 DDL statements (CREATE TABLE, CREATE INDEX, 3× GRANT, REVOKE) returned success under `--single-transaction`.
+
+## 20260715120000_create_refuel_log (Movement 5 Phase F)
+
+- File: `supabase/migrations/20260715120000_create_refuel_log.sql`
+- sha256: `344c34fc5b0ac00f22595c60d90741b55f316c963f1fa1e580b5fc7f5b5c1bed`
+- Applied at: ~2026-07-16 (UTC), exact time not recorded — applied just before the first `grey_two.refuel_log` row (`ticked_at 2026-07-16 23:38:46 UTC`). Ledger back-filled by Kov 2026-07-17.
+- Applied by: Forces-lane via `psql -w -v ON_ERROR_STOP=1 --single-transaction -d <WPV_DATABASE_URL> -f supabase/migrations/20260715120000_create_refuel_log.sql` (M5 Phase F spec §2; owner/migration cred). The Supabase CLI is NOT used (shared `schema_migrations` with plugin-wpv — M1 lesson).
+- Purpose: Phase F relayer-refuel audit table `grey_two.refuel_log` — one row per non-steady-state refuel evaluation (ok/skipped/insufficient_usdc/quote_oob/failed; silent skips not persisted).
+- Tables created: `grey_two.refuel_log` (1) — 15 columns (`id BIGINT GENERATED ALWAYS AS IDENTITY PK, ticked_at TIMESTAMPTZ DEFAULT now(), chain_id INTEGER, relayer_balance_before_wei/deficit_wei/usdc_in/quote_out_wei/min_out_wei/eth_delivered_wei NUMERIC(38,0), swap_tx/unwrap_tx/transfer_tx TEXT, status TEXT CHECK(ok/skipped/insufficient_usdc/quote_oob/failed), error_class/error_detail_redacted TEXT`). Additive; zero contact with existing `grey_two` tables or any `wpv_*`.
+- Indices: `refuel_log_pkey` + `refuel_log_ticked_at_idx` + `refuel_log_status_idx` (3).
+- Grants: `grey_pipeline_rw` → INSERT, SELECT on `refuel_log`. NOTE: UPDATE/DELETE remained granted via `grey_two`'s ALTER DEFAULT PRIVILEGES (a plain GRANT does not cancel them) — corrected by `20260716090000` (FDQ-52).
+- `supabase_migrations.schema_migrations` on remote: **untouched** (psql apply, not CLI push).
+- Anomalies: append-only REVOKE omitted at create (authoring defect, caught by Kov's grant verify) → corrected by the FDQ-52 migration below.
+
+## 20260716090000_refuel_log_append_only (Movement 5 Phase F — FDQ-52)
+
+- File: `supabase/migrations/20260716090000_refuel_log_append_only.sql`
+- sha256: `1241bb7ec20ecad4fdef7153371e0f6fc1d4f3b95117417b6056923785ec9a21`
+- Applied at: ~2026-07-16 (UTC), exact time not recorded — landed shortly after `create_refuel_log`, same Forces-lane session. Ledger back-filled by Kov 2026-07-17.
+- Applied by: Forces-lane via `psql -w -v ON_ERROR_STOP=1 --single-transaction -d <WPV_DATABASE_URL> -f supabase/migrations/20260716090000_refuel_log_append_only.sql`.
+- Purpose: FDQ-52 corrective — restore append-only posture on `grey_two.refuel_log`. The create-migration's GRANT did not cancel `grey_two`'s ALTER DEFAULT PRIVILEGES (UPDATE/DELETE auto-granted to `grey_pipeline_rw`); this REVOKEs them so the runtime role can INSERT/SELECT only.
+- Effects: `REVOKE UPDATE, DELETE, TRUNCATE ON grey_two.refuel_log FROM grey_pipeline_rw` + refreshed table COMMENT. Idempotent (REVOKE of an already-absent privilege is a no-op).
+- `supabase_migrations.schema_migrations` on remote: **untouched** (psql apply, not CLI push).
+- Anomalies: none — this IS the corrective for the create-migration omission.
+
+## id=207 error_detail scrub (Movement 5 Phase F — FDQ-56)
+
+- Type: one-off data scrub (not a migration file).
+- Applied at: 2026-07-17 ~20:5x UTC (this session), exact time not recorded — minutes after row 207 was written (`ticked_at 2026-07-17 20:47:13.756845+00`). Drafted by Kov, run Forces-lane.
+- Applied by: Forces-lane via `psql -w -v ON_ERROR_STOP=1 --single-transaction -d <WPV_DATABASE_URL> -f /tmp/scrub207.sql` (temp file removed after).
+- Statement: `UPDATE grey_two.refuel_log SET error_detail_redacted = '[REDACTED FDQ-56: RPC URL with key; error_class retained]' WHERE id = 207;`
+- Rationale: row 207 persisted a keyed Alchemy RPC URL in `error_detail_redacted`, written before the FDQ-56 sink-layer `redactError()` choke point landed (grey/main `e6b3279`, #24). Owner-cred UPDATE required — the runtime role `grey_pipeline_rw` is INSERT/SELECT-only (FDQ-52, above).
+- Result: `UPDATE 1` (1 of 208 rows). Post-verify: `has_url_after = f`, `error_class = TransactionExecutionError` retained, `error_detail_redacted` = the placeholder marker.
+- Scope: single row, `grey_two.refuel_log` only. Zero contact with any other `grey_two` table or any `wpv_*`. The 52 cosmetic public-URL rows (no key) left as-is (Forces ruling — not a security exposure).
+- `supabase_migrations.schema_migrations` on remote: **untouched**.
+- Anomalies: none.
