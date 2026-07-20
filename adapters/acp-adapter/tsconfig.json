@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    // Node runtime process: uses process + Buffer + timers. The ACP SDK is a RUNTIME-ONLY
+    // external, loaded via a variable-specifier dynamic import (src/sdk.ts) so tsc never
+    // statically resolves it — the adapter core, its tests, and the dist build need none of
+    // the SDK's heavy transitive tree (@account-kit/@alchemy/@privy/socket.io — the M5 VPS OOM).
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@grey/acp-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint . --no-error-on-unmatched-pattern",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "tier1-smoke": "tsx scripts/tier1-offline-smoke.ts"
+  },
+  "dependencies": {
+    "@grey/core": "workspace:*",
+    "@grey/pipeline": "workspace:*",
+    "@grey/x402-middleware": "workspace:*",
+    "viem": "^2.53.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.4"
+  }
+}
