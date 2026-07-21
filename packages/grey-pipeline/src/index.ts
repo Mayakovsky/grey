@@ -53,3 +53,11 @@ export {
 
 // Constants worth exposing
 export { GREY_MODEL, LLM_PRICING, DEFAULT_SCORE_WEIGHTS } from './constants';
+
+// Canonical protocol list (single source — M6: the ACP adapter's NL parser compiles its
+// project-name regex from here rather than keeping a third divergent copy).
+export {
+  KNOWN_PROTOCOL_NAMES,
+  KNOWN_PROTOCOL_PATTERN,
+  buildProtocolPattern,
+} from './constants/protocols';

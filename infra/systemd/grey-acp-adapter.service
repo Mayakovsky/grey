@@ -1,0 +1,26 @@
+# grey-acp-adapter — the ACP marketplace as a grey-core ChannelIngress (Movement 6). Holds the ACP
+# Privy signer, so it runs as its OWN unit, independent of grey-core and the (to-be-retired) pm2
+# agent. Ships INSTALLED-BUT-DISABLED — becoming the live seller is Phase D's act (stop pm2 grey,
+# then start this), NOT Phase C. NEVER co-run this and the pm2 `grey` agent: same signer 0xa966…
+# → on-chain double-action. No HTTP surface (the plugin-acp 3001 handler was dropped).
+[Unit]
+Description=Grey ACP adapter (ChannelIngress — ACP marketplace seller)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=grey
+WorkingDirectory=/opt/grey/grey
+ExecStart=/usr/bin/node adapters/acp-adapter/dist/main.js
+EnvironmentFile=/etc/grey/acp-adapter.env
+Restart=on-failure
+RestartSec=5
+
+# Hardening (drop if a probe shows it breaks node/the SDK; report before removing).
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
