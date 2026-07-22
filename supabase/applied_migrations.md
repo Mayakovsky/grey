@@ -71,3 +71,16 @@ This is grey's canonical pattern from Step 2 forward (Movement 4 `sweep_log`, CI
 - Scope: single row, `grey_two.refuel_log` only. Zero contact with any other `grey_two` table or any `wpv_*`. The 52 cosmetic public-URL rows (no key) left as-is (Forces ruling — not a security exposure).
 - `supabase_migrations.schema_migrations` on remote: **untouched**.
 - Anomalies: none.
+
+## 20260719140000_create_grey_two_reputation (Movement 6 Phase B)
+
+- File: `supabase/migrations/20260719140000_create_grey_two_reputation.sql`
+- sha256: `93084FDB0359AEB0D7D6CC922099FFA71D3D6AD51D1229A3C860E41F6FF5BB5A`
+- Applied at: ~2026-07-19 (UTC), Forces-lane session.
+- Applied by: Forces-lane via `psql -w -v ON_ERROR_STOP=1 --single-transaction -d <WPV_DATABASE_URL> -f supabase/migrations/20260719140000_create_grey_two_reputation.sql` (M6 Phase B run sheet, PowerShell). Supabase CLI NOT used (shared `schema_migrations` with plugin-wpv).
+- Purpose: M6 shadow reputation-gate state — re-homes buyer-reputation data out of the untouchable `autognostic.wpv_buyer_records`/`wpv_tracked_jobs` into grey's own `grey_two` schema (M6 Q4 ruling). Additive; zero contact with existing `grey_two` tables or any `wpv_*`.
+- Tables created: `grey_two.{buyer_records, tracked_jobs}` (2). `buyer_records`: 10 cols, `text` PK (`wallet_address`). `tracked_jobs`: 8 cols, composite PK (`chain_id, job_id`).
+- Indices: `grey_buyer_status_idx`, `grey_tracked_status_idx`, `grey_tracked_buyer_idx` (3 named) + 2 PK = 5.
+- Grants (FDQ-65): `grey_pipeline_rw` → USAGE on schema, SELECT/INSERT/UPDATE on both tables; REVOKE DELETE/TRUNCATE. **UPDATE deliberately KEPT** (buyer status transitions + tracked-job resolution) — the OPPOSITE of the append-only audit tables (`sweep_log`/`refuel_log`). Correct-by-construction: the explicit REVOKE executed inside the successful `--single-transaction` apply, cancelling `grey_two`'s ALTER DEFAULT PRIVILEGES auto-grant for DELETE/TRUNCATE while retaining UPDATE (cf. `refuel_log` FDQ-52, where the REVOKE was omitted). No sequence grants (`text` / composite PK — no BIGSERIAL/IDENTITY).
+- `supabase_migrations.schema_migrations` on remote: **untouched** (psql apply, not CLI push).
+- Anomalies: none reported. `\dp` visual grant verify (run-sheet block 6) confirmed by Forces: `grey_pipeline_rw=arw/...` on both tables, no `d` (DELETE) or `D` (TRUNCATE). FDQ-65 posture verified both by the in-transaction REVOKE and by visual `\dp` inspection.
