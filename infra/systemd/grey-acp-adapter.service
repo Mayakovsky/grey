@@ -12,7 +12,10 @@ Wants=network-online.target
 Type=simple
 User=grey
 WorkingDirectory=/opt/grey/grey
-ExecStart=/usr/bin/node adapters/acp-adapter/dist/main.js
+# FDQ-70: the @virtuals-protocol/acp-node-v2 SDK ships ESM with EXTENSIONLESS relative
+# imports (bun-authored; bun tolerates them, strict Node ESM does not). The tsx loader
+# resolves them, so the adapter runs under `node --import tsx`. tsx is a runtime dependency.
+ExecStart=/usr/bin/node --import tsx adapters/acp-adapter/dist/main.js
 EnvironmentFile=/etc/grey/acp-adapter.env
 Restart=on-failure
 RestartSec=5
