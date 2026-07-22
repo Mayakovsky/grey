@@ -17,6 +17,7 @@
     "@grey/core": "workspace:*",
     "@grey/pipeline": "workspace:*",
     "@grey/x402-middleware": "workspace:*",
+    "@virtuals-protocol/acp-node-v2": "^0.0.4",
     "viem": "^2.53.1"
   },
   "devDependencies": {
