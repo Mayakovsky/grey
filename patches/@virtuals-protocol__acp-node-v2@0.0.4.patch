@@ -1,0 +1,268 @@
+diff --git a/dist/acpAgent.js b/dist/acpAgent.js
+index 70f18cfae9638dba9b95002371647eef076fe9a3..20fbf1e7075cde3bce304fa8365aff07b5e828f1 100644
+--- a/dist/acpAgent.js
++++ b/dist/acpAgent.js
+@@ -1,13 +1,13 @@
+ import { encodeAbiParameters, zeroAddress } from "viem";
+ import Ajv from "ajv";
+-import { createAcpClient, } from "./clientFactory";
+-import { EvmAcpClient } from "./clients/evmAcpClient";
+-import { FUND_TRANSFER_HOOK_ADDRESSES, getAddressForChain, MIN_SLA_MINS, BUFFER_SECONDS, } from "./core/constants";
+-import { AssetToken } from "./core/assetToken";
+-import { JobSession } from "./jobSession";
+-import { AcpApiClient } from "./events/acpApiClient";
+-import { AcpHttpClient } from "./events/acpHttpClient";
+-import { SseTransport } from "./events/sseTransport";
++import { createAcpClient, } from "./clientFactory.js";
++import { EvmAcpClient } from "./clients/evmAcpClient.js";
++import { FUND_TRANSFER_HOOK_ADDRESSES, getAddressForChain, MIN_SLA_MINS, BUFFER_SECONDS, } from "./core/constants.js";
++import { AssetToken } from "./core/assetToken.js";
++import { JobSession } from "./jobSession.js";
++import { AcpApiClient } from "./events/acpApiClient.js";
++import { AcpHttpClient } from "./events/acpHttpClient.js";
++import { SseTransport } from "./events/sseTransport.js";
+ // ---------------------------------------------------------------------------
+ // AcpAgent
+ // ---------------------------------------------------------------------------
+diff --git a/dist/acpJob.js b/dist/acpJob.js
+index 470a5dbe667f137ee806a6171474c0857fa51bd9..19b6ec9a21d57ac9af1168a9aec90fb2b8957b12 100644
+--- a/dist/acpJob.js
++++ b/dist/acpJob.js
+@@ -1,4 +1,4 @@
+-import { AssetToken } from "./core/assetToken";
++import { AssetToken } from "./core/assetToken.js";
+ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+ export class AcpIntent {
+     constructor(data) {
+diff --git a/dist/clientFactory.js b/dist/clientFactory.js
+index c1384b2b618b5793948d503126657d6369e9f770..65d8e65fe7a1affa0449c5b629835f903b373f14 100644
+--- a/dist/clientFactory.js
++++ b/dist/clientFactory.js
+@@ -1,6 +1,6 @@
+-import { EvmAcpClient } from "./clients/evmAcpClient";
+-import { SolanaAcpClient } from "./clients/solanaAcpClient";
+-import { ACP_CONTRACT_ADDRESSES } from "./core/constants";
++import { EvmAcpClient } from "./clients/evmAcpClient.js";
++import { SolanaAcpClient } from "./clients/solanaAcpClient.js";
++import { ACP_CONTRACT_ADDRESSES } from "./core/constants.js";
+ export async function createAcpClient(input) {
+     if (isEvmProvider(input.provider)) {
+         return EvmAcpClient.create({
+diff --git a/dist/clients/evmAcpClient.js b/dist/clients/evmAcpClient.js
+index 6fe315c6e32fc642544dadae6bd7611da9505254..d80d1258ebda89ffc5853a3d46d8e41e4fb07a65 100644
+--- a/dist/clients/evmAcpClient.js
++++ b/dist/clients/evmAcpClient.js
+@@ -1,7 +1,7 @@
+ import { encodeFunctionData, erc20Abi, keccak256, pad, toHex, zeroAddress, } from "viem";
+-import { BaseAcpClient } from "./baseAcpClient";
+-import { ACP_ABI } from "../core/acpAbi";
+-import { parseJobIdFromReceipt } from "../utils/events";
++import { BaseAcpClient } from "./baseAcpClient.js";
++import { ACP_ABI } from "../core/acpAbi.js";
++import { parseJobIdFromReceipt } from "../utils/events.js";
+ export class EvmAcpClient extends BaseAcpClient {
+     constructor(contractAddresses, provider) {
+         super(contractAddresses);
+diff --git a/dist/clients/solanaAcpClient.js b/dist/clients/solanaAcpClient.js
+index 6d9a90e332cabfe704b676205e6094317b7359d5..c97e4cf24b0825b83f6b084ee0a14557a6d4b23d 100644
+--- a/dist/clients/solanaAcpClient.js
++++ b/dist/clients/solanaAcpClient.js
+@@ -1,5 +1,5 @@
+ import { keccak256, toHex } from "viem";
+-import { BaseAcpClient } from "./baseAcpClient";
++import { BaseAcpClient } from "./baseAcpClient.js";
+ export class SolanaAcpClient extends BaseAcpClient {
+     constructor(contractAddresses, provider) {
+         super(contractAddresses);
+diff --git a/dist/core/assetToken.js b/dist/core/assetToken.js
+index 880dc0b44b21b0a3e37838ddd956a74cca334935..5e05537ad9f63d6acbef9bd063ab45dcdfc8e0f2 100644
+--- a/dist/core/assetToken.js
++++ b/dist/core/assetToken.js
+@@ -1,5 +1,5 @@
+ import { parseUnits } from "viem";
+-import { USDC_ADDRESSES, USDC_DECIMALS, USDC_SYMBOL, getAddressForChain } from "./constants";
++import { USDC_ADDRESSES, USDC_DECIMALS, USDC_SYMBOL, getAddressForChain } from "./constants.js";
+ export class AssetToken {
+     constructor(address, symbol, decimals, amount) {
+         this.address = address;
+diff --git a/dist/events/acpApiClient.js b/dist/events/acpApiClient.js
+index 152fe0187812be5c9e1aacf72e871863cf79a890..564e765805dfe5f2deab19d6311f223c779422c4 100644
+--- a/dist/events/acpApiClient.js
++++ b/dist/events/acpApiClient.js
+@@ -1,4 +1,4 @@
+-import { AcpHttpClient } from "./acpHttpClient";
++import { AcpHttpClient } from "./acpHttpClient.js";
+ export class AcpApiClient extends AcpHttpClient {
+     constructor(opts = {}) {
+         super(opts);
+diff --git a/dist/events/acpHttpClient.js b/dist/events/acpHttpClient.js
+index 3a4ee77f49145bf50d35d16f754d1e4f935be54b..7d4f0b0e1fa2c45c19e212bd5eb7576be5b14857 100644
+--- a/dist/events/acpHttpClient.js
++++ b/dist/events/acpHttpClient.js
+@@ -1,4 +1,4 @@
+-import { ACP_SERVER_URL } from "../core/constants";
++import { ACP_SERVER_URL } from "../core/constants.js";
+ export class AcpHttpClient {
+     constructor(opts = {}) {
+         this.ctx = null;
+diff --git a/dist/events/socketTransport.js b/dist/events/socketTransport.js
+index 3514bfe3143dedd021d960000419661f467479e1..2bbb341fdc3fdde73c6ed94babd47b3e98a5364c 100644
+--- a/dist/events/socketTransport.js
++++ b/dist/events/socketTransport.js
+@@ -1,5 +1,5 @@
+ import { io } from "socket.io-client";
+-import { AcpHttpClient } from "./acpHttpClient";
++import { AcpHttpClient } from "./acpHttpClient.js";
+ export class SocketTransport extends AcpHttpClient {
+     constructor(opts = {}) {
+         super(opts);
+diff --git a/dist/events/sseTransport.js b/dist/events/sseTransport.js
+index cfb8026f11643db1f09bdab53241d9a60e4dbe2a..a5aa8a2cc2af0dd5e486f20638c2e4a621c58c02 100644
+--- a/dist/events/sseTransport.js
++++ b/dist/events/sseTransport.js
+@@ -1,5 +1,5 @@
+ import { EventSource } from "eventsource";
+-import { AcpHttpClient } from "./acpHttpClient";
++import { AcpHttpClient } from "./acpHttpClient.js";
+ export class SseTransport extends AcpHttpClient {
+     constructor(opts = {}) {
+         super(opts);
+diff --git a/dist/index.js b/dist/index.js
+index 15281a74d8b417c4e2c20a8e59f3ec33623fa017..bd5c090e6af45a0c3c7a4a6bb969849c24501e90 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1,28 +1,28 @@
+ // Primary API
+-export * from "./acpAgent";
+-export * from "./acpJob";
+-export * from "./jobSession";
++export * from "./acpAgent.js";
++export * from "./acpJob.js";
++export * from "./jobSession.js";
+ // Client layer
+-export * from "./clientFactory";
+-export * from "./clients/baseAcpClient";
+-export * from "./clients/evmAcpClient";
+-export * from "./clients/solanaAcpClient";
++export * from "./clientFactory.js";
++export * from "./clients/baseAcpClient.js";
++export * from "./clients/evmAcpClient.js";
++export * from "./clients/solanaAcpClient.js";
+ // Core types
+-export * from "./core/acpAbi";
+-export * from "./core/chains";
+-export * from "./core/constants";
+-export * from "./core/assetToken";
++export * from "./core/acpAbi.js";
++export * from "./core/chains.js";
++export * from "./core/constants.js";
++export * from "./core/assetToken.js";
+ // Provider interfaces & adapters
+-export * from "./providers/types";
+-export * from "./providers/evm/viemProviderAdapter";
+-export * from "./providers/evm/alchemyEvmProviderAdapter";
+-export * from "./providers/evm/privyAlchemyEvmProviderAdapter";
+-export * from "./providers/solana/solanaProviderAdapter";
++export * from "./providers/types.js";
++export * from "./providers/evm/viemProviderAdapter.js";
++export * from "./providers/evm/alchemyEvmProviderAdapter.js";
++export * from "./providers/evm/privyAlchemyEvmProviderAdapter.js";
++export * from "./providers/solana/solanaProviderAdapter.js";
+ // Transport & API
+-export { AcpHttpClient } from "./events/acpHttpClient";
+-export { AcpApiClient } from "./events/acpApiClient";
+-export { SocketTransport } from "./events/socketTransport";
+-export { SseTransport } from "./events/sseTransport";
++export { AcpHttpClient } from "./events/acpHttpClient.js";
++export { AcpApiClient } from "./events/acpApiClient.js";
++export { SocketTransport } from "./events/socketTransport.js";
++export { SseTransport } from "./events/sseTransport.js";
+ // Utilities
+-export * from "./utils/events";
++export * from "./utils/events.js";
+ //# sourceMappingURL=index.js.map
+\ No newline at end of file
+diff --git a/dist/jobSession.js b/dist/jobSession.js
+index 251090e7cbc0b47f5392a074c8d51a01f22c8cbe..2fde0f0227ab140ce1b3d9cca7e04b799cecb054 100644
+--- a/dist/jobSession.js
++++ b/dist/jobSession.js
+@@ -1,5 +1,5 @@
+-import { AcpJob } from "./acpJob";
+-import { AssetToken } from "./core/assetToken";
++import { AcpJob } from "./acpJob.js";
++import { AssetToken } from "./core/assetToken.js";
+ const EVENT_TO_STATUS = {
+     "job.created": "open",
+     "budget.set": "budget_set",
+diff --git a/dist/providers/evm/alchemyEvmProviderAdapter.js b/dist/providers/evm/alchemyEvmProviderAdapter.js
+index ffb9996fa72d8246d45643dd5b5e7ec3558dee9d..14e84064dc19a0fbbd2004da39b93be4bac004be 100644
+--- a/dist/providers/evm/alchemyEvmProviderAdapter.js
++++ b/dist/providers/evm/alchemyEvmProviderAdapter.js
+@@ -1,7 +1,7 @@
+ import { LocalAccountSigner } from "@aa-sdk/core";
+ import { alchemy, defineAlchemyChain } from "@account-kit/infra";
+ import { createModularAccountV2Client, } from "@account-kit/smart-contracts";
+-import { createEvmNetworkContext, EVM_MAINNET_CHAINS } from "../../core/chains";
++import { createEvmNetworkContext, EVM_MAINNET_CHAINS } from "../../core/chains.js";
+ export class AlchemyEvmProviderAdapter {
+     constructor(address, clients) {
+         this.providerName = "Alchemy";
+diff --git a/dist/providers/evm/privyAlchemyEvmProviderAdapter.js b/dist/providers/evm/privyAlchemyEvmProviderAdapter.js
+index 28ce00cbd87caa51f5afb6dd50b47942d3a37e21..d231f7b716ae5e37695de3a693dd06edc7559f68 100644
+--- a/dist/providers/evm/privyAlchemyEvmProviderAdapter.js
++++ b/dist/providers/evm/privyAlchemyEvmProviderAdapter.js
+@@ -1,10 +1,10 @@
+ import { createPublicClient, http, toHex, } from "viem";
+ import { getTransactionReceipt, readContract, getLogs, getBlockNumber, } from "viem/actions";
+-import { createEvmNetworkContext, EVM_MAINNET_CHAINS } from "../../core/chains";
++import { createEvmNetworkContext, EVM_MAINNET_CHAINS } from "../../core/chains.js";
+ import { formatRequestForAuthorizationSignature, generateAuthorizationSignature, } from "@privy-io/node";
+ import { createSmartWalletClient, alchemyWalletTransport, } from "@alchemy/wallet-apis";
+-import { ACP_SERVER_URL, ALCHEMY_POLICY_ID, PRIVY_APP_ID, } from "../../core/constants";
+-import { ProviderAuthClient } from "../providerAuthClient";
++import { ACP_SERVER_URL, ALCHEMY_POLICY_ID, PRIVY_APP_ID, } from "../../core/constants.js";
++import { ProviderAuthClient } from "../providerAuthClient.js";
+ function encodeSignableMessage(message) {
+     if (typeof message === "string") {
+         if (message.startsWith("0x")) {
+diff --git a/dist/providers/evm/viemProviderAdapter.js b/dist/providers/evm/viemProviderAdapter.js
+index 16a070e814087930f1d0be69a246677e4b56a156..d5c649c6199b04602ff3e7494c0d9871e9a09d0c 100644
+--- a/dist/providers/evm/viemProviderAdapter.js
++++ b/dist/providers/evm/viemProviderAdapter.js
+@@ -1,4 +1,4 @@
+-import { createEvmNetworkContext } from "../../core/chains";
++import { createEvmNetworkContext } from "../../core/chains.js";
+ export class ViemProviderAdapter {
+     constructor(providerName) {
+         this.providerName = providerName;
+diff --git a/dist/providers/providerAuthClient.js b/dist/providers/providerAuthClient.js
+index c97ee2b5b41181e67fb0287ac5cb9fd577f3a41a..e72b33a1f462b568dbe662e6dd71779b88f14a0a 100644
+--- a/dist/providers/providerAuthClient.js
++++ b/dist/providers/providerAuthClient.js
+@@ -1,4 +1,4 @@
+-import { ACP_SERVER_URL } from "../core/constants";
++import { ACP_SERVER_URL } from "../core/constants.js";
+ export class ProviderAuthClient {
+     constructor(opts) {
+         this.token = "";
+diff --git a/dist/providers/solana/solanaProviderAdapter.js b/dist/providers/solana/solanaProviderAdapter.js
+index 244b64abcc058cd47b6c0496ba039ceebfd7b882..2d00b9bde8592db6422f5f7d8a7615b7e363b816 100644
+--- a/dist/providers/solana/solanaProviderAdapter.js
++++ b/dist/providers/solana/solanaProviderAdapter.js
+@@ -1,4 +1,4 @@
+-import { createSolanaNetworkContext } from "../../core/chains";
++import { createSolanaNetworkContext } from "../../core/chains.js";
+ export class SolanaProviderAdapter {
+     constructor(providerName) {
+         this.providerName = providerName;
+diff --git a/dist/utils/events.js b/dist/utils/events.js
+index 694da564429d5bee39e675dbd11eca0c0cc33ca3..dda4243e9ff2353b895756b430e8563cf52bd738 100644
+--- a/dist/utils/events.js
++++ b/dist/utils/events.js
+@@ -1,5 +1,5 @@
+ import { decodeEventLog } from "viem";
+-import { ACP_ABI } from "../core/acpAbi";
++import { ACP_ABI } from "../core/acpAbi.js";
+ function addressEq(a, b) {
+     return a.toLowerCase() === b.toLowerCase();
+ }
