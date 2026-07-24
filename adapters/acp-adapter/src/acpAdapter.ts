@@ -73,6 +73,10 @@ export class AcpAdapter implements ChannelIngress {
   private readonly recentJobs = new Map<string, number>();
   // In-flight delivery guard — per `${chainId}:${jobId}` (never TTL-swept; released in the funded finally).
   private readonly inFlight = new Set<string>();
+  // In-flight ACCEPT guard (FDQ-70b) — per `${chainId}:${jobId}` (same key shape as inFlight); one
+  // accept attempt at a time, released after the attempt. Closes the job.created / requirement.message
+  // double-dispatch race (see handleEntry).
+  private readonly acceptInFlight = new Set<string>();
   // Poll log-once.
   private readonly pollSeen = new Map<string, number>();
 
@@ -167,6 +171,20 @@ export class AcpAdapter implements ChannelIngress {
     return true;
   }
 
+  /** FDQ-70b accept guard — a synchronous check-and-set (no await between `.has` and `.add`) so a
+   *  concurrent `job.created` + `requirement.message` for one job yields exactly ONE accept attempt.
+   *  Keyed `${chainId}:${jobId}` to match the funded `inFlight` claim; released by the caller once
+   *  the attempt settles. */
+  private claimAccept(chainId: number, jobId: string): boolean {
+    const key = `${chainId}:${jobId}`;
+    if (this.acceptInFlight.has(key)) return false;
+    this.acceptInFlight.add(key);
+    return true;
+  }
+  private releaseAccept(chainId: number, jobId: string): void {
+    this.acceptInFlight.delete(`${chainId}:${jobId}`);
+  }
+
   async handleEntry(session: AcpJobSession, entry: AcpRoomEntry): Promise<void> {
     // Process system lifecycle events AND the initial requirement message (arrives as a separate
     // room entry, contentType='requirement', after job.created).
@@ -187,7 +205,19 @@ export class AcpAdapter implements ChannelIngress {
       case 'requirement.message': {
         const decidedKey = `${jobId}:__decided`;
         if (this.recentJobs.has(decidedKey)) break;
-        await this.handleJobCreated(session, entry, log);
+        // FDQ-70b: `job.created` and `requirement.message` are DISTINCT eventTypes, so claimDispatch's
+        // per-event key admits BOTH into the accept path — and markDecided only fires AFTER setBudget's
+        // await, so a concurrent pair (SSE double-fire, or hydration re-firing pre-existing jobs at
+        // startup) could each pass the __decided check and each call setBudget. Claim a single accept
+        // slot per jobId SYNCHRONOUSLY here, before handleJobCreated's first await → exactly one
+        // setBudget. Released in the finally so a transient accept FAILURE can still be retried by a
+        // later event; the __decided marker makes a SUCCESSFUL accept permanent.
+        if (!this.claimAccept(session.chainId, jobId)) break;
+        try {
+          await this.handleJobCreated(session, entry, log);
+        } finally {
+          this.releaseAccept(session.chainId, jobId);
+        }
         break;
       }
       case 'job.funded':
@@ -281,6 +311,10 @@ export class AcpAdapter implements ChannelIngress {
     // Accept: propose the registered sticker price (no dynamic price resolver in the adapter).
     const price = this.offeringPrices.get(offeringId) ?? 0;
     void isPlainText;
+    // FDQ-70b INVARIANT: markDecided() must remain synchronous-adjacent to this await —
+    // do NOT insert an await or throwing statement between setBudget resolving and
+    // markDecided(). The accept claim releases in handleEntry's finally; if __decided
+    // were unset at that moment, a later event could re-accept an already-accepted job.
     try {
       await session.setBudget(this.sdk.assetUsdc(price, session.chainId));
       log.info('Job accepted via setBudget', { offeringId, price });

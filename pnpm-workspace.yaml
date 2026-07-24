@@ -32,3 +32,6 @@ allowBuilds:
   bufferutil: false
   utf-8-validate: false
   es5-ext: false
+
+patchedDependencies:
+  '@virtuals-protocol/acp-node-v2@0.0.4': patches/@virtuals-protocol__acp-node-v2@0.0.4.patch
