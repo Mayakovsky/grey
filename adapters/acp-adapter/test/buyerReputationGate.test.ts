@@ -102,6 +102,9 @@ class MemTracked implements TrackedJobsRepo {
     j.status = terminal;
     return { buyerAddress: j.buyerAddress };
   }
+  async listExpiredSubmitted(): Promise<Array<{ chainId: number; jobId: string; buyerAddress: string }>> {
+    return []; // not exercised by the gate-logic tests (see reputationReconciler.test.ts)
+  }
 }
 
 function makeGate(store: MemBuyerStore, tracked: MemTracked, gating: BuyerGatingConfig, clock?: () => Date): BuyerReputationGateImpl {
