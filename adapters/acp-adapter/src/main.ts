@@ -14,6 +14,7 @@ import { createLogger } from './logger.js';
 import { PgBuyerRecordStore, PgTrackedJobsRepo, stripSslParams } from './reputation/reputationDb.js';
 import { BuyerReputationGateImpl } from './reputation/buyerReputationGate.js';
 import { makeCrossProviderFetch } from './reputation/crossProvider.js';
+import { ReputationReconciler } from './reputation/reputationReconciler.js';
 
 async function main(): Promise<void> {
   const log = createLogger({ component: 'acp-adapter' });
@@ -33,12 +34,20 @@ async function main(): Promise<void> {
     ssl: { rejectUnauthorized: false },
     max: 3,
   });
+  const trackedRepo = new PgTrackedJobsRepo(gatePool);
   const reputationGate = new BuyerReputationGateImpl({
     buyerStore: new PgBuyerRecordStore(gatePool),
-    trackedRepo: new PgTrackedJobsRepo(gatePool),
+    trackedRepo,
     gating: config.buyerGating,
     logger: log.child({ subsystem: 'reputation' }),
     crossProviderFetch: makeCrossProviderFetch(config.baseRpcUrl),
+  });
+  // FDQ-73 — reconciliation sweep for stranded submitted jobs (SDK never delivers job.expired/
+  // rejected). Shares the gate's trackedRepo + idempotent onJobTerminal; runs on the poll cadence.
+  const reputationReconciler = new ReputationReconciler({
+    trackedRepo,
+    onTerminal: (jobId, chainId, terminal) => reputationGate.onJobTerminal(jobId, chainId, terminal),
+    logger: log.child({ subsystem: 'reconcile' }),
   });
 
   const adapter = new AcpAdapter({
@@ -48,6 +57,7 @@ async function main(): Promise<void> {
     handlers: offeringHandlers,
     logger: log,
     reputationGate,
+    reputationReconciler,
   });
 
   // Register the 7 paid offerings from the single price source (invariant #20), BEFORE start() —

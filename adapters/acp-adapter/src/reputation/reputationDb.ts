@@ -68,6 +68,13 @@ export interface BuyerRecordStore {
   writeCrossProvider(walletLowercased: string, w: CrossProviderWrite): Promise<void>;
 }
 
+/** A stranded-submitted row surfaced by the FDQ-73 reconciliation sweep. */
+export interface ExpiredSubmittedRow {
+  chainId: number;
+  jobId: string;
+  buyerAddress: string;
+}
+
 /** Tracked-job persistence surface (composite key chain_id+job_id at every site — multi-chain-safe). */
 export interface TrackedJobsRepo {
   trackSubmitted(input: TrackSubmittedInput): Promise<void>;
@@ -79,6 +86,9 @@ export interface TrackedJobsRepo {
     jobId: string,
     terminal: TrackedTerminalStatus,
   ): Promise<{ buyerAddress: string } | null>;
+  /** FDQ-73 sweep source: still-`submitted` rows whose SLA `expires_at` has passed (bounded LIMIT).
+   *  SELECT only — the reconciler discriminates the TRUE terminal via a fresh on-chain status read. */
+  listExpiredSubmitted(nowIso: string, limit: number): Promise<ExpiredSubmittedRow[]>;
 }
 
 // ── row mapping ───────────────────────────────
@@ -135,6 +145,9 @@ const RESOLVE_TRACKED = `UPDATE grey_two.tracked_jobs SET status = $3, resolved_
   WHERE chain_id = $1 AND job_id = $2 AND status = 'submitted'
   RETURNING buyer_address`;
 
+const LIST_EXPIRED_SUBMITTED = `SELECT chain_id, job_id, buyer_address FROM grey_two.tracked_jobs
+  WHERE status = 'submitted' AND expires_at < $1 ORDER BY expires_at ASC LIMIT $2`;
+
 /** Production buyer-record store — raw parameterized SQL over a pg.Pool. */
 export class PgBuyerRecordStore implements BuyerRecordStore {
   constructor(private readonly pool: PoolLike) {}
@@ -174,6 +187,14 @@ export class PgTrackedJobsRepo implements TrackedJobsRepo {
     const { rows } = await this.pool.query(RESOLVE_TRACKED, [chainId, jobId, terminal]);
     const r = rows[0];
     return r ? { buyerAddress: String(r['buyer_address'] ?? '') } : null;
+  }
+  async listExpiredSubmitted(nowIso: string, limit: number): Promise<ExpiredSubmittedRow[]> {
+    const { rows } = await this.pool.query(LIST_EXPIRED_SUBMITTED, [nowIso, limit]);
+    return rows.map((r) => ({
+      chainId: toInt(r['chain_id']),
+      jobId: String(r['job_id'] ?? ''),
+      buyerAddress: String(r['buyer_address'] ?? ''),
+    }));
   }
 }
 
