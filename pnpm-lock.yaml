@@ -62,10 +62,16 @@ importers:
       '@virtuals-protocol/acp-node-v2':
         specifier: ^0.0.4
         version: 0.0.4(patch_hash=26623b3f61d2912475c80828c9a865f25808a4f6383aa30d2a4e3ee18fb7cb56)(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.4.3)
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
       viem:
         specifier: ^2.53.1
         version: 2.53.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.4.3)
     devDependencies:
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
       tsx:
         specifier: ^4.22.4
         version: 4.22.4

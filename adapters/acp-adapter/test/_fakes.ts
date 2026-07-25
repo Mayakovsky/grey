@@ -185,6 +185,7 @@ export function testConfig(over: Record<string, unknown> = {}): import('../src/c
     databaseUrl: 'postgres://x',
     observeOnly: false,
     pollIntervalMs: 30_000,
+    buyerGating: { blockEnabled: false, timeout1hSec: 3600, timeout12hSec: 43200, crossProviderCacheTtlSec: 3600 },
     ...over,
   };
 }

@@ -4,12 +4,16 @@
 // and the unit exits non-zero (replaces plugin-acp's 2s/60s PM2-restart retry loop).
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import pg from 'pg';
 import { offeringHandlers, createHandlerDeps } from '@grey/core';
 import { PAID_SLUGS, priceUsdFor } from '@grey/x402-middleware';
 import { loadConfig } from './config.js';
 import { AcpAdapter } from './acpAdapter.js';
 import { createRealSdkBundle } from './sdk.js';
 import { createLogger } from './logger.js';
+import { PgBuyerRecordStore, PgTrackedJobsRepo, stripSslParams } from './reputation/reputationDb.js';
+import { BuyerReputationGateImpl } from './reputation/buyerReputationGate.js';
+import { makeCrossProviderFetch } from './reputation/crossProvider.js';
 
 async function main(): Promise<void> {
   const log = createLogger({ component: 'acp-adapter' });
@@ -20,12 +24,30 @@ async function main(): Promise<void> {
   const deps = createHandlerDeps({ databaseUrl: config.databaseUrl });
   const sdk = await createRealSdkBundle();
 
+  // M6 C′ — buyer-reputation gate, wired to the Phase B grey_two tables via a dedicated pg pool
+  // (grey_pipeline_rw; SELECT/INSERT/UPDATE only — FDQ-65). Shadow-mode by default
+  // (BUYER_GATING_BLOCK_ENABLED=false → records, never blocks; fail-open on any DB error). A small
+  // pool (max 3) keeps the memory-tight VPS light; the cache-read handlers keep their own pool.
+  const gatePool = new pg.Pool({
+    connectionString: stripSslParams(config.databaseUrl),
+    ssl: { rejectUnauthorized: false },
+    max: 3,
+  });
+  const reputationGate = new BuyerReputationGateImpl({
+    buyerStore: new PgBuyerRecordStore(gatePool),
+    trackedRepo: new PgTrackedJobsRepo(gatePool),
+    gating: config.buyerGating,
+    logger: log.child({ subsystem: 'reputation' }),
+    crossProviderFetch: makeCrossProviderFetch(config.baseRpcUrl),
+  });
+
   const adapter = new AcpAdapter({
     config,
     sdk,
     deps,
     handlers: offeringHandlers,
     logger: log,
+    reputationGate,
   });
 
   // Register the 7 paid offerings from the single price source (invariant #20), BEFORE start() —
@@ -38,6 +60,8 @@ async function main(): Promise<void> {
     observeOnly: config.observeOnly,
     receivingAddress: config.agentWalletAddress,
     offerings: PAID_SLUGS.length,
+    reputationGate: config.buyerGating.blockEnabled ? 'enforcing' : 'shadow',
+    crossProvider: config.baseRpcUrl ? 'enabled' : 'disabled',
   });
 
   await adapter.start();
@@ -57,7 +81,12 @@ async function main(): Promise<void> {
             error: err instanceof Error ? err.message : String(err),
           }),
         )
-        .finally(() => resolve());
+        .finally(() => {
+          void gatePool.end().catch(() => {
+            /* best-effort pool close on shutdown */
+          });
+          resolve();
+        });
     };
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
