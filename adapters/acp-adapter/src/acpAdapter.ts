@@ -28,6 +28,7 @@ import type { AcpAdapterConfig } from './config.js';
 import { GREY_DID } from './config.js';
 import { parseRequirement } from './parseRequirement.js';
 import { createLogger, type AdapterLogger } from './logger.js';
+import type { ReputationReconciler } from './reputation/reputationReconciler.js';
 
 /** Dedup TTL — 5 minutes. */
 const DEDUP_TTL_MS = 5 * 60 * 1000;
@@ -51,6 +52,8 @@ export interface AcpAdapterOptions {
   logger?: AdapterLogger;
   /** B6 seam — null in Phase C. */
   reputationGate?: BuyerReputationGate | null;
+  /** FDQ-73 seam — null until C′-reconciliation. Swept on the poll cadence; reads status, never signs. */
+  reputationReconciler?: ReputationReconciler | null;
 }
 
 export class AcpAdapter implements ChannelIngress {
@@ -60,6 +63,7 @@ export class AcpAdapter implements ChannelIngress {
   private readonly handlers: Record<string, OfferingHandler>;
   private readonly log: AdapterLogger;
   private reputationGate: BuyerReputationGate | null;
+  private readonly reputationReconciler: ReputationReconciler | null;
 
   private agent: AcpAgentLike | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
@@ -87,6 +91,7 @@ export class AcpAdapter implements ChannelIngress {
     this.handlers = opts.handlers;
     this.log = opts.logger ?? createLogger({ component: 'acp-adapter' });
     this.reputationGate = opts.reputationGate ?? null;
+    this.reputationReconciler = opts.reputationReconciler ?? null;
   }
 
   // ── ChannelIngress ─────────────────────────
@@ -149,7 +154,29 @@ export class AcpAdapter implements ChannelIngress {
     // stop() clears it for a clean exit.
     this.pollTimer = setInterval(() => {
       void this.runDeliveryPoll();
+      void this.runReconcileSweep(); // FDQ-73 — independent of the funded poll; fail-soft
     }, this.config.pollIntervalMs);
+  }
+
+  /** FDQ-73 reconciliation tick — resolve stranded `submitted` jobs the SDK never event-fired as
+   *  terminal (job.expired/job.rejected). Reads job status + records reputation only; NEVER signs
+   *  (safe under OBSERVE_ONLY). Fully fail-soft. */
+  private async runReconcileSweep(): Promise<void> {
+    if (!this.agent || !this.reputationReconciler) return;
+    try {
+      await this.reputationReconciler.sweep((chainId, jobId) => this.fetchJobStatus(chainId, jobId));
+    } catch (err) {
+      this.log.warn('[reconcile] sweep failed', { error: errMsg(err) });
+    }
+  }
+
+  /** Authoritative job status (REST string) via the SDK's getJob — same convention as the funded
+   *  filter (`jobStatus ?? status`). Returns null when the agent/job is unavailable. */
+  private async fetchJobStatus(chainId: number, jobId: string): Promise<string | null> {
+    if (!this.agent) return null;
+    const full = await this.agent.getApi().getJob(chainId, jobId);
+    if (!full) return null;
+    return String((full as { jobStatus?: unknown; status?: unknown }).jobStatus ?? full.status ?? '');
   }
 
   /** Shared dispatch-claim primitive — the first synchronous check-and-set any path performs for a
