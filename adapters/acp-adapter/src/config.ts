@@ -21,6 +21,16 @@ export interface AcpAdapterConfig {
   observeOnly: boolean;
   /** Delivery poll backstop cadence (ms). */
   pollIntervalMs: number;
+  /** M6 C′ buyer-reputation gate config (shadow-mode by default; `blockEnabled` flips to enforce). */
+  buyerGating: {
+    blockEnabled: boolean;
+    timeout1hSec: number;
+    timeout12hSec: number;
+    crossProviderCacheTtlSec: number;
+  };
+  /** Optional Base RPC URL for the gate's cross-provider on-chain history (B.7). Absent → cross-
+   *  provider tallies stay 0 (never gated on). Not `required()` — the gate degrades gracefully. */
+  baseRpcUrl?: string;
 }
 
 type Env = Record<string, string | undefined>;
@@ -39,6 +49,16 @@ export function loadConfig(env: Env = process.env): AcpAdapterConfig {
   if (!Number.isInteger(pollIntervalMs) || pollIntervalMs <= 0) {
     throw new Error(`acp-adapter: ACP_ADAPTER_POLL_INTERVAL_MS must be a positive integer, got "${pollRaw}"`);
   }
+  const posIntEnv = (key: string, def: number): number => {
+    const raw = env[key]?.trim();
+    if (!raw) return def;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n <= 0) {
+      throw new Error(`acp-adapter: ${key} must be a positive integer, got "${raw}"`);
+    }
+    return n;
+  };
+  const baseRpcUrl = env.BASE_RPC_URL?.trim();
   return {
     agentWalletAddress: required(env, 'ACP_AGENT_WALLET_ADDRESS'),
     privyWalletId: required(env, 'ACP_PRIVY_WALLET_ID'),
@@ -46,5 +66,13 @@ export function loadConfig(env: Env = process.env): AcpAdapterConfig {
     databaseUrl: required(env, 'GREY_DATABASE_URL'),
     observeOnly: (env.ACP_ADAPTER_OBSERVE_ONLY?.trim() ?? '') === 'true',
     pollIntervalMs,
+    buyerGating: {
+      // Shadow-mode default (records, never blocks). Flip-to-enforce = set this env to "true".
+      blockEnabled: (env.BUYER_GATING_BLOCK_ENABLED?.trim().toLowerCase() ?? '') === 'true',
+      timeout1hSec: posIntEnv('BUYER_GATING_TIMEOUT_1H_SEC', 3600),
+      timeout12hSec: posIntEnv('BUYER_GATING_TIMEOUT_12H_SEC', 43200),
+      crossProviderCacheTtlSec: posIntEnv('CROSS_PROVIDER_CACHE_TTL_SEC', 3600),
+    },
+    ...(baseRpcUrl ? { baseRpcUrl } : {}),
   };
 }
