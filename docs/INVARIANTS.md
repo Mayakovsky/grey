@@ -173,6 +173,56 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Rationale:** an unbounded (`amountOutMinimum: 0`) swap is the classic sandwich-attack surface; scattered amount literals are how a cap or slippage constant silently drifts. One block, grep-countable, keeps the sizing math, the on-chain bound, and the sanity band mutually consistent. **`DEFAULT_GAS_RESERVE_WEI` joined the block at M5 Phase F FDQ-58 (native-ETH recovery reserve) — count 6 → 7.**
 - **Established by:** M5 Phase F (count 7 at FDQ-58).
 
+## 23. `channel-ingress-additive`
+- **Statement:** every earning channel is a standalone process implementing the slim `ChannelIngress` interface (`start`/`stop`/`registerOffering`/`identity`) declared once in grey-core; grey-core is channel-agnostic below the seam (confirm/clearance/delivery are adapter-internal); adding a channel is purely additive (a new `adapters/<name>`, grey-core untouched). x402 (`x402Adapter`) and ACP (`acp-adapter`) are conformances #1 and #2 over the SAME shared `offeringHandlers`.
+- **Verification:** `git grep -q "interface ChannelIngress" -- packages/grey-core/src/channels/ingress.ts && git grep -q "implements ChannelIngress" -- packages/grey-core/src/channels/x402Adapter.ts && git grep -q "implements ChannelIngress" -- adapters/acp-adapter/src/acpAdapter.ts && git grep -q "offeringHandlers" -- adapters/acp-adapter/src/main.ts`
+- **Expected:** exit 0 (one interface; both channels conform; the ACP adapter reuses the shared handlers, never a private copy).
+- **Rationale:** the value (verification pipeline) lives once in grey-core; channels are thin ingress shells. This is what made M6 a bounded add (ACP) rather than a fork, and what makes the next channel additive.
+- **Established by:** M6 Phase A (interface + x402 conformance) / Phase C (ACP adapter).
+
+## 24. `one-live-process-per-signer`
+- **Statement:** at most ONE live process may hold a given signer at a time. The ACP signer `0xa966…` is held solely by `grey-acp-adapter` (its own systemd unit); the retired ElizaOS pm2 `grey` agent used the SAME signer and MUST NEVER co-run with the adapter. Proven load-bearing at FDQ-72 (a pm2 `cron_restart` silently re-onlined the stopped agent → a ~15h co-run on one signer until caught). Enforced structurally post-Phase-E: pm2 `grey` is deleted from the live list AND the saved dump; the systemd unit documents the rule.
+- **Verification:** `git grep -qi "NEVER co-run" -- infra/systemd/grey-acp-adapter.service` (the unit encodes the rule); operationally, exactly one process serves `0xa966…` and the abort path (re-register `grey`) requires stopping the adapter first.
+- **Expected:** the unit's never-co-run comment present; no second process on the signer.
+- **Rationale:** two processes on one signer double-act on-chain (double setBudget/submit) — the M6 abort path (adapter ⇄ pm2 grey) is safe ONLY because the two never run together.
+- **Established by:** M6 Phase D (reversible cutover) / hardened at FDQ-72.
+
+## 25. `reversible-cutover-wallet-reuse`
+- **Statement:** the ACP cutover REUSES the pre-existing Privy wallet `0xa966…` (and the on-chain ERC-8004 DID `did:erc8004:8453:58618`); identity is NEVER re-pointed or re-registered. The adapter's `identity()` returns that same `receivingAddress` + DID, so the Virtuals registration, Agent ID, and accrued history survive the cutover — and the cutover stays reversible (stop adapter ⇄ start the old agent, same wallet).
+- **Verification:** `git grep -q "did:erc8004:8453:58618" -- adapters/acp-adapter/src/config.ts && git grep -q "receivingAddress: this.config.agentWalletAddress" -- adapters/acp-adapter/src/acpAdapter.ts` (the DID is a pinned literal; the receiver is the configured reused wallet).
+- **Expected:** exit 0 (DID literal present; `identity()` surfaces the reused wallet).
+- **Rationale:** re-pointing identity would forfeit the accrued Virtuals reputation and break the abort path; wallet reuse (Q6) is what makes the cutover reversible.
+- **Established by:** M6 (Q6 ruling) / Phase D.
+
+## 26. `grey_two-reputation-grants` (extends #the grey_two posture)
+- **Statement:** the reputation tables `grey_two.{buyer_records,tracked_jobs}` are the FIRST grey_two tables that KEEP `UPDATE` (buyer status ladder + tracked-job resolution) but REVOKE `DELETE`/`TRUNCATE` from `grey_pipeline_rw` (FDQ-65 — the opposite of the append-only audit tables). Every runtime statement against them is `SELECT`/`INSERT`/`INSERT…ON CONFLICT DO UPDATE` — NEVER a destructive verb; status transitions are upserts, never delete-reinsert. `wpv_*` (the ElizaOS autognostic schema) remains untouchable.
+- **Verification (grants):** the migration REVOKEs the destructive verbs — `git grep -qE "REVOKE DELETE, TRUNCATE\s+ON grey_two.buyer_records, grey_two.tracked_jobs" -- supabase/migrations/20260719140000_create_grey_two_reputation.sql`
+- **Verification (no destructive SQL in the runtime):** `! git grep -qiE "\\b(DELETE|TRUNCATE)\\b" -- adapters/acp-adapter/src/reputation/reputationDb.ts` and no `wpv_` reference anywhere in the adapter: `! git grep -q "wpv_" -- adapters/acp-adapter/src/`
+- **Expected:** grant grep exits 0; both anti-pattern greps exit 0 (no DELETE/TRUNCATE authored; no `wpv_` touch).
+- **Rationale:** a stray DELETE errors at the grant (defense in depth), but authoring none keeps the reputation history append-and-transition-only and the ElizaOS schema off-limits.
+- **Established by:** M6 Phase B (migration + FDQ-65) / Phase C′ (data layer).
+
+## 27. `fail-open-earning-path`
+- **Statement:** the reputation subsystem NEVER blocks or throws into the earning path. `evaluateAcceptance` fails OPEN on any DB error (returns `accept:true`) AND in shadow mode always accepts; the reconciliation sweep is fail-soft (tick-level + per-row) and NEVER signs; every gate/reconciler call site in the adapter is guarded (`if (this.reputationGate)` / wrapped) so a null or throwing collaborator degrades to exact "no gating" behavior.
+- **Verification:** `git grep -q "accept: true" -- adapters/acp-adapter/src/reputation/buyerReputationGate.ts && git grep -q "if (this.reputationGate)" -- adapters/acp-adapter/src/acpAdapter.ts && ! git grep -qE "\\.(setBudget|submit|reject)\\(" -- adapters/acp-adapter/src/reputation/`
+- **Expected:** exit 0 (fail-open return present; call sites guarded; the reputation subsystem issues zero on-chain signing calls).
+- **Rationale:** reputation is an optional-by-construction overlay; a gating bug or DB blip must never cost a paid job. Shadow-then-enforce is safe because the block is a single-flag change over an already-fail-open path.
+- **Established by:** M6 Phase C′ (gate) / FDQ-73 (reconciler).
+
+## 28. `plain-node-patched-sdk`
+- **Statement:** the adapter runs on PLAIN Node in production — no `tsx` runtime loader. The `@virtuals-protocol/acp-node-v2@0.0.4` SDK's bun-authored extensionless ESM is fixed at the root by a committed `pnpm patch` (adds `.js` to its relative imports), reapplied deterministically on every install. The heavy SDK tree stays out of the tsc graph via a variable-specifier dynamic import (`sdk.ts`), and the memory-tight VPS uses a filtered, swap-armed install that declines native builds (FDQ-69b).
+- **Verification:** `git grep -q "ExecStart=/usr/bin/node adapters/acp-adapter/dist/main.js" -- infra/systemd/grey-acp-adapter.service && ! git grep -q "import tsx" -- infra/systemd/grey-acp-adapter.service && test -f patches/@virtuals-protocol__acp-node-v2@0.0.4.patch && git grep -q "const spec: string = ACP_SDK_SPECIFIER" -- adapters/acp-adapter/src/sdk.ts && git grep -qE "bufferutil: false" -- pnpm-workspace.yaml`
+- **Expected:** exit 0 (plain-node unit, no tsx, patch present, variable-specifier import, native-build decline held).
+- **Rationale:** a production runtime loader is heavier and masks the defect; the patch is root-cause, owned-in-repo, and fails LOUDLY on a version bump (`ERR_PNPM_UNUSED_PATCH`).
+- **Established by:** M6 FDQ-70 (root-cause patch) / FDQ-69b (native-build decline).
+
+## 29. `acp-terminal-event-gap-needs-reconciler`
+- **Statement:** the ACP SDK NEVER delivers `job.expired` / `job.rejected` to the adapter's entry handler — `acpAgent.fireHandler` (the sole path, used by both live dispatch and startup hydration) hard-returns on `!shouldRespond`, and `jobSession.shouldRespond`'s `RESPONDERS` map omits `job.expired` and sets `job.rejected:[]`. There is no client-side expiry timer and the delivery poll is FUNDED-only. Therefore expiry-stiff detection REQUIRES the reconciliation sweep, which reads the authoritative on-chain `getJob` status (a `view`; `EXPIRED=5`) for stranded `submitted` rows past `expires_at` and resolves via the idempotent `onJobTerminal`. (FDQ-74: `expired` surfaces autonomously ~one keeper-window after `expiredAt`, no settlement tx.)
+- **Verification:** `git grep -q "listExpiredSubmitted" -- adapters/acp-adapter/src/reputation/reputationDb.ts && git grep -q "reputationReconciler" -- adapters/acp-adapter/src/acpAdapter.ts && git grep -q "resolveIfSubmitted" -- adapters/acp-adapter/src/reputation/reputationReconciler.ts`
+- **Expected:** exit 0 (the sweep source + wiring + idempotent resolve all present).
+- **Rationale:** without the sweep, a funded-delivered-but-uncompleted job strands as `submitted` forever and the buyer-reputation ladder can never advance — a hard prerequisite for flip-to-enforce, discovered via dist inspection (FDQ-73) and proven live (#70352).
+- **Established by:** M6 FDQ-73 (reconciliation) / FDQ-74 (expiry-semantics determination).
+
 ---
 
-*Invariants 11–13 established at M3 close (grey-core); #11 replaced + #14/#15 appended at M3.5 close (live-compute fill). #16/#17/#18 appended at M4 close (ERC-8004 DID mint + sweeper). #19/#20 appended at M5 Phase C close (x402 middleware). #21/#22 appended at M5 Phase F close (relayer refuel loop). Future movements append at their close, not mid-flight. Invariant #3 was retargeted src → dist at M5 Phase C (FDQ-37) to reflect the Phase B real-build flip — Phase B's close should have done this but ran only a partial invariant check (#13/#16–#18).*
+*Invariants 11–13 established at M3 close (grey-core); #11 replaced + #14/#15 appended at M3.5 close (live-compute fill). #16/#17/#18 appended at M4 close (ERC-8004 DID mint + sweeper). #19/#20 appended at M5 Phase C close (x402 middleware). #21/#22 appended at M5 Phase F close (relayer refuel loop). #23–#29 appended at M6 close (ACP `ChannelIngress` adapter cutover + ElizaOS decommission). Future movements append at their close, not mid-flight. Invariant #3 was retargeted src → dist at M5 Phase C (FDQ-37) to reflect the Phase B real-build flip — Phase B's close should have done this but ran only a partial invariant check (#13/#16–#18).*
