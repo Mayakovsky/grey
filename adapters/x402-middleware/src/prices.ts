@@ -1,29 +1,48 @@
-// THE single price source (invariant #20). Every route price, the 402 `maxAmountRequired`,
-// and grey-core's envelope `costUsd` derive from this one table. No price literal lives
-// anywhere else. USD values are the authoritative OpenAPI `x-x402-pricing`; atomic units are
-// USDC (6 decimals). Kept as a string USD label + bigint atomic so no float rounding creeps in.
+// x402's price resolver (E1-A / Invariant #31). @grey/schemas/pricing is THE single canonical
+// price source (supersedes this file's old PRICE_TABLE literal, invariant #20 → #31); this file
+// resolves x402's networkMultiplier (1.00× today) at the adapter boundary and converts the
+// resolved USD to USDC atomic units. No price literal lives here anymore — PRICE_TABLE below is
+// derived, kept only so existing consumers (route registration, tests) don't need to change
+// shape. Every route price, the 402 `maxAmountRequired`, and grey-core's envelope `costUsd`
+// derive from this resolution. Atomic units are USDC (6 decimals).
+import type { PaidOfferingSlug } from '@grey/schemas/responses';
+import { resolvePriceUsd } from '@grey/schemas/pricing';
 import type { X402Network, UsdcAsset } from './types.js';
 
-export type PaidSlug =
-  | 'legitimacy_scan'
-  | 'verify_whitepaper'
-  | 'verify_full_tech'
-  | 'claim_extraction'
-  | 'claim_history'
-  | 'quick_protocol_facts'
-  | 'daily_tech_brief';
+export type PaidSlug = PaidOfferingSlug;
 
-export const PRICE_TABLE: Record<PaidSlug, { readonly usd: string; readonly atomic: bigint }> = {
-  legitimacy_scan: { usd: '0.25', atomic: 250_000n },
-  verify_whitepaper: { usd: '1.50', atomic: 1_500_000n },
-  verify_full_tech: { usd: '3.00', atomic: 3_000_000n },
-  claim_extraction: { usd: '0.75', atomic: 750_000n },
-  claim_history: { usd: '0.25', atomic: 250_000n },
-  quick_protocol_facts: { usd: '0.30', atomic: 300_000n },
-  daily_tech_brief: { usd: '8.00', atomic: 8_000_000n },
-};
+const CHANNEL = 'x402' as const;
 
-export const PAID_SLUGS = Object.keys(PRICE_TABLE) as PaidSlug[];
+/** USD → USDC atomic units (6-dec), rounded to avoid float drift (e.g. 0.30 * 1e6 in IEEE754). */
+function toAtomic(usd: number): bigint {
+  return BigInt(Math.round(usd * 1_000_000));
+}
+
+function usdLabel(usd: number): string {
+  return usd.toFixed(2);
+}
+
+const PAID_SLUG_ORDER: PaidSlug[] = [
+  'legitimacy_scan',
+  'verify_whitepaper',
+  'verify_full_tech',
+  'claim_extraction',
+  'claim_history',
+  'quick_protocol_facts',
+  'daily_tech_brief',
+];
+
+/** Derived from @grey/schemas/pricing — NOT the source. Kept as a stable {usd,atomic} shape for
+ *  existing consumers/tests; recomputed from the canonical table + x402's networkMultiplier. */
+export const PRICE_TABLE: Record<PaidSlug, { readonly usd: string; readonly atomic: bigint }> =
+  Object.fromEntries(
+    PAID_SLUG_ORDER.map((slug) => {
+      const usd = resolvePriceUsd(slug, CHANNEL);
+      return [slug, { usd: usdLabel(usd), atomic: toAtomic(usd) }];
+    }),
+  ) as Record<PaidSlug, { readonly usd: string; readonly atomic: bigint }>;
+
+export const PAID_SLUGS = [...PAID_SLUG_ORDER];
 
 export function isPaidSlug(slug: string): slug is PaidSlug {
   return Object.prototype.hasOwnProperty.call(PRICE_TABLE, slug);
@@ -32,13 +51,13 @@ export function isPaidSlug(slug: string): slug is PaidSlug {
 /** USDC atomic units (6-dec) required for a slug. Throws on unknown slug (fail-closed). */
 export function priceAtomicFor(slug: string): bigint {
   if (!isPaidSlug(slug)) throw new Error(`x402: no price for slug ${slug}`);
-  return PRICE_TABLE[slug].atomic;
+  return toAtomic(resolvePriceUsd(slug, CHANNEL));
 }
 
 /** USD price for a slug (grey-core envelope `costUsd`). Throws on unknown slug (fail-closed). */
 export function priceUsdFor(slug: string): number {
   if (!isPaidSlug(slug)) throw new Error(`x402: no price for slug ${slug}`);
-  return Number(PRICE_TABLE[slug].usd);
+  return resolvePriceUsd(slug as PaidSlug, CHANNEL);
 }
 
 /** Per-network USDC asset literals — the ONE place addresses + EIP-712 domains live.

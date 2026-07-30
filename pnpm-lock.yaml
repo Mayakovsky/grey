@@ -56,6 +56,9 @@ importers:
       '@grey/pipeline':
         specifier: workspace:*
         version: link:../../packages/grey-pipeline
+      '@grey/schemas':
+        specifier: workspace:*
+        version: link:../../packages/grey-schemas
       '@grey/x402-middleware':
         specifier: workspace:*
         version: link:../x402-middleware
@@ -78,6 +81,9 @@ importers:
 
   adapters/x402-middleware:
     dependencies:
+      '@grey/schemas':
+        specifier: workspace:*
+        version: link:../../packages/grey-schemas
       fastify:
         specifier: ^5.8.5
         version: 5.8.5
