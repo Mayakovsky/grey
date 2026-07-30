@@ -47,6 +47,9 @@ const adapter = new X402Adapter({
   relayerAddress: relayer.relayerAddress,
   trustRungEnabled: trustRungOn,
   trustRungPreHandler,
+  // E1-D: MCP is unconditional (unlike the trust rung) — reuses the SAME relayer clients as the
+  // HTTP gate, verify/settle against the same USDC contract, just a different transport.
+  mcp: { x402Config, wallet: relayer.wallet, publicClient: relayer.publicClient },
 });
 
 // FDQ-66(a) boot-wrapper: record the catalog for identity()/observability. Routes stay statically

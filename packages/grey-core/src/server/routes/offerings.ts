@@ -9,7 +9,9 @@ import type { HandlerDeps } from '../../deps';
 import { offeringHandlers } from '../../handlers';
 import { buildEnvelope } from '../../envelope/build';
 
-const PAID: PaidOfferingSlug[] = [
+// Exported so other surfaces over the SAME x402 rail (e.g. server/routes/mcp.ts, E1-D) reuse this
+// exact list instead of re-declaring it — one place names "the 7 normal paid offerings".
+export const PAID: PaidOfferingSlug[] = [
   'legitimacy_scan',
   'verify_whitepaper',
   'verify_full_tech',

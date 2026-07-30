@@ -27,7 +27,9 @@ export function registerDiscoveryRoutes(app: FastifyInstance, opts: DiscoveryRou
     const services = listableSlugs(opts)
       .map((slug) => buildEvaluationKit(slug))
       .filter((kit) => kit.discoverable);
-    reply.send({ services });
+    // E1-D: "List in Bazaar as MCP" — the same offering set is also reachable as paid MCP tools
+    // over one JSON-RPC endpoint (POST /v1/mcp), not one route per offering like the HTTP surface.
+    reply.send({ services, mcpEndpoint: '/v1/mcp' });
   });
 
   app.get<{ Params: { slug: string } }>('/v1/discovery/services/:slug', async (req, reply) => {
