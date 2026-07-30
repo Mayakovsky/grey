@@ -9,6 +9,7 @@ import { installValidatorCompiler } from './validators';
 import { registerProbes } from './routes/probes';
 import { registerOfferingRoutes } from './routes/offerings';
 import { registerResourceRoutes } from './routes/resources';
+import { registerDiscoveryRoutes } from './routes/discovery';
 
 export function buildServer(deps: HandlerDeps, x402PreHandler: preHandlerHookHandler): FastifyInstance {
   const app = Fastify({ logger: false });
@@ -16,5 +17,6 @@ export function buildServer(deps: HandlerDeps, x402PreHandler: preHandlerHookHan
   registerProbes(app, deps);
   registerOfferingRoutes(app, deps, x402PreHandler); // paid POST × 7, behind the x402 gate
   registerResourceRoutes(app, deps); // free GET × 2
+  registerDiscoveryRoutes(app); // E1-B: free Bazaar discovery index, GET × 2
   return app;
 }
