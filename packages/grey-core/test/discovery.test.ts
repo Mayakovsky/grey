@@ -13,7 +13,7 @@ describe('discovery routes — Bazaar index (E1-B, Invariant #33)', () => {
     expect(body.services.map((s) => s.slug)).toContain('legitimacy_scan');
   });
 
-  it('GET /v1/discovery/services/:slug returns one EvaluationKit entry', async () => {
+  it('GET /v1/discovery/services/:slug returns the full evaluation artifact, incl. a sample (E1-C)', async () => {
     const app = makeApp();
     const res = await app.inject({
       method: 'GET',
@@ -26,6 +26,16 @@ describe('discovery routes — Bazaar index (E1-B, Invariant #33)', () => {
     expect(body.computeClass).toBe('LIVE_ALLOWED');
     expect(body.inputSchema).toBeTruthy();
     expect(body.outputSchema).toBeTruthy();
+    expect(body.sample).toBeTruthy();
+    expect(body.sample.request).toBeTruthy();
+    expect(body.sample.response).toBeTruthy();
+  });
+
+  it('the list route stays lean — no sample attached', async () => {
+    const app = makeApp();
+    const res = await app.inject({ method: 'GET', url: '/v1/discovery/services' });
+    const body = res.json() as { services: Array<{ sample?: unknown }> };
+    expect(body.services.every((s) => s.sample === undefined)).toBe(true);
   });
 
   it('GET /v1/discovery/services/:slug 404s for an unknown or unregistered slug', async () => {

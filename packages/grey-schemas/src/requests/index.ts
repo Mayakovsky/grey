@@ -4,6 +4,7 @@
 // Pattern 6 convention, though request schemas have no shared $defs so no inlining collision.
 export type {
   LegitimacyScanRequest,
+  LegitimacyScanTrustRungRequest,
   VerifyWhitepaperRequest,
   VerifyFullTechRequest,
   DailyTechBriefRequest,

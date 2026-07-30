@@ -19,6 +19,12 @@ export interface X402AdapterOptions {
   host?: string;
   /** Informational only: the relayer ADDRESS (never the key) for the boot log line. */
   relayerAddress?: string;
+  /** E1-C, Invariant #34: default OFF. start.ts is the one boot boundary that reads
+   *  @grey/x402-middleware's trustRungEnabled() and passes the result through here. */
+  trustRungEnabled?: boolean;
+  /** Required when trustRungEnabled is true — @grey/x402-middleware's makeTrustRungPreHandler(...)
+   *  output. NOT the same as `gate`: different slug/price, so a different verify/settle path. */
+  trustRungPreHandler?: preHandlerHookHandler;
 }
 
 /**
@@ -33,6 +39,8 @@ export class X402Adapter implements ChannelIngress {
   private readonly port: number;
   private readonly host: string;
   private readonly relayerAddress?: string;
+  private readonly trustRungEnabled: boolean;
+  private readonly trustRungPreHandler?: preHandlerHookHandler;
   private readonly offerings: OfferingRegistration[] = [];
   private app: FastifyInstance | null = null;
   private boundAddress: string | null = null;
@@ -43,12 +51,17 @@ export class X402Adapter implements ChannelIngress {
     this.port = opts.port;
     this.host = opts.host ?? '0.0.0.0';
     this.relayerAddress = opts.relayerAddress;
+    this.trustRungEnabled = opts.trustRungEnabled ?? false;
+    this.trustRungPreHandler = opts.trustRungPreHandler;
   }
 
   async start(): Promise<void> {
     if (this.app) throw new Error('X402Adapter: already started');
     // The SAME call start.ts made inline — the seam adds no per-request code.
-    const app = buildServer(this.deps, this.gate);
+    const app = buildServer(this.deps, this.gate, {
+      trustRungEnabled: this.trustRungEnabled,
+      trustRungPreHandler: this.trustRungPreHandler,
+    });
     this.app = app;
     this.boundAddress = await app.listen({ port: this.port, host: this.host });
     this.deps.logger.info(

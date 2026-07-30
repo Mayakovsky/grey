@@ -6,4 +6,5 @@ export type {
   DroppedField,
 } from './types';
 export { EVALUATION_KIT_BRANDING } from './data';
-export { buildEvaluationKit, buildAllEvaluationKits } from './build';
+export { EVALUATION_SAMPLES } from './samples';
+export { buildEvaluationKit, buildAllEvaluationKits, buildEvaluationArtifact } from './build';

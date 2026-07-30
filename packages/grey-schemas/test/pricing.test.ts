@@ -11,6 +11,7 @@ import {
 
 const ALL_SLUGS: OfferingSlug[] = [
   'legitimacy_scan',
+  'legitimacy_scan_trust_rung',
   'verify_whitepaper',
   'verify_full_tech',
   'claim_extraction',
@@ -28,7 +29,10 @@ const LIVE_ALLOWED: OfferingSlug[] = [
   'claim_extraction',
 ];
 
+// E1-C: legitimacy_scan_trust_rung is CACHE_ONLY too — BUILT BUT BLOCKED (Forces ruling B-1),
+// never live-computed regardless of the disable flag's state (see @grey/x402-middleware/trustRung).
 const CACHE_ONLY: OfferingSlug[] = [
+  'legitimacy_scan_trust_rung',
   'claim_history',
   'quick_protocol_facts',
   'daily_tech_brief',
@@ -39,7 +43,7 @@ const CACHE_ONLY: OfferingSlug[] = [
 const UNPRICED: OfferingSlug[] = ['daily_greenlight_list', 'scam_alert_feed'];
 
 describe('pricing — computeClass + canonical table (E1-A, Invariant #30/#31)', () => {
-  it('classifies all 9 offerings, matching cacheOrLive reachability', () => {
+  it('classifies all 10 offerings, matching cacheOrLive reachability', () => {
     expect(Object.keys(PRICING_TABLE).sort()).toEqual([...ALL_SLUGS].sort());
     for (const slug of LIVE_ALLOWED) expect(computeClassFor(slug)).toBe('LIVE_ALLOWED');
     for (const slug of CACHE_ONLY) expect(computeClassFor(slug)).toBe('CACHE_ONLY');
@@ -62,6 +66,11 @@ describe('pricing — computeClass + canonical table (E1-A, Invariant #30/#31)',
     for (const [slug, usd] of Object.entries(expected)) {
       expect(canonicalUsdFor(slug as OfferingSlug)).toBe(usd);
     }
+  });
+
+  it('the trust rung canonicalizes at $0.10, CACHE_ONLY (E1-C, spec §2.4)', () => {
+    expect(canonicalUsdFor('legitimacy_scan_trust_rung')).toBe(0.1);
+    expect(computeClassFor('legitimacy_scan_trust_rung')).toBe('CACHE_ONLY');
   });
 
   it('leaves the 2 unpriced offerings flagged (null), not invented', () => {

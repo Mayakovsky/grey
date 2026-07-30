@@ -8,6 +8,8 @@ import {
   makeX402PreHandler,
   priceUsdFor,
   PAID_SLUGS,
+  trustRungEnabled,
+  makeTrustRungPreHandler,
 } from '@grey/x402-middleware';
 import { createHandlerDeps } from './deps';
 import { X402Adapter } from './channels/x402Adapter';
@@ -24,6 +26,17 @@ const x402PreHandler = makeX402PreHandler(x402Config, {
   logger: deps.logger,
 });
 
+// E1-C, Invariant #34: the ONE place trustRungEnabled() is read for the x402 channel — start.ts is
+// the boot boundary, same posture as x402Config/relayer above. Default off; Forces-gated to flip.
+const trustRungOn = trustRungEnabled();
+const trustRungPreHandler = trustRungOn
+  ? makeTrustRungPreHandler(x402Config, {
+      wallet: relayer.wallet,
+      publicClient: relayer.publicClient,
+      logger: deps.logger,
+    })
+  : undefined;
+
 // M6 Phase A: x402 now boots THROUGH the ChannelIngress seam. The adapter runs the SAME
 // buildServer(deps, gate) + listen path this file used inline — zero per-request change.
 const port = Number(process.env.GREY_CORE_PORT ?? 3002);
@@ -32,6 +45,8 @@ const adapter = new X402Adapter({
   gate: x402PreHandler,
   port,
   relayerAddress: relayer.relayerAddress,
+  trustRungEnabled: trustRungOn,
+  trustRungPreHandler,
 });
 
 // FDQ-66(a) boot-wrapper: record the catalog for identity()/observability. Routes stay statically

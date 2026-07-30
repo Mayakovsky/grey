@@ -7,9 +7,9 @@ import {
 } from '../src/evaluationKit';
 
 describe('EvaluationKit — Bazaar extension projection (E1-B, Invariant #33)', () => {
-  it('projects all 9 offerings with the spec field list', () => {
+  it('projects all 10 offerings with the spec field list', () => {
     const kits = buildAllEvaluationKits();
-    expect(kits).toHaveLength(9);
+    expect(kits).toHaveLength(10);
     for (const k of kits) {
       expect(k.discoverable).toBe(true);
       expect(typeof k.description).toBe('string');

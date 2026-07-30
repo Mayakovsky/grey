@@ -1,7 +1,13 @@
-// @grey/core handler registry — OfferingSlug → OfferingHandler. All 9 are cache-read-only (M3).
+// @grey/core handler registry — OfferingSlug → OfferingHandler. All 10 are cache-read-only at
+// this layer (M3); 4 delegate to cacheOrLive on a cache miss (M3.5). `legitimacy_scan_trust_rung`
+// (E1-C) is here because the HANDLER is harmless to have registered — it never reaches live
+// compute either way — but it must NOT be reachable on any route/channel unless
+// @grey/x402-middleware's trustRungEnabled() is true. Route mounting (grey-core/src/server) and
+// discovery listing both check that flag explicitly; this registry does not gate anything itself.
 import type { OfferingSlug } from '@grey/schemas/responses';
 import type { OfferingHandler } from './types';
 import { legitimacyScan } from './legitimacy_scan';
+import { legitimacyScanTrustRung } from './legitimacy_scan_trust_rung';
 import { verifyWhitepaper } from './verify_whitepaper';
 import { verifyFullTech } from './verify_full_tech';
 import { claimExtraction } from './claim_extraction';
@@ -13,6 +19,7 @@ import { scamAlertFeed } from './scam_alert_feed';
 
 export const offeringHandlers: Record<OfferingSlug, OfferingHandler> = {
   legitimacy_scan: legitimacyScan,
+  legitimacy_scan_trust_rung: legitimacyScanTrustRung,
   verify_whitepaper: verifyWhitepaper,
   verify_full_tech: verifyFullTech,
   claim_extraction: claimExtraction,

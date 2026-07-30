@@ -13,6 +13,13 @@ export const EVALUATION_KIT_BRANDING: Record<OfferingSlug, EvaluationKitBranding
     description: 'Fast structural + claims legitimacy read on a token project, cache-or-live.',
     iconUrl: `${ICON_BASE}/legitimacy_scan.svg`,
   },
+  legitimacy_scan_trust_rung: {
+    serviceName: 'Legitimacy Trust Rung',
+    tags: ['crypto', 'due-diligence', 'trust-rung', 'cache-only'],
+    description:
+      'Cheap cache-only legitimacy teaser. BUILT BUT BLOCKED — not exposed on any live channel (Forces ruling B-1).',
+    iconUrl: `${ICON_BASE}/legitimacy_scan_trust_rung.svg`,
+  },
   verify_whitepaper: {
     serviceName: 'Whitepaper Verification',
     tags: ['crypto', 'due-diligence', 'verification', 'tokenomics'],

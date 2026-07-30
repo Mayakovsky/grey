@@ -134,8 +134,9 @@ export function fakeDeps(stubs: RepoStubs = {}): HandlerDeps {
 export function makeApp(
   stubs: RepoStubs = {},
   gate: preHandlerHookHandler = passThroughX402,
+  opts: Parameters<typeof buildServer>[2] = {},
 ): FastifyInstance {
-  return buildServer(fakeDeps(stubs), gate);
+  return buildServer(fakeDeps(stubs), gate, opts);
 }
 
 /** Loose envelope shape for reading inject() response bodies in tests. */

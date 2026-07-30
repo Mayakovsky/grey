@@ -6,9 +6,11 @@
 import type { OfferingSlug, PaidOfferingSlug } from '../responses/types';
 import { computeClassFor, canonicalUsdFor, PRICING_TABLE } from '../pricing/table';
 import { EVALUATION_KIT_BRANDING } from './data';
+import { EVALUATION_SAMPLES } from './samples';
 import type { DroppedField, EvaluationKitEntry, SampleExchange } from './types';
 
 import legitimacyScanResponse from '../responses/v1/legitimacy_scan.schema.json';
+import legitimacyScanTrustRungResponse from '../responses/v1/legitimacy_scan_trust_rung.schema.json';
 import verifyWhitepaperResponse from '../responses/v1/verify_whitepaper.schema.json';
 import verifyFullTechResponse from '../responses/v1/verify_full_tech.schema.json';
 import claimExtractionResponse from '../responses/v1/claim_extraction.schema.json';
@@ -19,6 +21,7 @@ import dailyGreenlightListResponse from '../responses/v1/daily_greenlight_list.s
 import scamAlertFeedResponse from '../responses/v1/scam_alert_feed.schema.json';
 
 import legitimacyScanRequest from '../requests/v1/legitimacy_scan.schema.json';
+import legitimacyScanTrustRungRequest from '../requests/v1/legitimacy_scan_trust_rung.schema.json';
 import verifyWhitepaperRequest from '../requests/v1/verify_whitepaper.schema.json';
 import verifyFullTechRequest from '../requests/v1/verify_full_tech.schema.json';
 import claimExtractionRequest from '../requests/v1/claim_extraction.schema.json';
@@ -28,6 +31,7 @@ import dailyTechBriefRequest from '../requests/v1/daily_tech_brief.schema.json';
 
 const OUTPUT_SCHEMAS: Record<OfferingSlug, object> = {
   legitimacy_scan: legitimacyScanResponse,
+  legitimacy_scan_trust_rung: legitimacyScanTrustRungResponse,
   verify_whitepaper: verifyWhitepaperResponse,
   verify_full_tech: verifyFullTechResponse,
   claim_extraction: claimExtractionResponse,
@@ -40,6 +44,7 @@ const OUTPUT_SCHEMAS: Record<OfferingSlug, object> = {
 
 const INPUT_SCHEMAS: Record<PaidOfferingSlug, object> = {
   legitimacy_scan: legitimacyScanRequest,
+  legitimacy_scan_trust_rung: legitimacyScanTrustRungRequest,
   verify_whitepaper: verifyWhitepaperRequest,
   verify_full_tech: verifyFullTechRequest,
   claim_extraction: claimExtractionRequest,
@@ -131,9 +136,19 @@ export function buildEvaluationKit(
 }
 
 /** Project every offering. Callers filter on `discoverable`/`priceUsd !== null` as needed — this
- *  function does not itself decide what a channel should list (E1-C's disable flag is separate). */
+ *  function does not itself decide what a channel should list (E1-C's disable flag is separate).
+ *  No `sample` attached (keeps the 402 body / list index lean) — see `buildEvaluationArtifact`. */
 export function buildAllEvaluationKits(): EvaluationKitEntry[] {
   return (Object.keys(EVALUATION_KIT_BRANDING) as OfferingSlug[]).map((slug) =>
     buildEvaluationKit(slug),
   );
+}
+
+/**
+ * The public capability page (E1-C evaluation artifacts): the same EvaluationKit entry PLUS a
+ * schema-valid sample request/response pair, so an evaluating agent can inspect real shape and a
+ * real output before ever paying. Ships live — distinct from the trust rung, which does not.
+ */
+export function buildEvaluationArtifact(slug: OfferingSlug): EvaluationKitEntry {
+  return buildEvaluationKit(slug, { sample: EVALUATION_SAMPLES[slug] });
 }

@@ -12,6 +12,15 @@ import type { Channel, ComputeClass, OfferingPricing } from './types';
 export const PRICING_TABLE: Record<OfferingSlug, OfferingPricing> = {
   // LIVE_ALLOWED — resolve through cacheOrLive on a cache miss (grey-core/src/handlers/index.ts).
   legitimacy_scan: { slug: 'legitimacy_scan', canonicalUsd: 0.25, computeClass: 'LIVE_ALLOWED' },
+
+  // CACHE_ONLY, BUILT BUT BLOCKED (E1-C, spec §2.4, Forces ruling B-1, Invariant #34): $0.10
+  // trust rung. Never live-computed regardless of the disable flag's state — the flag controls
+  // whether the ROUTE is reachable at all, not this offering's computeClass floor.
+  legitimacy_scan_trust_rung: {
+    slug: 'legitimacy_scan_trust_rung',
+    canonicalUsd: 0.1,
+    computeClass: 'CACHE_ONLY',
+  },
   verify_whitepaper: { slug: 'verify_whitepaper', canonicalUsd: 1.5, computeClass: 'LIVE_ALLOWED' },
   verify_full_tech: { slug: 'verify_full_tech', canonicalUsd: 3.0, computeClass: 'LIVE_ALLOWED' },
   claim_extraction: { slug: 'claim_extraction', canonicalUsd: 0.75, computeClass: 'LIVE_ALLOWED' },
