@@ -92,6 +92,8 @@ export interface RepoStubs {
   /** M3.5: discovery result for the cache-miss live path. Default null → cacheOrLive returns the
    *  typed-empty miss sentinel (preserves the M3 cache-miss test expectations). */
   discover?: TieredDiscoveryResult | null;
+  /** E1-F: pass an array to capture every revenueEvents.create() call for assertions. */
+  revenueEventsSink?: Array<{ channel: string; offering: string; revenueUsd: number }>;
 }
 
 export function fakeDeps(stubs: RepoStubs = {}): HandlerDeps {
@@ -118,11 +120,18 @@ export function fakeDeps(stubs: RepoStubs = {}): HandlerDeps {
   const discovery = {
     discover: async (): Promise<TieredDiscoveryResult | null> => stubs.discover ?? null,
   };
+  const revenueEvents = {
+    create: async (data: { channel: string; offering: string; revenueUsd: number }): Promise<unknown> => {
+      stubs.revenueEventsSink?.push(data);
+      return { id: 'revenue-test', settledAt: new Date(), requestId: null, ...data };
+    },
+  };
   return {
     db: {} as HandlerDeps['db'],
     whitepapers: whitepapers as unknown as HandlerDeps['whitepapers'],
     verifications: verifications as unknown as HandlerDeps['verifications'],
     claims: claims as unknown as HandlerDeps['claims'],
+    revenueEvents: revenueEvents as unknown as HandlerDeps['revenueEvents'],
     logger: logger as unknown as HandlerDeps['logger'],
     clock: () => new Date('2026-06-14T12:00:00.000Z'),
     config: TEST_CONFIG,

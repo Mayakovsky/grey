@@ -35,6 +35,17 @@ export function registerOfferingRoutes(
       },
       async (req, reply) => {
         const start = deps.clock().getTime();
+        // E1-F: the x402PreHandler gate already settled payment before this handler runs (402/502
+        // on any failure never reaches here) — record revenue now, not speculatively. A ledger
+        // write failure must never cost the buyer their already-paid-for response (fail open, log).
+        try {
+          await deps.revenueEvents.create({ channel: 'x402', offering: slug, revenueUsd: priceUsdFor(slug) });
+        } catch (err) {
+          deps.logger.warn('revenue ledger write failed (non-fatal)', {
+            slug,
+            error: (err as Error).message,
+          });
+        }
         const result = await offeringHandlers[slug]({ offeringId: slug, requirement: req.body }, deps);
         const env = buildEnvelope({
           offering: slug,

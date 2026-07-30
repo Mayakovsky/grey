@@ -27,6 +27,20 @@ export function registerTrustRungRoute(
     },
     async (req, reply) => {
       const start = deps.clock().getTime();
+      // E1-F: same fail-open ledger posture as offerings.ts — settlement already happened in the
+      // preHandler; a ledger write failure must never cost the buyer their paid-for response.
+      try {
+        await deps.revenueEvents.create({
+          channel: 'x402',
+          offering: TRUST_RUNG_SLUG,
+          revenueUsd: trustRungPriceUsd(),
+        });
+      } catch (err) {
+        deps.logger.warn('revenue ledger write failed (non-fatal)', {
+          slug: TRUST_RUNG_SLUG,
+          error: (err as Error).message,
+        });
+      }
       const result = await offeringHandlers[TRUST_RUNG_SLUG](
         { offeringId: TRUST_RUNG_SLUG, requirement: req.body },
         deps,

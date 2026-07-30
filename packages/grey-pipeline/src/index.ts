@@ -49,6 +49,10 @@ export {
   VerificationsRepo,
   RequestsRepo,
   CostEventsRepo,
+  RevenueEventsRepo,
+  MarginRepo,
+  computeMarginReport,
+  type MarginReportRow,
 } from './persistence/repositories';
 
 // Constants worth exposing

@@ -184,6 +184,20 @@ export function registerMcpRoute(
           reply.send(ok(id, textResult({ error: outcome.reason }, true)));
           return;
         }
+        // E1-F: settlement just succeeded above — record revenue now, same fail-open posture as
+        // the HTTP routes (a ledger write failure must never cost the buyer their paid response).
+        try {
+          await deps.revenueEvents.create({
+            channel: 'x402',
+            offering: slug,
+            revenueUsd: priceUsdFor(paidSlug),
+          });
+        } catch (err) {
+          deps.logger.warn('revenue ledger write failed (non-fatal)', {
+            slug,
+            error: (err as Error).message,
+          });
+        }
       }
 
       const start = deps.clock().getTime();

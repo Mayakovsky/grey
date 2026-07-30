@@ -78,7 +78,9 @@ export const verifications = greyTwo.table(
     verifiedClaims: integer('verified_claims').notNull().default(0),
     reportJson: jsonb('report_json').$type<Record<string, unknown>>(),
     llmTokensUsed: integer('llm_tokens_used').notNull().default(0),
-    computeCostUsd: numeric('compute_cost_usd', { precision: 12, scale: 6, mode: 'number' }).notNull().default(0),
+    computeCostUsd: numeric('compute_cost_usd', { precision: 12, scale: 6, mode: 'number' })
+      .notNull()
+      .default(0),
     triggerSource: text('trigger_source'),
     cacheHit: boolean('cache_hit').default(false),
     l1DurationMs: integer('l1_duration_ms').default(0),
@@ -146,6 +148,26 @@ export const costEvents = greyTwo.table(
   ],
 );
 
+// ── revenue_events (E1-F; one row per settled payment, channel x offering) ──
+export const revenueEvents = greyTwo.table(
+  'revenue_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    requestId: uuid('request_id').references(() => requests.id, { onDelete: 'set null' }),
+    channel: text('channel').notNull(), // 'x402' | 'acp' (@grey/schemas/pricing Channel)
+    offering: text('offering').notNull(), // OfferingSlug
+    revenueUsd: numeric('revenue_usd', { precision: 12, scale: 6, mode: 'number' })
+      .notNull()
+      .default(0),
+    settledAt: timestamp('settled_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index('grey_revenue_channel_offering_idx').on(t.channel, t.offering),
+    index('grey_revenue_settled_at_idx').on(t.settledAt),
+    index('grey_revenue_request_idx').on(t.requestId),
+  ],
+);
+
 export type WhitepaperRow = typeof whitepapers.$inferSelect;
 export type WhitepaperInsert = typeof whitepapers.$inferInsert;
 export type RequestRow = typeof requests.$inferSelect;
@@ -156,3 +178,5 @@ export type ClaimRow = typeof claims.$inferSelect;
 export type ClaimInsert = typeof claims.$inferInsert;
 export type CostEventRow = typeof costEvents.$inferSelect;
 export type CostEventInsert = typeof costEvents.$inferInsert;
+export type RevenueEventRow = typeof revenueEvents.$inferSelect;
+export type RevenueEventInsert = typeof revenueEvents.$inferInsert;
