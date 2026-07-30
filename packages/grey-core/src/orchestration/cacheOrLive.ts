@@ -8,6 +8,7 @@
 // (§16). The run variants (runL1/runL1L2/runFullPipeline) are ordinary pipeline exports. The sole
 // sanctioned cross-boundary discovery-type reference lives in deps/index.ts (§15/§16).
 import type { ComputeOfferingSlug, RequestFor, DiscoveryStatus, DiscoveryAttempt } from '@grey/schemas';
+import { computeClassFor } from '@grey/schemas/pricing';
 import {
   runL1,
   runL1L2,
@@ -102,6 +103,16 @@ export async function cacheOrLive<O extends ComputeOfferingSlug>(
   input: RequestFor<O>,
   deps: HandlerDeps,
 ): Promise<HandlerResult> {
+  // Invariant #30, defense-in-depth: `O extends ComputeOfferingSlug` already makes a CACHE_ONLY
+  // slug uncallable at compile time (only the 4 live-capable offerings satisfy that constraint) —
+  // this is the runtime fail-closed backstop against the class violation, same posture as
+  // Invariant #27's fail-open guards elsewhere, inverted (fail closed, not open).
+  const computeClass = computeClassFor(offering);
+  if (computeClass === 'CACHE_ONLY') {
+    throw new Error(
+      `cacheOrLive: refusing live compute for CACHE_ONLY offering "${offering}" (Invariant #30) — no offering may be served below its computeClass floor, including a paid retry.`,
+    );
+  }
   const body = input as unknown as Record<string, unknown>;
   const tokenAddress = (body.token_address as string | undefined) ?? null;
   const projectName = body.project_name as string | undefined;
