@@ -1,7 +1,7 @@
 // @grey/x402-middleware — sell-side x402 `exact`-scheme payment gate (Fastify).
 // DIRECT settlement (FDQ-26) via a gas-only relayer (FDQ-31(a)); single price source (invariant #20).
 export { loadX402Config } from './config.js';
-export { makeX402PreHandler, slugFromUrl } from './preHandler.js';
+export { makeX402PreHandler, makeX402PaymentPresenceCheck, slugFromUrl } from './preHandler.js';
 export type { X402PreHandlerDeps } from './preHandler.js';
 export { makeRelayerClients } from './clients.js';
 export type { PublicClientLike, WalletClientLike, RelayerClients } from './clients.js';
@@ -22,6 +22,7 @@ export {
   trustRungPriceUsd,
   buildTrustRungPaymentRequirements,
   makeTrustRungPreHandler,
+  makeTrustRungPaymentPresenceCheck,
 } from './trustRung.js';
 export { decodePaymentHeader, verifyPayment } from './verify.js';
 export type { VerifyResult } from './verify.js';

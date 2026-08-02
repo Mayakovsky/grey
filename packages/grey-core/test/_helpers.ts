@@ -3,9 +3,10 @@
 // AND binds the payload to the offering's response schema (allOf[if/then]). So a malformed handler
 // payload fails here. (Internal-impl test organization per Pattern 1 Tier B / spec §4.3 fixtures.)
 import { expect } from 'vitest';
-import type { FastifyInstance, preHandlerHookHandler } from 'fastify';
+import type { FastifyInstance, preHandlerHookHandler, preValidationHookHandler } from 'fastify';
 import { envelopeValidator } from '@grey/schemas/validators';
 import { buildServer } from '../src/server';
+import type { X402Gate } from '../src/server/routes/offerings';
 import type { HandlerDeps, GreyCoreConfig } from '../src/deps';
 import type { WhitepaperRow, VerificationRow, ClaimRow } from '../src/handlers/types';
 import type { TieredDiscoveryResult } from '@grey/pipeline';
@@ -20,8 +21,16 @@ export const TEST_CONFIG: GreyCoreConfig = {
 };
 
 /** Pass-through x402 gate for handler-logic tests — lets paid routes through so they test the
- *  handler/envelope, not payment. The real gate is exercised separately in x402-routes.test.ts. */
+ *  handler/envelope, not payment. The real gate is exercised separately in x402-routes.test.ts.
+ *  CDP/Bazaar alignment Phase 1 revision: the gate is two hooks now — passThroughX402 remains
+ *  exported (some tests still pass it directly as the preHandler half), and passThroughX402Gate
+ *  bundles both halves for callers that need the full X402Gate shape. */
 export const passThroughX402: preHandlerHookHandler = async () => {};
+const passThroughPreValidation: preValidationHookHandler = async () => {};
+export const passThroughX402Gate: X402Gate = {
+  preValidation: passThroughPreValidation,
+  preHandler: passThroughX402,
+};
 
 const TS = new Date('2026-06-14T00:00:00.000Z');
 
@@ -47,7 +56,9 @@ export function verificationRow(over: Partial<VerificationRow> = {}): Verificati
   return {
     id: 'v-1',
     whitepaperId: 'wp-1',
-    structuralAnalysisJson: { mica: { claimsMicaCompliance: 'NO', micaCompliant: 'YES', micaSummary: 'compliant' } },
+    structuralAnalysisJson: {
+      mica: { claimsMicaCompliance: 'NO', micaCompliant: 'YES', micaSummary: 'compliant' },
+    },
     structuralScore: 4,
     confidenceScore: 82,
     hypeTechRatio: 1.2,
@@ -121,7 +132,11 @@ export function fakeDeps(stubs: RepoStubs = {}): HandlerDeps {
     discover: async (): Promise<TieredDiscoveryResult | null> => stubs.discover ?? null,
   };
   const revenueEvents = {
-    create: async (data: { channel: string; offering: string; revenueUsd: number }): Promise<unknown> => {
+    create: async (data: {
+      channel: string;
+      offering: string;
+      revenueUsd: number;
+    }): Promise<unknown> => {
       stubs.revenueEventsSink?.push(data);
       return { id: 'revenue-test', settledAt: new Date(), requestId: null, ...data };
     },
@@ -142,7 +157,7 @@ export function fakeDeps(stubs: RepoStubs = {}): HandlerDeps {
 
 export function makeApp(
   stubs: RepoStubs = {},
-  gate: preHandlerHookHandler = passThroughX402,
+  gate: X402Gate = passThroughX402Gate,
   opts: Parameters<typeof buildServer>[2] = {},
 ): FastifyInstance {
   return buildServer(fakeDeps(stubs), gate, opts);

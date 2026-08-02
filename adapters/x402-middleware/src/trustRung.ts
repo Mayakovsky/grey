@@ -6,7 +6,12 @@
 // var. Deliberately kept OUT of prices.ts's PAID_SLUG_ORDER/PAID_SLUGS/PRICE_TABLE — those stay
 // byte-identical to the 7 normal paid slugs; this file is fully isolated so the block can never be
 // lifted by an accidental edit to the well-tested normal pricing path.
-import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
+import type {
+  FastifyReply,
+  FastifyRequest,
+  preHandlerHookHandler,
+  preValidationHookHandler,
+} from 'fastify';
 import type { OfferingSlug } from '@grey/schemas/responses';
 import { resolvePriceUsd } from '@grey/schemas/pricing';
 import { buildEvaluationArtifact } from '@grey/schemas/evaluationKit';
@@ -86,6 +91,22 @@ function encodePaymentResponse(txHash: string, network: string): string {
   ).toString('base64');
 }
 
+/** `preValidation` half of the trust-rung gate — CDP/Bazaar Phase 1 revision, mirrors
+ *  preHandler.ts's makeX402PaymentPresenceCheck. Body-independent: only checks that X-PAYMENT is
+ *  present, before Fastify's schema validation runs. Only ever installed on the trust-rung route
+ *  (mounted only when `trustRungEnabled()` is true). */
+export function makeTrustRungPaymentPresenceCheck(cfg: X402Config): preValidationHookHandler {
+  return async function trustRungPaymentPresenceCheck(
+    req: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
+    const header = req.headers['x-payment'];
+    if (typeof header !== 'string' || header.length === 0) {
+      reply.code(402).send(buildTrustRungPaymentRequirements(cfg, req.url, 'payment required'));
+    }
+  };
+}
+
 /**
  * A SEPARATE preHandler, not a variant dispatched by the normal `makeX402PreHandler`
  * (preHandler.ts's `slugFromUrl` deliberately does not recognize this slug, since it checks
@@ -93,6 +114,8 @@ function encodePaymentResponse(txHash: string, network: string): string {
  * route, which itself is only mounted when `trustRungEnabled()` is true — so this function being
  * unreachable is a property of grey-core's route wiring, not of this function checking the flag
  * itself. Otherwise byte-identical verify→settle logic to the normal gate (same reused functions).
+ * `preHandler` half of the split gate (see makeTrustRungPaymentPresenceCheck above) — decode/
+ * verify/settle, unchanged from before the split; runs after Fastify's schema validation.
  */
 export function makeTrustRungPreHandler(
   cfg: X402Config,

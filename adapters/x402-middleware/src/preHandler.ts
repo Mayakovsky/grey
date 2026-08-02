@@ -1,12 +1,28 @@
-// The Fastify preHandler (FDQ-29) grey-core installs on the 7 paid routes — drop-in for the old
+// The Fastify hooks (FDQ-29) grey-core installs on the 7 paid routes — drop-in for the old
 // no-op x402Placeholder. Orchestrates: challenge (402) → verify → settle → gate the handler.
 //
+// CDP/Bazaar alignment Phase 1 revision: this is now TWO hooks, not one, because Fastify's
+// request lifecycle runs preValidation -> [body-schema validation] -> preHandler -> handler.
+// `makeX402PaymentPresenceCheck` is body-independent (checks only that X-PAYMENT is present) and
+// belongs on `preValidation`, BEFORE schema validation — that's what lets a probe with no known
+// body shape still get a 402-with-Bazaar-metadata instead of a bare schema 400. The real
+// decode/verify/settle logic stays in `makeX402PreHandler`, wired to `preHandler`, AFTER schema
+// validation — so a buyer with a valid payment but a malformed body still 400s before being
+// charged, same protection as before this whole change.
+//
 // Failure semantics (spec exit-criterion 3):
-//  - no/invalid X-PAYMENT or any verify failure → 402 + PaymentRequirements, NO settlement.
+//  - no X-PAYMENT → 402 + PaymentRequirements, from the preValidation hook, NO settlement.
+//  - invalid/unverifiable X-PAYMENT → 402 + PaymentRequirements, from the preHandler hook (only
+//    reached once the body has already passed schema validation), NO settlement.
 //  - settle throws (submit error OR reverted receipt) → 502, NO handler, payment not consumed.
 //  - settle succeeds → X-PAYMENT-RESPONSE header set (persists even if the handler later throws),
 //    handler runs; a post-settlement handler error still leaves the payment standing.
-import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
+import type {
+  FastifyReply,
+  FastifyRequest,
+  preHandlerHookHandler,
+  preValidationHookHandler,
+} from 'fastify';
 import type { X402Config } from './types.js';
 import type { PublicClientLike, WalletClientLike } from './clients.js';
 import { isPaidSlug, priceAtomicFor } from './prices.js';
@@ -39,7 +55,31 @@ function encodePaymentResponse(txHash: string, network: string): string {
   ).toString('base64');
 }
 
-export function makeX402PreHandler(cfg: X402Config, deps: X402PreHandlerDeps): preHandlerHookHandler {
+/** `preValidation` half of the split gate — see this file's header comment. Body-independent: only
+ *  checks that X-PAYMENT is present, before Fastify's schema validation runs. */
+export function makeX402PaymentPresenceCheck(cfg: X402Config): preValidationHookHandler {
+  return async function x402PaymentPresenceCheck(
+    req: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
+    const slug = slugFromUrl(req.url);
+    if (!slug) return; // installed only on paid routes; defensive no-op otherwise.
+
+    const header = req.headers['x-payment'];
+    if (typeof header !== 'string' || header.length === 0) {
+      reply.code(402).send(buildPaymentRequirements(cfg, slug, req.url, 'payment required'));
+    }
+  };
+}
+
+/** `preHandler` half of the split gate — decode/verify/settle, unchanged from before the split.
+ *  Runs after Fastify's schema validation (see header comment); its own header-presence check
+ *  below is now redundant with makeX402PaymentPresenceCheck when both hooks are wired together,
+ *  but keeps this function correct and self-contained for direct unit-test/call-site use. */
+export function makeX402PreHandler(
+  cfg: X402Config,
+  deps: X402PreHandlerDeps,
+): preHandlerHookHandler {
   return async function x402PreHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     const slug = slugFromUrl(req.url);
     if (!slug) return; // installed only on paid routes; defensive no-op otherwise.

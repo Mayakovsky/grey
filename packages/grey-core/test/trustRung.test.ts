@@ -3,8 +3,12 @@
 // (the offering route itself, and the discovery/capability listing), and that flipping the
 // explicit opt-in makes it correctly reachable (proving the block is a real gate, not dead code).
 import { describe, it, expect } from 'vitest';
-import { makeTrustRungPreHandler, loadX402Config } from '@grey/x402-middleware';
-import { makeApp, passThroughX402 } from './_helpers';
+import {
+  makeTrustRungPreHandler,
+  makeTrustRungPaymentPresenceCheck,
+  loadX402Config,
+} from '@grey/x402-middleware';
+import { makeApp, passThroughX402Gate } from './_helpers';
 
 const cfg = loadX402Config({
   X402_NETWORK: 'eip155:84532',
@@ -12,14 +16,19 @@ const cfg = loadX402Config({
   BASE_RPC_URL: 'http://127.0.0.1:8545',
   X402_RELAYER_PRIVATE_KEY: '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
 });
-const trustRungGate = makeTrustRungPreHandler(cfg, {
-  wallet: { writeContract: async () => ('0x' + 'ee'.repeat(32)) as `0x${string}` },
-  publicClient: {
-    readContract: async () => false,
-    simulateContract: async () => ({ request: {} }),
-    waitForTransactionReceipt: async () => ({ status: 'success' as const }),
-  },
-});
+// CDP/Bazaar alignment Phase 1 revision: the gate is two hooks — see offerings.ts's header
+// comment. The new preValidation half + the unchanged preHandler half.
+const trustRungGate = {
+  preValidation: makeTrustRungPaymentPresenceCheck(cfg),
+  preHandler: makeTrustRungPreHandler(cfg, {
+    wallet: { writeContract: async () => ('0x' + 'ee'.repeat(32)) as `0x${string}` },
+    publicClient: {
+      readContract: async () => false,
+      simulateContract: async () => ({ request: {} }),
+      waitForTransactionReceipt: async () => ({ status: 'success' as const }),
+    },
+  }),
+};
 
 describe('trust rung — unreachable by default (E1-C, Invariant #34, B-1)', () => {
   it('POST /v1/offerings/legitimacy_scan_trust_rung 404s — the route does not exist', async () => {
@@ -52,9 +61,9 @@ describe('trust rung — unreachable by default (E1-C, Invariant #34, B-1)', () 
 
 describe('trust rung — correctly reachable when explicitly enabled (proves the block is real)', () => {
   it('POST without payment returns 402 with the $0.10 price, not 404 — route genuinely mounted', async () => {
-    const app = makeApp({}, passThroughX402, {
+    const app = makeApp({}, passThroughX402Gate, {
       trustRungEnabled: true,
-      trustRungPreHandler: trustRungGate,
+      trustRungGate,
     });
     const res = await app.inject({
       method: 'POST',
@@ -67,9 +76,9 @@ describe('trust rung — correctly reachable when explicitly enabled (proves the
   });
 
   it('CDP/Bazaar alignment Phase 1: an empty body with no payment still gets a 402, not a 400 (same fix as the normal 7 routes)', async () => {
-    const app = makeApp({}, passThroughX402, {
+    const app = makeApp({}, passThroughX402Gate, {
       trustRungEnabled: true,
-      trustRungPreHandler: trustRungGate,
+      trustRungGate,
     });
     const res = await app.inject({
       method: 'POST',
@@ -82,9 +91,9 @@ describe('trust rung — correctly reachable when explicitly enabled (proves the
   });
 
   it('is listed in discovery once enabled', async () => {
-    const app = makeApp({}, passThroughX402, {
+    const app = makeApp({}, passThroughX402Gate, {
       trustRungEnabled: true,
-      trustRungPreHandler: trustRungGate,
+      trustRungGate,
     });
     const res = await app.inject({ method: 'GET', url: '/v1/discovery/services' });
     const body = res.json() as { services: Array<{ slug: string }> };
@@ -92,11 +101,11 @@ describe('trust rung — correctly reachable when explicitly enabled (proves the
     expect(body.services).toHaveLength(8); // 7 enabled + the trust rung, still minus the 2 not-yet-offered
   });
 
-  it('buildServer throws if trustRungEnabled is true without a trustRungPreHandler (fail closed on misconfiguration)', async () => {
+  it('buildServer throws if trustRungEnabled is true without a trustRungGate (fail closed on misconfiguration)', async () => {
     const { buildServer } = await import('../src/server');
     const { fakeDeps } = await import('./_helpers');
-    expect(() => buildServer(fakeDeps(), passThroughX402, { trustRungEnabled: true })).toThrow(
-      /trustRungPreHandler/,
+    expect(() => buildServer(fakeDeps(), passThroughX402Gate, { trustRungEnabled: true })).toThrow(
+      /trustRungGate/,
     );
   });
 });

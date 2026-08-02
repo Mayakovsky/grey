@@ -3,7 +3,11 @@
 // clean 402 (never 500), and the free GET resources are ungated. The valid-payment→settle→200
 // path is unit-covered in @grey/x402-middleware's preHandler.test + the anvil integration.
 import { describe, it, expect } from 'vitest';
-import { loadX402Config, makeX402PreHandler } from '@grey/x402-middleware';
+import {
+  loadX402Config,
+  makeX402PreHandler,
+  makeX402PaymentPresenceCheck,
+} from '@grey/x402-middleware';
 import { makeApp } from './_helpers';
 
 const cfg = loadX402Config({
@@ -14,15 +18,20 @@ const cfg = loadX402Config({
 });
 
 // Mock clients — never reached on the no-payment paths (402 precedes settle).
-const gate = makeX402PreHandler(cfg, {
-  wallet: { writeContract: async () => ('0x' + 'ee'.repeat(32)) as `0x${string}` },
-  publicClient: {
-    readContract: async () => false,
-    simulateContract: async () => ({ request: {} }),
-    waitForTransactionReceipt: async () => ({ status: 'success' as const }),
-  },
-  now: () => 1_000_000_000_000,
-});
+// CDP/Bazaar alignment Phase 1 revision: the gate is two hooks — see offerings.ts's header
+// comment. The new preValidation half + the unchanged preHandler half.
+const gate = {
+  preValidation: makeX402PaymentPresenceCheck(cfg),
+  preHandler: makeX402PreHandler(cfg, {
+    wallet: { writeContract: async () => ('0x' + 'ee'.repeat(32)) as `0x${string}` },
+    publicClient: {
+      readContract: async () => false,
+      simulateContract: async () => ({ request: {} }),
+      waitForTransactionReceipt: async () => ({ status: 'success' as const }),
+    },
+    now: () => 1_000_000_000_000,
+  }),
+};
 
 const PRICE: Record<string, string> = {
   legitimacy_scan: '250000',

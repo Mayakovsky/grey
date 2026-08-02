@@ -3,17 +3,19 @@
 // path is imported and used untouched (invariant #19: the relayer key never enters grey-core). Its
 // only job is to run the existing `buildServer(deps, gate)` + `listen` through the ChannelIngress
 // lifecycle so x402 genuinely runs *through* the seam, and to surface the channel's identity/catalog.
-import type { FastifyInstance, preHandlerHookHandler } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import type { HandlerDeps } from '../deps';
 import { buildServer } from '../server';
+import type { X402Gate } from '../server/routes/offerings';
 import type { McpRouteDeps } from '../server/routes/mcp';
 import type { ChannelIdentity, ChannelIngress, OfferingRegistration } from './ingress';
 
 export interface X402AdapterOptions {
   /** The channel-agnostic core deps (same object start.ts builds via createHandlerDeps). */
   deps: HandlerDeps;
-  /** The x402 payment gate (built in start.ts from @grey/x402-middleware; used here untouched). */
-  gate: preHandlerHookHandler;
+  /** The x402 payment gate — both hooks (built in start.ts from @grey/x402-middleware; used here
+   *  untouched). */
+  gate: X402Gate;
   /** Listen port (start.ts passes GREY_CORE_PORT ?? 3002). */
   port: number;
   /** Listen host. Defaults to 0.0.0.0 (the production bind). */
@@ -23,9 +25,9 @@ export interface X402AdapterOptions {
   /** E1-C, Invariant #34: default OFF. start.ts is the one boot boundary that reads
    *  @grey/x402-middleware's trustRungEnabled() and passes the result through here. */
   trustRungEnabled?: boolean;
-  /** Required when trustRungEnabled is true — @grey/x402-middleware's makeTrustRungPreHandler(...)
-   *  output. NOT the same as `gate`: different slug/price, so a different verify/settle path. */
-  trustRungPreHandler?: preHandlerHookHandler;
+  /** Required when trustRungEnabled is true — both hooks from @grey/x402-middleware's trust-rung
+   *  factories. NOT the same as `gate`: different slug/price, so a different verify/settle path. */
+  trustRungGate?: X402Gate;
   /** E1-D: mounts POST /v1/mcp when present. Unconditional (unlike the trust rung) — MCP exposes
    *  the same 7+2 normal offerings, not a blocked one. */
   mcp?: McpRouteDeps;
@@ -39,12 +41,12 @@ export interface X402AdapterOptions {
  */
 export class X402Adapter implements ChannelIngress {
   private readonly deps: HandlerDeps;
-  private readonly gate: preHandlerHookHandler;
+  private readonly gate: X402Gate;
   private readonly port: number;
   private readonly host: string;
   private readonly relayerAddress?: string;
   private readonly trustRungEnabled: boolean;
-  private readonly trustRungPreHandler?: preHandlerHookHandler;
+  private readonly trustRungGate?: X402Gate;
   private readonly mcp?: McpRouteDeps;
   private readonly offerings: OfferingRegistration[] = [];
   private app: FastifyInstance | null = null;
@@ -57,7 +59,7 @@ export class X402Adapter implements ChannelIngress {
     this.host = opts.host ?? '0.0.0.0';
     this.relayerAddress = opts.relayerAddress;
     this.trustRungEnabled = opts.trustRungEnabled ?? false;
-    this.trustRungPreHandler = opts.trustRungPreHandler;
+    this.trustRungGate = opts.trustRungGate;
     this.mcp = opts.mcp;
   }
 
@@ -66,7 +68,7 @@ export class X402Adapter implements ChannelIngress {
     // The SAME call start.ts made inline — the seam adds no per-request code.
     const app = buildServer(this.deps, this.gate, {
       trustRungEnabled: this.trustRungEnabled,
-      trustRungPreHandler: this.trustRungPreHandler,
+      trustRungGate: this.trustRungGate,
       mcp: this.mcp,
     });
     this.app = app;

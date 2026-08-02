@@ -6,26 +6,29 @@
 // exist — a request to this path 404s before Fastify has any handler to dispatch to (Invariant
 // #34: unreachable, not merely gated inside a reachable handler).
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance, preHandlerHookHandler } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { TRUST_RUNG_SLUG, trustRungPriceUsd } from '@grey/x402-middleware';
 import type { HandlerDeps } from '../../deps';
 import { offeringHandlers } from '../../handlers';
 import { buildEnvelope } from '../../envelope/build';
+import type { X402Gate } from './offerings';
 
 export function registerTrustRungRoute(
   app: FastifyInstance,
   deps: HandlerDeps,
-  // NOT the general x402PreHandler — preHandler.ts's slugFromUrl deliberately doesn't recognize
-  // this slug, so this MUST be @grey/x402-middleware's makeTrustRungPreHandler(...) output.
-  trustRungPreHandler: preHandlerHookHandler,
+  // NOT the general offerings.ts gate — preHandler.ts's slugFromUrl deliberately doesn't
+  // recognize this slug, so this MUST be built from @grey/x402-middleware's trust-rung-scoped
+  // makeTrustRungPaymentPresenceCheck(...)/makeTrustRungPreHandler(...) factories.
+  trustRungGate: X402Gate,
 ): void {
   app.post(
     `/v1/offerings/${TRUST_RUNG_SLUG}`,
     {
       schema: { body: { $grey: { kind: 'request', offering: TRUST_RUNG_SLUG } } },
-      // CDP/Bazaar alignment Phase 1, Task 2: `preValidation`, not `preHandler` — see
-      // offerings.ts's header comment for why (runs before Fastify's body-schema validation).
-      preValidation: trustRungPreHandler,
+      // CDP/Bazaar alignment Phase 1 revision — see offerings.ts's header comment: the gate is
+      // two hooks, `preValidation` (body-independent) + `preHandler` (verify+settle).
+      preValidation: trustRungGate.preValidation,
+      preHandler: trustRungGate.preHandler,
     },
     async (req, reply) => {
       const start = deps.clock().getTime();

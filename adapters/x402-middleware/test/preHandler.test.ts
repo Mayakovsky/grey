@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import Fastify from 'fastify';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { makeX402PreHandler, slugFromUrl } from '../src/preHandler.js';
+import {
+  makeX402PreHandler,
+  makeX402PaymentPresenceCheck,
+  slugFromUrl,
+} from '../src/preHandler.js';
 import { TEST_CFG, signedPayment, mockPublicClient, mockWallet } from './_sign.js';
 
 // now() returns ms; 1e12 ms → 1e9 s, inside the default [0, 9_999_999_999) window.
@@ -137,5 +142,107 @@ describe('makeX402PreHandler — orchestration', () => {
     expect(m.statusCode).toBe(402); // clean 402, not a 502 after a wasted reverted tx
     expect(wallet.calls).toHaveLength(0); // nothing broadcast → zero relayer gas
     expect(m.headers['X-PAYMENT-RESPONSE']).toBeUndefined();
+  });
+});
+
+// CDP/Bazaar alignment Phase 1 revision: proves the split hook pair's actual contract through a
+// real Fastify instance (schema validation included) — a unit test calling makeX402PreHandler
+// directly, like the tests above, can't exercise "does schema validation run first" at all, since
+// there's no schema validation happening outside of Fastify's own request lifecycle.
+describe('preValidation + preHandler split (CDP/Bazaar Phase 1 revision)', () => {
+  const BODY_SCHEMA = {
+    type: 'object',
+    required: ['token_address'],
+    properties: { token_address: { type: 'string' } },
+  };
+
+  it('valid X-PAYMENT + malformed body → 400, not 402/200, and zero broadcast (settlement never runs)', async () => {
+    const { header } = await signedPayment(TEST_CFG);
+    const wallet = mockWallet();
+    const app = Fastify();
+    app.post(
+      '/v1/offerings/legitimacy_scan',
+      {
+        schema: { body: BODY_SCHEMA },
+        preValidation: makeX402PaymentPresenceCheck(TEST_CFG),
+        preHandler: makeX402PreHandler(TEST_CFG, {
+          wallet,
+          publicClient: mockPublicClient({ used: false, status: 'success' }),
+          now,
+        }),
+      },
+      async () => ({ ok: true }),
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/offerings/legitimacy_scan',
+      headers: { 'x-payment': header }, // a genuinely valid, verifiable payment
+      payload: {}, // missing required token_address → fails schema validation
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(wallet.calls).toHaveLength(0); // settle() never ran — schema validation blocked it first
+    await app.close();
+  });
+
+  it('no X-PAYMENT + malformed body → 402 with requirements, before schema validation ever runs', async () => {
+    const app = Fastify();
+    app.post(
+      '/v1/offerings/legitimacy_scan',
+      {
+        schema: { body: BODY_SCHEMA },
+        preValidation: makeX402PaymentPresenceCheck(TEST_CFG),
+        preHandler: makeX402PreHandler(TEST_CFG, {
+          wallet: mockWallet(),
+          publicClient: mockPublicClient(),
+          now,
+        }),
+      },
+      async () => ({ ok: true }),
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/offerings/legitimacy_scan',
+      payload: {}, // would also fail schema, but preValidation's 402 must win the race
+    });
+
+    expect(res.statusCode).toBe(402);
+    expect(
+      (res.json() as { accepts: { maxAmountRequired: string }[] }).accepts[0].maxAmountRequired,
+    ).toBe('250000');
+    await app.close();
+  });
+
+  it('valid X-PAYMENT + valid body → settles and reaches the handler, same as before the split', async () => {
+    const { header } = await signedPayment(TEST_CFG);
+    const wallet = mockWallet('0x' + 'ee'.repeat(32));
+    const app = Fastify();
+    app.post(
+      '/v1/offerings/legitimacy_scan',
+      {
+        schema: { body: BODY_SCHEMA },
+        preValidation: makeX402PaymentPresenceCheck(TEST_CFG),
+        preHandler: makeX402PreHandler(TEST_CFG, {
+          wallet,
+          publicClient: mockPublicClient({ used: false, status: 'success' }),
+          now,
+        }),
+      },
+      async () => ({ ok: true }),
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/offerings/legitimacy_scan',
+      headers: { 'x-payment': header },
+      payload: { token_address: '0x1111111111111111111111111111111111111111' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(wallet.calls).toHaveLength(1);
+    expect(res.headers['x-payment-response']).toBeDefined();
+    await app.close();
   });
 });
