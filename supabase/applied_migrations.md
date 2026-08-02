@@ -84,3 +84,16 @@ This is grey's canonical pattern from Step 2 forward (Movement 4 `sweep_log`, CI
 - Grants (FDQ-65): `grey_pipeline_rw` → USAGE on schema, SELECT/INSERT/UPDATE on both tables; REVOKE DELETE/TRUNCATE. **UPDATE deliberately KEPT** (buyer status transitions + tracked-job resolution) — the OPPOSITE of the append-only audit tables (`sweep_log`/`refuel_log`). Correct-by-construction: the explicit REVOKE executed inside the successful `--single-transaction` apply, cancelling `grey_two`'s ALTER DEFAULT PRIVILEGES auto-grant for DELETE/TRUNCATE while retaining UPDATE (cf. `refuel_log` FDQ-52, where the REVOKE was omitted). No sequence grants (`text` / composite PK — no BIGSERIAL/IDENTITY).
 - `supabase_migrations.schema_migrations` on remote: **untouched** (psql apply, not CLI push).
 - Anomalies: none reported. `\dp` visual grant verify (run-sheet block 6) confirmed by Forces: `grey_pipeline_rw=arw/...` on both tables, no `d` (DELETE) or `D` (TRUNCATE). FDQ-65 posture verified both by the in-transaction REVOKE and by visual `\dp` inspection.
+
+## 20260730150000_create_grey_two_revenue_events (Expansion E1-F)
+
+- File: `supabase/migrations/20260730150000_create_grey_two_revenue_events.sql`
+- sha256: `C15F09F0A56C12CB5171BAB93EC961AB1244904C229D1A899B5B51674092ECB5`
+- Applied at: 2026-08-02 20:57 UTC, Forces-lane session.
+- Applied by: Forces-lane via `psql -w -v ON_ERROR_STOP=1 --single-transaction -d <WPV_DATABASE_URL> -f supabase/migrations/20260730150000_create_grey_two_revenue_events.sql`.
+- Purpose: E1-F margin instrumentation, revenue side — one new APPEND-ONLY `grey_two` table, one row per settled payment, attributed by channel × offering. Pairs with existing `grey_two.cost_events` (compute spend) to compute realized margin; cost is attributed per-offering only, not per-channel, per the deliberate scoping note in `computeMarginReport()`. Zero contact with any other `grey_two` table or any `wpv_*`.
+- Tables created: `grey_two.revenue_events` (1). 6 columns, `uuid` PK (`gen_random_uuid()`), FK to `grey_two.requests(id)` on delete set null.
+- Indices: `grey_revenue_channel_offering_idx`, `grey_revenue_settled_at_idx`, `grey_revenue_request_idx` (3 named) + 1 PK = 4.
+- Grants (FDQ-52 posture): `grey_pipeline_rw` → USAGE on schema, SELECT/INSERT on the table; REVOKE UPDATE/DELETE/TRUNCATE executed inside the same transaction as the CREATE TABLE (learned from `refuel_log`'s original omission — not split into a later corrective migration this time). Verified via `\dp`: `grey_pipeline_rw=ar/postgres`, no `w`/`d`/`D`.
+- `supabase_migrations.schema_migrations` on remote: **untouched** (psql apply, not CLI push).
+- Anomalies: none. Table, indexes, grants, and table comment all confirmed post-apply via `\d`, `\dp`, and `obj_description()`.
