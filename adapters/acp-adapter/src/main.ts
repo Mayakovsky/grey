@@ -6,8 +6,9 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { offeringHandlers, createHandlerDeps } from '@grey/core';
-import { PAID_SLUGS, priceUsdFor } from '@grey/x402-middleware';
+import { PAID_SLUGS } from '@grey/x402-middleware';
 import { loadConfig } from './config.js';
+import { priceUsdForAcp } from './pricing.js';
 import { AcpAdapter } from './acpAdapter.js';
 import { createRealSdkBundle } from './sdk.js';
 import { createLogger } from './logger.js';
@@ -60,10 +61,11 @@ async function main(): Promise<void> {
     reputationReconciler,
   });
 
-  // Register the 7 paid offerings from the single price source (invariant #20), BEFORE start() —
-  // no boot-buffer needed (one process; no cross-plugin registration race).
+  // Register the 7 paid offerings from the single canonical price source (Invariant #31),
+  // resolved through ACP's own networkMultiplier — BEFORE start() (one process; no cross-plugin
+  // registration race).
   for (const slug of PAID_SLUGS) {
-    adapter.registerOffering({ slug, priceUsd: priceUsdFor(slug) });
+    adapter.registerOffering({ slug, priceUsd: priceUsdForAcp(slug) });
   }
 
   log.info('acp-adapter: starting', {

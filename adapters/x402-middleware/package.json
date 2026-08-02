@@ -15,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@grey/schemas": "workspace:*",
     "fastify": "^5.8.5",
     "viem": "^2.53.1"
   }

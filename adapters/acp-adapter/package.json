@@ -16,6 +16,7 @@
   "dependencies": {
     "@grey/core": "workspace:*",
     "@grey/pipeline": "workspace:*",
+    "@grey/schemas": "workspace:*",
     "@grey/x402-middleware": "workspace:*",
     "@virtuals-protocol/acp-node-v2": "^0.0.4",
     "pg": "^8.22.0",

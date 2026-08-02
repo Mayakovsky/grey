@@ -180,6 +180,30 @@ describe('cacheOrLive — subject derivation', () => {
   });
 });
 
+describe('cacheOrLive — Invariant #30 (CACHE_ONLY never triggers live compute)', () => {
+  const CACHE_ONLY_SLUGS = ['claim_history', 'quick_protocol_facts', 'daily_tech_brief', 'daily_greenlight_list', 'scam_alert_feed'] as const;
+
+  for (const slug of CACHE_ONLY_SLUGS) {
+    it(`${slug} is structurally unreachable from cacheOrLive() — compile-time AND runtime rejection`, async () => {
+      const deps = fakeDeps({ discover: discovered });
+      // The type system already makes this uncallable (O extends ComputeOfferingSlug excludes
+      // every CACHE_ONLY slug) — the cast below simulates a bypass to prove the runtime
+      // fail-closed assertion is the actual backstop, not just the type constraint.
+      await expect(
+        cacheOrLive(slug as never, { token_address: TOKEN } as never, deps),
+      ).rejects.toThrow(/CACHE_ONLY/);
+      expect(runL1).not.toHaveBeenCalled();
+      expect(runL1L2).not.toHaveBeenCalled();
+      expect(runFullPipeline).not.toHaveBeenCalled();
+    });
+  }
+
+  it('rejects before any discovery/pipeline side effect runs, even on a "paid retry" shape', async () => {
+    const deps = fakeDeps({ discover: discovered });
+    await expect(cacheOrLive('scam_alert_feed' as never, {} as never, deps)).rejects.toThrow(/Invariant #30/);
+  });
+});
+
 describe('createHandlerDeps — M3.5 wiring sanity', () => {
   it('constructs HandlerDeps carrying pipeline + discovery (§15)', () => {
     const deps = createHandlerDeps({ databaseUrl: '' });
