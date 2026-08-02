@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPaymentRequirements } from '../src/challenge.js';
+import { buildPaymentRequirements, buildCdpBazaarExtension } from '../src/challenge.js';
 import { TEST_CFG } from './_sign.js';
 
 describe('buildPaymentRequirements — strict-canonical x402', () => {
@@ -60,5 +60,29 @@ describe('buildPaymentRequirements — strict-canonical x402', () => {
     expect(bazaar.inputSchema).toBeTruthy();
     expect(bazaar.outputSchema).toBeTruthy();
     expect(bazaar.iconUrl).toBe('https://whitepapergrey.com/icons/legitimacy_scan.svg');
+  });
+
+  it('CDP/Bazaar alignment Phase 1: also carries the top-level extensions.bazaar shape, alongside (not replacing) extra.bazaar', () => {
+    const body = buildPaymentRequirements(
+      TEST_CFG,
+      'legitimacy_scan',
+      '/v1/offerings/legitimacy_scan',
+    );
+    // extra.bazaar is untouched — Task 3 says keep it, other consumers may read it.
+    expect(body.accepts[0].extra.bazaar).toBeTruthy();
+    // extensions sits at the top of the body, sibling to accepts, not inside accepts[0].
+    expect(body.extensions).toBeTruthy();
+    expect(body).not.toHaveProperty('accepts[0].extensions');
+    const ext = body.extensions!.bazaar;
+    expect(ext.info.input).toEqual({ type: 'http', method: 'POST', bodyType: 'json' });
+    expect(ext.info.output?.example).toBeTruthy(); // legitimacy_scan has a sample response (Round 2)
+    expect(ext.schema).toEqual(body.accepts[0].extra.bazaar.inputSchema); // same JSON Schema, reshaped location
+  });
+
+  it('buildCdpBazaarExtension is a pure reshape — same output for the same EvaluationKitEntry input', () => {
+    const kitA = { inputSchema: { type: 'object' }, sample: undefined } as never;
+    const extA = buildCdpBazaarExtension(kitA);
+    expect(extA.bazaar.schema).toEqual({ type: 'object' });
+    expect(extA.bazaar.info.output).toBeUndefined(); // no sample -> no output example, not a fabricated one
   });
 });

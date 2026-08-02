@@ -55,6 +55,32 @@ export interface PaymentPayload {
   };
 }
 
+/**
+ * CDP's canonical Bazaar discovery extension shape (CDP/Bazaar alignment Phase 1, Task 3).
+ *
+ * UNCERTAINTY, documented rather than hidden: CDP's public docs (docs.cdp.coinbase.com/x402/bazaar,
+ * checked 2026-08-02) describe `bazaar.info.{input,output}` + `bazaar.schema` but do not publish a
+ * complete worked JSON example of the surrounding `extensions` envelope — specifically, whether
+ * `extensions` sits at the top of the PaymentRequirements body (sibling to `x402Version`/`accepts`)
+ * or inside each `accepts[]` entry is not shown in a full example anywhere found (docs, the x402
+ * gitbook, or the coinbase/x402 GitHub repo's visible structure). Placed at the TOP LEVEL here —
+ * the more spec-consistent reading, since discovery metadata describes the RESOURCE, not a specific
+ * payment option, and matches the docs' own description of it as "top-level". This is Grey's best
+ * good-faith mapping from EvaluationKitEntry, not independently verified against a live
+ * CDP-indexed endpoint — Grey has no CDP API keys yet (Phase 2). Re-verify against the real
+ * facilitator once keys exist, before treating this shape as load-bearing.
+ */
+export interface CdpBazaarExtension {
+  bazaar: {
+    info: {
+      input: { type: 'http'; method: 'GET' | 'POST'; bodyType?: 'json' };
+      output?: { example?: unknown };
+    };
+    /** The request body's JSON Schema, verbatim from EvaluationKitEntry.inputSchema. */
+    schema: object | null;
+  };
+}
+
 /** 402 body — strict-canonical x402 `PaymentRequirements` (Forces ruling: maxTimeoutSeconds only,
  *  no server nonce/expiresAt; the buyer chooses the EIP-3009 nonce). */
 export interface PaymentRequirements {
@@ -70,7 +96,9 @@ export interface PaymentRequirements {
     maxTimeoutSeconds: number;
     asset: Address;
     /** EIP-712 domain hints the buyer needs to sign the authorization, plus (E1-B) the Bazaar
-     *  discovery metadata projected from @grey/schemas/evaluationKit — "on every x402 route". */
+     *  discovery metadata projected from @grey/schemas/evaluationKit — "on every x402 route".
+     *  Grey's own shape — kept alongside `extensions.bazaar` below (Task 3), not replaced by it;
+     *  other consumers may already read this field. Flag before removing, don't drop unilaterally. */
     extra: {
       name: string;
       version: string;
@@ -86,5 +114,8 @@ export interface PaymentRequirements {
       >;
     };
   }>;
+  /** CDP's canonical wire shape (Task 3) — top-level, see CdpBazaarExtension's own doc comment
+   *  for the placement uncertainty this represents Grey's best-effort resolution of. */
+  extensions?: CdpBazaarExtension;
   error?: string;
 }

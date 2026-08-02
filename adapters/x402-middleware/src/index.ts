@@ -14,7 +14,7 @@ export {
   isPaidSlug,
 } from './prices.js';
 export type { PaidSlug } from './prices.js';
-export { buildPaymentRequirements } from './challenge.js';
+export { buildPaymentRequirements, buildCdpBazaarExtension } from './challenge.js';
 export {
   TRUST_RUNG_SLUG,
   trustRungEnabled,
@@ -35,4 +35,5 @@ export type {
   PaymentRequirements,
   PaymentPayload,
   TransferAuthorization,
+  CdpBazaarExtension,
 } from './types.js';

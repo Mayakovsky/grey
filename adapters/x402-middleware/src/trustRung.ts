@@ -9,11 +9,12 @@
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
 import type { OfferingSlug } from '@grey/schemas/responses';
 import { resolvePriceUsd } from '@grey/schemas/pricing';
-import { buildEvaluationKit } from '@grey/schemas/evaluationKit';
+import { buildEvaluationArtifact } from '@grey/schemas/evaluationKit';
 import type { X402Config, PaymentRequirements } from './types.js';
 import type { X402PreHandlerDeps } from './preHandler.js';
 import { decodePaymentHeader, verifyPayment } from './verify.js';
 import { settle } from './settle.js';
+import { buildCdpBazaarExtension } from './challenge.js';
 
 export const TRUST_RUNG_SLUG: OfferingSlug = 'legitimacy_scan_trust_rung';
 
@@ -43,7 +44,7 @@ export function buildTrustRungPaymentRequirements(
   resource: string,
   error?: string,
 ): PaymentRequirements {
-  const kit = buildEvaluationKit(TRUST_RUNG_SLUG);
+  const kit = buildEvaluationArtifact(TRUST_RUNG_SLUG);
   const body: PaymentRequirements = {
     x402Version: 1,
     accepts: [
@@ -72,6 +73,7 @@ export function buildTrustRungPaymentRequirements(
         },
       },
     ],
+    extensions: buildCdpBazaarExtension(kit),
   };
   if (error) body.error = error;
   return body;

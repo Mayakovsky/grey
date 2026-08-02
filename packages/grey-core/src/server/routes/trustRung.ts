@@ -23,7 +23,9 @@ export function registerTrustRungRoute(
     `/v1/offerings/${TRUST_RUNG_SLUG}`,
     {
       schema: { body: { $grey: { kind: 'request', offering: TRUST_RUNG_SLUG } } },
-      preHandler: trustRungPreHandler,
+      // CDP/Bazaar alignment Phase 1, Task 2: `preValidation`, not `preHandler` — see
+      // offerings.ts's header comment for why (runs before Fastify's body-schema validation).
+      preValidation: trustRungPreHandler,
     },
     async (req, reply) => {
       const start = deps.clock().getTime();

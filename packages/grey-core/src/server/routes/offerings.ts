@@ -1,6 +1,19 @@
 // Paid offering routes: POST /v1/offerings/<slug> × 7. Each validates its request body via the
-// $grey marker (→ offeringRequestValidators), runs behind the x402 no-op preHandler, calls the
-// cache-read handler, and wraps the payload in a GreyResponseEnvelope.
+// $grey marker (→ offeringRequestValidators), runs behind the x402 gate, calls the cache-read
+// handler, and wraps the payload in a GreyResponseEnvelope.
+//
+// CDP/Bazaar alignment Phase 1, Task 2: the x402 gate is wired as `preValidation`, NOT
+// `preHandler`. Fastify's request lifecycle is onRequest -> preParsing -> preValidation ->
+// [body/query/params SCHEMA VALIDATION] -> preHandler -> handler — so a `preHandler`-wired gate
+// runs AFTER schema validation, meaning a request without a schema-valid body 400s before ever
+// reaching the point where a 402-with-Bazaar-metadata would be returned. That defeats any
+// discovery crawler that doesn't already know the input shape (the exact scenario CDP's own
+// validator hits — see CDP-BAZAAR-COMPATIBILITY-AUDIT-REPORT-KOV.md). `preValidation` runs
+// BEFORE schema validation, so: no X-PAYMENT header -> 402 immediately, body content irrelevant.
+// A request that DOES carry payment but an invalid body now settles first, then 400s on schema —
+// consistent with this codebase's already-established "settlement stands even if something after
+// it fails" posture (see preHandler.ts's own header comment: "a post-settlement handler error
+// still leaves the payment standing"); this is the same posture, one step earlier.
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, preHandlerHookHandler } from 'fastify';
 import type { PaidOfferingSlug } from '@grey/schemas/responses';
@@ -31,7 +44,7 @@ export function registerOfferingRoutes(
       `/v1/offerings/${slug}`,
       {
         schema: { body: { $grey: { kind: 'request', offering: slug } } },
-        preHandler: x402PreHandler,
+        preValidation: x402PreHandler,
       },
       async (req, reply) => {
         const start = deps.clock().getTime();

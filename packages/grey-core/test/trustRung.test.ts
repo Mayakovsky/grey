@@ -66,6 +66,21 @@ describe('trust rung — correctly reachable when explicitly enabled (proves the
     expect(body.accepts[0].maxAmountRequired).toBe('100000');
   });
 
+  it('CDP/Bazaar alignment Phase 1: an empty body with no payment still gets a 402, not a 400 (same fix as the normal 7 routes)', async () => {
+    const app = makeApp({}, passThroughX402, {
+      trustRungEnabled: true,
+      trustRungPreHandler: trustRungGate,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/offerings/legitimacy_scan_trust_rung',
+      payload: {},
+    });
+    expect(res.statusCode, JSON.stringify(res.json())).toBe(402);
+    const body = res.json();
+    expect(body.accepts[0].maxAmountRequired).toBe('100000');
+  });
+
   it('is listed in discovery once enabled', async () => {
     const app = makeApp({}, passThroughX402, {
       trustRungEnabled: true,
