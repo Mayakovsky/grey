@@ -121,7 +121,11 @@ export function buildEvaluationKit(
 
   return {
     slug,
-    discoverable: true,
+    // Merge-prep ruling: an offering with `enabled: false` (not yet offered, period — e.g.
+    // daily_greenlight_list/scam_alert_feed) is structurally absent from every Bazaar-facing
+    // surface (discovery list+detail, 402 extra.bazaar, MCP tools/list) — every one of those
+    // surfaces filters/gates on THIS field, not a separate flag each has to keep in sync.
+    discoverable: pricing.enabled,
     serviceName,
     tags,
     description: branding.description,

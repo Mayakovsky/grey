@@ -19,6 +19,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { OfferingSlug, PaidOfferingSlug } from '@grey/schemas/responses';
 import { buildEvaluationKit } from '@grey/schemas/evaluationKit';
+import { isEnabled } from '@grey/schemas/pricing';
 import {
   isPaidSlug,
   priceAtomicFor,
@@ -37,7 +38,10 @@ import { PAID } from './offerings';
 import { FREE } from './resources';
 
 const PROTOCOL_VERSION = '2026-03-26';
-const MCP_TOOL_SLUGS: OfferingSlug[] = [...PAID, ...FREE];
+// Merge-prep ruling: a not-yet-offered slug (PRICING_TABLE.enabled === false — currently
+// daily_greenlight_list, scam_alert_feed) is filtered out HERE, so it's excluded from both
+// tools/list AND tools/call's "unknown or unlisted tool" check (the same array gates both).
+const MCP_TOOL_SLUGS: OfferingSlug[] = [...PAID, ...FREE].filter((slug) => isEnabled(slug));
 
 export interface McpRouteDeps {
   x402Config: X402Config;
@@ -119,9 +123,11 @@ export function registerMcpRoute(
     }
 
     if (method === 'tools/list') {
-      // Registry-driven, same gating discipline as discovery.ts: only the normal 7 paid + 2 free
-      // slugs are ever listed. The trust rung is never in MCP_TOOL_SLUGS regardless of its own
-      // disable flag — E1-D's rail doesn't get a separate exposure decision from B-1.
+      // Registry-driven, same gating discipline as discovery.ts: only enabled offerings are ever
+      // listed (MCP_TOOL_SLUGS already filters out not-yet-offered + excludes the trust rung
+      // entirely — the trust rung is never a member of PAID/FREE in the first place, so it's not
+      // in MCP_TOOL_SLUGS regardless of its own disable flag; E1-D's rail doesn't get a separate
+      // exposure decision from B-1).
       reply.send(ok(id, { tools: MCP_TOOL_SLUGS.map(toolDef) }));
       return;
     }

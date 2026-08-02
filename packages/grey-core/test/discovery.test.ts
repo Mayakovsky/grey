@@ -3,14 +3,28 @@ import { describe, it, expect } from 'vitest';
 import { makeApp } from './_helpers';
 
 describe('discovery routes — Bazaar index (E1-B, Invariant #33)', () => {
-  it('GET /v1/discovery/services lists all 9 offerings, discoverable and free (no x402 gate)', async () => {
+  it('GET /v1/discovery/services lists the 7 enabled offerings, discoverable and free (no x402 gate)', async () => {
     const app = makeApp();
     const res = await app.inject({ method: 'GET', url: '/v1/discovery/services' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { services: Array<{ slug: string; discoverable: boolean }> };
-    expect(body.services).toHaveLength(9);
+    expect(body.services).toHaveLength(7);
     expect(body.services.every((s) => s.discoverable)).toBe(true);
     expect(body.services.map((s) => s.slug)).toContain('legitimacy_scan');
+  });
+
+  it('merge-prep ruling: not-yet-offered offerings (enabled:false) are absent from the list AND their own detail page 404s', async () => {
+    const app = makeApp();
+    const list = await app.inject({ method: 'GET', url: '/v1/discovery/services' });
+    const body = list.json() as { services: Array<{ slug: string }> };
+    const slugs = body.services.map((s) => s.slug);
+    expect(slugs).not.toContain('daily_greenlight_list');
+    expect(slugs).not.toContain('scam_alert_feed');
+
+    for (const slug of ['daily_greenlight_list', 'scam_alert_feed']) {
+      const detail = await app.inject({ method: 'GET', url: `/v1/discovery/services/${slug}` });
+      expect(detail.statusCode, slug).toBe(404);
+    }
   });
 
   it('GET /v1/discovery/services/:slug returns the full evaluation artifact, incl. a sample (E1-C)', async () => {

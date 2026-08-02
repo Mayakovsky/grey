@@ -32,14 +32,16 @@ describe('MCP — initialize + tools/list (E1-D)', () => {
     expect(body.result.capabilities.tools).toBeDefined();
   });
 
-  it('tools/list projects the SAME EvaluationKit source as the HTTP surface — 9 tools, never the trust rung', async () => {
+  it('tools/list projects the SAME EvaluationKit source as the HTTP surface — 7 tools: never the trust rung, never a not-yet-offered offering', async () => {
     const app = makeApp({}, undefined, { mcp: mcpDeps });
     const res = await app.inject({ method: 'POST', url: '/v1/mcp', payload: rpc('tools/list') });
     const body = res.json();
-    expect(body.result.tools).toHaveLength(9);
+    expect(body.result.tools).toHaveLength(7);
     const names = body.result.tools.map((t: { name: string }) => t.name);
     expect(names).toContain('legitimacy_scan');
     expect(names).not.toContain('legitimacy_scan_trust_rung');
+    expect(names).not.toContain('daily_greenlight_list'); // merge-prep: not-yet-offered
+    expect(names).not.toContain('scam_alert_feed'); // merge-prep: not-yet-offered
     const legit = body.result.tools.find((t: { name: string }) => t.name === 'legitimacy_scan');
     expect(legit.inputSchema).toBeTruthy();
     expect(typeof legit.description).toBe('string');
@@ -53,18 +55,25 @@ describe('MCP — initialize + tools/list (E1-D)', () => {
   });
 });
 
+// Note: mcp.ts's `isFree` branch (skip payment for a FREE-list tool) has no live coverage via
+// tools/call right now — both FREE offerings (daily_greenlight_list, scam_alert_feed) are
+// enabled:false (merge-prep ruling) and are therefore excluded from MCP_TOOL_SLUGS entirely (see
+// the not-yet-offered test below). If a future offering ships free+enabled, add a tools/call
+// happy-path test against that slug here.
 describe('MCP — tools/call (E1-D)', () => {
-  it('a free tool runs with no payment required', async () => {
+  it('merge-prep ruling: not-yet-offered offerings cannot be called by name, same as the trust rung', async () => {
     const app = makeApp({}, undefined, { mcp: mcpDeps });
-    const res = await app.inject({
-      method: 'POST',
-      url: '/v1/mcp',
-      payload: rpc('tools/call', { name: 'scam_alert_feed', arguments: {} }),
-    });
-    const body = res.json();
-    expect(body.result.isError).toBeFalsy();
-    const envelope = JSON.parse(body.result.content[0].text);
-    expect(envelope.offering).toBe('scam_alert_feed');
+    for (const name of ['daily_greenlight_list', 'scam_alert_feed']) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/mcp',
+        payload: rpc('tools/call', { name, arguments: {} }),
+      });
+      const body = res.json();
+      expect(body.error, name).toBeDefined();
+      expect(body.error.code, name).toBe(-32602);
+      expect(body.result, name).toBeUndefined();
+    }
   });
 
   it('a paid tool without payment returns isError:true carrying PaymentRequirements', async () => {

@@ -4,6 +4,7 @@ import {
   PRICING_TABLE,
   NETWORK_MULTIPLIER,
   computeClassFor,
+  isEnabled,
   networkMultiplierFor,
   canonicalUsdFor,
   resolvePriceUsd,
@@ -78,6 +79,14 @@ describe('pricing — computeClass + canonical table (E1-A, Invariant #30/#31)',
       expect(PRICING_TABLE[slug].canonicalUsd).toBeNull();
       expect(() => canonicalUsdFor(slug)).toThrow(/no canonical price/);
     }
+  });
+
+  it('merge-prep ruling: the 2 unpriced offerings are enabled:false (not-yet-offered, not a pricing gap) — 7 priced + 2 disabled = 9', () => {
+    const disabled = ALL_SLUGS.filter((slug) => !isEnabled(slug));
+    expect(disabled.sort()).toEqual(['daily_greenlight_list', 'scam_alert_feed']);
+    const enabled = ALL_SLUGS.filter((slug) => isEnabled(slug));
+    expect(enabled).toHaveLength(8); // 7 priced + the trust rung (priced, gated by its own runtime flag)
+    expect(isEnabled('legitimacy_scan_trust_rung')).toBe(true); // static table says "real offering"; route reachability is a separate runtime flag
   });
 
   it('networkMultiplier resolves to 1.00 for both live channels today (Invariant #31)', () => {

@@ -40,6 +40,15 @@ export function registerDiscoveryRoutes(app: FastifyInstance, opts: DiscoveryRou
     }
     // E1-C: the detail/capability page carries the evaluation artifact (adds a sample); the list
     // route above stays lean (no sample) — this is the only difference between the two.
-    reply.send(buildEvaluationArtifact(slug as OfferingSlug));
+    const artifact = buildEvaluationArtifact(slug as OfferingSlug);
+    // Merge-prep: listableSlugs() only excludes the trust rung when disabled — a not-yet-offered
+    // offering (enabled:false in PRICING_TABLE) is still registry-present, so the DETAIL route
+    // needs its own discoverable check too, or it'd 200 with a full artifact for something the
+    // list route already hides. Same field, same source, second surface.
+    if (!artifact.discoverable) {
+      reply.code(404).send({ error: `not found or not discoverable: ${slug}` });
+      return;
+    }
+    reply.send(artifact);
   });
 }

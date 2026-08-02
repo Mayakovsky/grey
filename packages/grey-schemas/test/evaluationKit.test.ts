@@ -11,12 +11,18 @@ describe('EvaluationKit — Bazaar extension projection (E1-B, Invariant #33)', 
     const kits = buildAllEvaluationKits();
     expect(kits).toHaveLength(10);
     for (const k of kits) {
-      expect(k.discoverable).toBe(true);
       expect(typeof k.description).toBe('string');
       expect(k.outputSchema).toBeTruthy();
       expect(Array.isArray(k.tags)).toBe(true);
       expect(Array.isArray(k.dropped)).toBe(true);
     }
+  });
+
+  it('discoverable tracks PRICING_TABLE.enabled — 8 enabled, 2 not-yet-offered (merge-prep ruling)', () => {
+    const kits = buildAllEvaluationKits();
+    const notYetOffered = kits.filter((k) => !k.discoverable).map((k) => k.slug);
+    expect(notYetOffered.sort()).toEqual(['daily_greenlight_list', 'scam_alert_feed']);
+    expect(kits.filter((k) => k.discoverable)).toHaveLength(8);
   });
 
   it('the 7 paid offerings carry an inputSchema; the 2 free resources do not', () => {

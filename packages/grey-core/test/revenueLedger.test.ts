@@ -88,7 +88,7 @@ describe('revenue ledger — recorded at settlement (E1-F)', () => {
     expect(sink).toHaveLength(0);
   });
 
-  it('MCP free tools never write a revenue event', async () => {
+  it('a not-yet-offered slug (merge-prep: daily_greenlight_list/scam_alert_feed, enabled:false) writes no revenue event — rejected before it ever reaches the payment/handler path', async () => {
     const sink: Array<unknown> = [];
     const app = makeApp({ revenueEventsSink: sink as never }, undefined, {
       mcp: { x402Config: cfg, ...relayerStubs },

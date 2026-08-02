@@ -37,7 +37,7 @@ describe('trust rung — unreachable by default (E1-C, Invariant #34, B-1)', () 
     const res = await app.inject({ method: 'GET', url: '/v1/discovery/services' });
     const body = res.json() as { services: Array<{ slug: string }> };
     expect(body.services.map((s) => s.slug)).not.toContain('legitimacy_scan_trust_rung');
-    expect(body.services).toHaveLength(9);
+    expect(body.services).toHaveLength(7); // 9 built offerings minus the 2 not-yet-offered (merge-prep)
   });
 
   it('its own discovery/capability detail page also 404s while disabled', async () => {
@@ -74,7 +74,7 @@ describe('trust rung — correctly reachable when explicitly enabled (proves the
     const res = await app.inject({ method: 'GET', url: '/v1/discovery/services' });
     const body = res.json() as { services: Array<{ slug: string }> };
     expect(body.services.map((s) => s.slug)).toContain('legitimacy_scan_trust_rung');
-    expect(body.services).toHaveLength(10);
+    expect(body.services).toHaveLength(8); // 7 enabled + the trust rung, still minus the 2 not-yet-offered
   });
 
   it('buildServer throws if trustRungEnabled is true without a trustRungPreHandler (fail closed on misconfiguration)', async () => {
