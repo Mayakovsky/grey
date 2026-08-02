@@ -12,6 +12,7 @@
     "./envelope": { "types": "./dist/envelope/index.d.ts", "default": "./dist/envelope/index.js" },
     "./validators": { "types": "./dist/validators/index.d.ts", "default": "./dist/validators/index.js" },
     "./pricing": { "types": "./dist/pricing/index.d.ts", "default": "./dist/pricing/index.js" },
+    "./evaluationKit": { "types": "./dist/evaluationKit/index.d.ts", "default": "./dist/evaluationKit/index.js" },
     "./openapi": "./openapi/openapi.yaml"
   },
   "files": ["dist", "openapi"],

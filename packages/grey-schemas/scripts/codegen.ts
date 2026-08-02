@@ -33,6 +33,7 @@ const GROUPS: CodegenGroup[] = [
     // Schema file -> generated type name (Q4 naming table, locked verbatim).
     nameMap: {
       'legitimacy_scan.schema.json': 'LegitimacyScanResponse',
+      'legitimacy_scan_trust_rung.schema.json': 'LegitimacyScanTrustRungResponse',
       'verify_whitepaper.schema.json': 'VerifyWhitepaperResponse',
       'verify_full_tech.schema.json': 'VerifyFullTechResponse',
       'claim_extraction.schema.json': 'ClaimExtractionResponse',
@@ -53,6 +54,7 @@ const GROUPS: CodegenGroup[] = [
     // 7 paid offerings (M3 FDQ-10 — the 2 free GETs take no input, no request schema).
     nameMap: {
       'legitimacy_scan.schema.json': 'LegitimacyScanRequest',
+      'legitimacy_scan_trust_rung.schema.json': 'LegitimacyScanTrustRungRequest',
       'verify_whitepaper.schema.json': 'VerifyWhitepaperRequest',
       'verify_full_tech.schema.json': 'VerifyFullTechRequest',
       'claim_extraction.schema.json': 'ClaimExtractionRequest',

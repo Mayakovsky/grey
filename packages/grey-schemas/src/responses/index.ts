@@ -6,6 +6,7 @@
 // re-declares LegitimacyScanResponse/DiscoveryAttempt), so a wildcard re-export across files
 // would collide on the shared names. The shared $def types come from `_shared` once.
 export type { LegitimacyScanResponse } from '../generated/v1/LegitimacyScanResponse';
+export type { LegitimacyScanTrustRungResponse } from '../generated/v1/LegitimacyScanTrustRungResponse';
 export type { VerifyWhitepaperResponse } from '../generated/v1/VerifyWhitepaperResponse';
 export type { VerifyFullTechResponse } from '../generated/v1/VerifyFullTechResponse';
 export type { ClaimExtractionResponse } from '../generated/v1/ClaimExtractionResponse';

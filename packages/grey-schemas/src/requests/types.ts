@@ -19,6 +19,13 @@ export interface LegitimacyScanRequest {
   project_name?: string;
 }
 
+/** E1-C trust rung — same identifier shape as legitimacy_scan. BUILT BUT BLOCKED (see
+ *  @grey/x402-middleware's trustRung.ts); this type existing does not mean the route is live. */
+export interface LegitimacyScanTrustRungRequest {
+  token_address: string;
+  project_name?: string;
+}
+
 export interface VerifyWhitepaperRequest {
   token_address: string;
   project_name?: string;
@@ -64,7 +71,9 @@ export type ComputeOfferingSlug =
 /** Maps a paid offering slug to its hand-authored request interface (the cacheOrLive input seam). */
 export type RequestFor<O extends PaidOfferingSlug> = O extends 'legitimacy_scan'
   ? LegitimacyScanRequest
-  : O extends 'verify_whitepaper'
+  : O extends 'legitimacy_scan_trust_rung'
+    ? LegitimacyScanTrustRungRequest
+    : O extends 'verify_whitepaper'
     ? VerifyWhitepaperRequest
     : O extends 'verify_full_tech'
       ? VerifyFullTechRequest

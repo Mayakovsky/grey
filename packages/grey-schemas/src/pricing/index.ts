@@ -4,6 +4,7 @@ export {
   PRICING_TABLE,
   NETWORK_MULTIPLIER,
   computeClassFor,
+  isEnabled,
   networkMultiplierFor,
   canonicalUsdFor,
   resolvePriceUsd,

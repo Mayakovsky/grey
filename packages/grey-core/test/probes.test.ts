@@ -21,6 +21,7 @@ function fakeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
     whitepapers: {} as HandlerDeps['whitepapers'],
     verifications: {} as HandlerDeps['verifications'],
     claims: {} as HandlerDeps['claims'],
+    revenueEvents: {} as HandlerDeps['revenueEvents'],
     logger: logger as unknown as HandlerDeps['logger'],
     clock: () => new Date('2026-06-14T00:00:00.000Z'),
     config: CONFIG,

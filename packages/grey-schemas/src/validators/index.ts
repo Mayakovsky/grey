@@ -10,6 +10,7 @@ import type { PaidOfferingSlug } from '../responses/types';
 
 import sharedSchema from '../responses/v1/_shared.schema.json';
 import legitimacyScanSchema from '../responses/v1/legitimacy_scan.schema.json';
+import legitimacyScanTrustRungSchema from '../responses/v1/legitimacy_scan_trust_rung.schema.json';
 import verifyWhitepaperSchema from '../responses/v1/verify_whitepaper.schema.json';
 import verifyFullTechSchema from '../responses/v1/verify_full_tech.schema.json';
 import claimExtractionSchema from '../responses/v1/claim_extraction.schema.json';
@@ -22,6 +23,7 @@ import envelopeSchema from '../responses/v1/envelope.schema.json';
 
 // M3 (Q7): request-body schemas for the 7 paid offerings (FDQ-10 — the 2 free GETs take no body).
 import legitimacyScanRequestSchema from '../requests/v1/legitimacy_scan.schema.json';
+import legitimacyScanTrustRungRequestSchema from '../requests/v1/legitimacy_scan_trust_rung.schema.json';
 import verifyWhitepaperRequestSchema from '../requests/v1/verify_whitepaper.schema.json';
 import verifyFullTechRequestSchema from '../requests/v1/verify_full_tech.schema.json';
 import claimExtractionRequestSchema from '../requests/v1/claim_extraction.schema.json';
@@ -41,6 +43,7 @@ addFormats(ajv);
 ajv.addSchema([
   sharedSchema,
   legitimacyScanSchema,
+  legitimacyScanTrustRungSchema,
   verifyWhitepaperSchema,
   verifyFullTechSchema,
   claimExtractionSchema,
@@ -52,6 +55,7 @@ ajv.addSchema([
   envelopeSchema,
   // M3 request schemas (distinct $id namespace: .../v1/requests/<file>).
   legitimacyScanRequestSchema,
+  legitimacyScanTrustRungRequestSchema,
   verifyWhitepaperRequestSchema,
   verifyFullTechRequestSchema,
   claimExtractionRequestSchema,
@@ -74,6 +78,7 @@ function compiledRequest(file: string): ValidateFunction {
 
 // Per-offering payload validators (validate the inner response shape).
 export const legitimacyScanValidator = compiled('legitimacy_scan.schema.json');
+export const legitimacyScanTrustRungValidator = compiled('legitimacy_scan_trust_rung.schema.json');
 export const verifyWhitepaperValidator = compiled('verify_whitepaper.schema.json');
 export const verifyFullTechValidator = compiled('verify_full_tech.schema.json');
 export const claimExtractionValidator = compiled('claim_extraction.schema.json');
@@ -89,6 +94,7 @@ export const envelopeValidator = compiled('envelope.schema.json');
 /** Per-offering validator lookup by canonical slug. */
 export const offeringValidators: Record<string, ValidateFunction> = {
   legitimacy_scan: legitimacyScanValidator,
+  legitimacy_scan_trust_rung: legitimacyScanTrustRungValidator,
   verify_whitepaper: verifyWhitepaperValidator,
   verify_full_tech: verifyFullTechValidator,
   claim_extraction: claimExtractionValidator,
@@ -104,6 +110,7 @@ export const offeringValidators: Record<string, ValidateFunction> = {
 // delegates request-body validation to these (no second ajv instance — HC#12).
 
 export const legitimacyScanRequestValidator = compiledRequest('legitimacy_scan.schema.json');
+export const legitimacyScanTrustRungRequestValidator = compiledRequest('legitimacy_scan_trust_rung.schema.json');
 export const verifyWhitepaperRequestValidator = compiledRequest('verify_whitepaper.schema.json');
 export const verifyFullTechRequestValidator = compiledRequest('verify_full_tech.schema.json');
 export const claimExtractionRequestValidator = compiledRequest('claim_extraction.schema.json');
@@ -111,9 +118,10 @@ export const claimHistoryRequestValidator = compiledRequest('claim_history.schem
 export const quickProtocolFactsRequestValidator = compiledRequest('quick_protocol_facts.schema.json');
 export const dailyTechBriefRequestValidator = compiledRequest('daily_tech_brief.schema.json');
 
-/** Per-paid-offering request-body validator lookup (7 entries; the 2 free GETs have no body — FDQ-10). */
+/** Per-paid-offering request-body validator lookup (8 entries; the 2 free GETs have no body — FDQ-10). */
 export const offeringRequestValidators: Record<PaidOfferingSlug, ValidateFunction> = {
   legitimacy_scan: legitimacyScanRequestValidator,
+  legitimacy_scan_trust_rung: legitimacyScanTrustRungRequestValidator,
   verify_whitepaper: verifyWhitepaperRequestValidator,
   verify_full_tech: verifyFullTechRequestValidator,
   claim_extraction: claimExtractionRequestValidator,
