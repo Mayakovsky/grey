@@ -6,7 +6,8 @@ import type { HandlerDeps } from '../../deps';
 import { offeringHandlers } from '../../handlers';
 import { buildEnvelope } from '../../envelope/build';
 
-const FREE = ['daily_greenlight_list', 'scam_alert_feed'] as const;
+// Exported so other surfaces (e.g. server/routes/mcp.ts, E1-D) reuse this exact list.
+export const FREE = ['daily_greenlight_list', 'scam_alert_feed'] as const;
 
 export function registerResourceRoutes(app: FastifyInstance, deps: HandlerDeps): void {
   for (const slug of FREE) {

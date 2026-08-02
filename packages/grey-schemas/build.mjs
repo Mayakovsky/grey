@@ -14,6 +14,7 @@ await buildPackage({
     'src/envelope/index.ts',
     'src/validators/index.ts',
     'src/pricing/index.ts',
+    'src/evaluationKit/index.ts',
   ],
   // ajv 8.x has no `exports` map; its extensionless deep import must carry `.js` for Node ESM.
   alias: { 'ajv/dist/2020': 'ajv/dist/2020.js' },

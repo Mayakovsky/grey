@@ -8,6 +8,9 @@ info:
     Movement 2.5 (schema layer); routes are placeholders that Movement 3 (grey-core)
     is authoritative for and may relocate. x402 payment integration is Movement 5;
     this document declares the payment CONTRACT only, not its implementation.
+    Bazaar discovery metadata (E1-B) is NOT hand-mirrored here (Invariant #33 —
+    single source, no per-platform metadata): every 402 response's `accepts[].extra.bazaar`
+    and `GET /v1/discovery/services` project the same @grey/schemas/evaluationKit source live.
 servers:
   - url: https://whitepapergrey.com
     description: Live domain

@@ -20,7 +20,8 @@ describe('buildPaymentRequirements — strict-canonical x402', () => {
     expect(a.asset).toBe(TEST_CFG.usdc.address);
     expect(a.maxTimeoutSeconds).toBe(120);
     expect(a.resource).toBe('/v1/offerings/verify_whitepaper');
-    expect(a.extra).toEqual({ name: TEST_CFG.usdc.name, version: TEST_CFG.usdc.version });
+    expect(a.extra.name).toBe(TEST_CFG.usdc.name);
+    expect(a.extra.version).toBe(TEST_CFG.usdc.version);
     expect(body.error).toBe('payment required');
   });
 
@@ -37,11 +38,27 @@ describe('buildPaymentRequirements — strict-canonical x402', () => {
   });
 
   it('carries per-slug pricing', () => {
-    expect(buildPaymentRequirements(TEST_CFG, 'daily_tech_brief', '/r').accepts[0].maxAmountRequired).toBe(
-      '8000000',
+    expect(
+      buildPaymentRequirements(TEST_CFG, 'daily_tech_brief', '/r').accepts[0].maxAmountRequired,
+    ).toBe('8000000');
+    expect(
+      buildPaymentRequirements(TEST_CFG, 'quick_protocol_facts', '/r').accepts[0].maxAmountRequired,
+    ).toBe('300000');
+  });
+
+  it('carries Bazaar discovery metadata from the single EvaluationKit source (E1-B, Invariant #33)', () => {
+    const body = buildPaymentRequirements(
+      TEST_CFG,
+      'legitimacy_scan',
+      '/v1/offerings/legitimacy_scan',
     );
-    expect(buildPaymentRequirements(TEST_CFG, 'quick_protocol_facts', '/r').accepts[0].maxAmountRequired).toBe(
-      '300000',
-    );
+    const bazaar = body.accepts[0].extra.bazaar;
+    expect(bazaar.discoverable).toBe(true);
+    expect(bazaar.serviceName).toBe('Project Legitimacy Scan');
+    expect(bazaar.tags).toContain('crypto');
+    expect(typeof bazaar.description).toBe('string');
+    expect(bazaar.inputSchema).toBeTruthy();
+    expect(bazaar.outputSchema).toBeTruthy();
+    expect(bazaar.iconUrl).toBe('https://whitepapergrey.com/icons/legitimacy_scan.svg');
   });
 });

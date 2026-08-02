@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/requests/legitimacy_scan_trust_rung.schema.json",
+  "title": "LegitimacyScanTrustRungRequest",
+  "description": "Request body for the trust-rung offering (E1-C). Same identifier shape as legitimacy_scan.",
+  "type": "object",
+  "properties": {
+    "token_address": { "type": "string" },
+    "project_name": { "type": "string" }
+  },
+  "required": ["token_address"],
+  "additionalProperties": false
+}

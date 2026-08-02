@@ -10,6 +10,7 @@ import {
   WhitepapersRepo,
   VerificationsRepo,
   ClaimsRepo,
+  RevenueEventsRepo,
   type GreyDb,
   type Logger,
   type PipelineDeps,
@@ -34,6 +35,12 @@ export interface HandlerDeps {
   whitepapers: WhitepapersRepo;
   verifications: VerificationsRepo;
   claims: ClaimsRepo;
+  /** E1-F: append-only revenue ledger, written by the route/MCP layer after settle() succeeds
+   *  (offerings.ts, trustRung.ts, mcp.ts). The only WRITE repo on HandlerDeps — everything else
+   *  here is cache-read (M3's "cache-read-only" posture, unchanged for whitepapers/verifications/
+   *  claims). See packages/grey-pipeline/src/persistence/repositories.ts's MarginRepo for the
+   *  read/aggregation side. */
+  revenueEvents: RevenueEventsRepo;
   logger: Logger;
   /** Injectable clock for deterministic timestamps in tests. */
   clock: () => Date;
@@ -84,6 +91,7 @@ export function createHandlerDeps(env: CreateHandlerDepsEnv = {}): HandlerDeps {
     whitepapers: new WhitepapersRepo(db),
     verifications: new VerificationsRepo(db),
     claims: new ClaimsRepo(db),
+    revenueEvents: new RevenueEventsRepo(db),
     logger: createLogger({ component: 'grey-core' }),
     clock: env.clock ?? ((): Date => new Date()),
     config: {

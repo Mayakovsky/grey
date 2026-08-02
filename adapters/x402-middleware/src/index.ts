@@ -15,6 +15,14 @@ export {
 } from './prices.js';
 export type { PaidSlug } from './prices.js';
 export { buildPaymentRequirements } from './challenge.js';
+export {
+  TRUST_RUNG_SLUG,
+  trustRungEnabled,
+  trustRungPriceAtomic,
+  trustRungPriceUsd,
+  buildTrustRungPaymentRequirements,
+  makeTrustRungPreHandler,
+} from './trustRung.js';
 export { decodePaymentHeader, verifyPayment } from './verify.js';
 export type { VerifyResult } from './verify.js';
 export { settle } from './settle.js';

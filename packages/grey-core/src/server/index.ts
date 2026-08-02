@@ -9,12 +9,40 @@ import { installValidatorCompiler } from './validators';
 import { registerProbes } from './routes/probes';
 import { registerOfferingRoutes } from './routes/offerings';
 import { registerResourceRoutes } from './routes/resources';
+import { registerDiscoveryRoutes } from './routes/discovery';
+import { registerTrustRungRoute } from './routes/trustRung';
+import { registerMcpRoute, type McpRouteDeps } from './routes/mcp';
 
-export function buildServer(deps: HandlerDeps, x402PreHandler: preHandlerHookHandler): FastifyInstance {
+export interface BuildServerOptions {
+  /** E1-C, Invariant #34: default OFF. Only start.ts (reading @grey/x402-middleware's
+   *  trustRungEnabled()) and trust-rung-specific tests should ever pass `true`. */
+  trustRungEnabled?: boolean;
+  /** Required when trustRungEnabled is true — @grey/x402-middleware's
+   *  makeTrustRungPreHandler(...) output. NOT the general x402PreHandler (different slug/price). */
+  trustRungPreHandler?: preHandlerHookHandler;
+  /** E1-D: mounts POST /v1/mcp when present. Optional so existing callers (and most tests) are
+   *  unaffected; start.ts always passes it (MCP is unconditional — only the trust rung is gated). */
+  mcp?: McpRouteDeps;
+}
+
+export function buildServer(
+  deps: HandlerDeps,
+  x402PreHandler: preHandlerHookHandler,
+  opts: BuildServerOptions = {},
+): FastifyInstance {
+  const trustRungEnabled = opts.trustRungEnabled ?? false;
   const app = Fastify({ logger: false });
   installValidatorCompiler(app);
   registerProbes(app, deps);
   registerOfferingRoutes(app, deps, x402PreHandler); // paid POST × 7, behind the x402 gate
   registerResourceRoutes(app, deps); // free GET × 2
+  registerDiscoveryRoutes(app, { trustRungEnabled }); // E1-B: free Bazaar discovery index, GET × 2
+  if (trustRungEnabled) {
+    if (!opts.trustRungPreHandler) {
+      throw new Error('buildServer: trustRungEnabled requires opts.trustRungPreHandler');
+    }
+    registerTrustRungRoute(app, deps, opts.trustRungPreHandler); // E1-C, default off
+  }
+  if (opts.mcp) registerMcpRoute(app, deps, opts.mcp); // E1-D: paid MCP tools, POST × 1
   return app;
 }

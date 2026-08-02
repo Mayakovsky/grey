@@ -6,7 +6,7 @@
 // new-architecture additions (request audit trail + cost telemetry) per the audit.
 
 import { eq, and, gte, desc, sql } from 'drizzle-orm';
-import { whitepapers, claims, verifications, requests, costEvents } from './schema';
+import { whitepapers, claims, verifications, requests, costEvents, revenueEvents } from './schema';
 import type {
   WhitepaperRow,
   WhitepaperInsert,
@@ -18,6 +18,8 @@ import type {
   RequestInsert,
   CostEventRow,
   CostEventInsert,
+  RevenueEventRow,
+  RevenueEventInsert,
 } from './schema';
 import type { GreyDb } from './client';
 
@@ -296,5 +298,111 @@ export class CostEventsRepo {
   async create(data: CostEventInsert): Promise<CostEventRow> {
     const rows = await this.db.insert(costEvents).values(data).returning();
     return rows[0];
+  }
+}
+
+// ── E1-F: revenue ledger + margin report (Expansion Round 2, sub-unit 4) ──
+
+export class RevenueEventsRepo {
+  constructor(private db: GreyDb) {}
+
+  /** One row per settled payment. Written by grey-core's route/MCP layer AFTER settle() succeeds
+   *  — never speculatively, never on a 402/verify failure. */
+  async create(data: RevenueEventInsert): Promise<RevenueEventRow> {
+    const rows = await this.db.insert(revenueEvents).values(data).returning();
+    return rows[0];
+  }
+}
+
+export interface MarginReportRow {
+  offering: string;
+  /** Revenue broken out per channel — the ledger's actual channel x offering attribution. */
+  revenueByChannelUsd: Record<string, number>;
+  totalRevenueUsd: number;
+  /**
+   * Compute spend for this offering, channel-agnostic. Scoping note: cost_events has no channel
+   * dimension (a legitimacy_scan pipeline run costs the same regardless of which channel
+   * triggered it) — splitting cost by channel would require either plumbing a channel identifier
+   * all the way through cacheOrLive into the pipeline's persistence layer, or an allocation
+   * methodology (e.g. proportional to revenue share). Both are judgment calls beyond this pass's
+   * scope — reported here in aggregate per offering, not invented per channel.
+   */
+  totalCostUsd: number;
+  /** totalRevenueUsd - totalCostUsd. The E1->E2 gate's "positive realized margin on LIVE_ALLOWED
+   *  offerings" reads this field. CACHE_ONLY offerings trivially show margin == revenue
+   *  (cost_events never has rows for them — Invariant #30). */
+  realizedMarginUsd: number;
+}
+
+/**
+ * Pure aggregation — takes already-fetched rows (mirrors VerificationsRepo.getMonthlyCostSummary's
+ * fetch-then-reduce-in-JS convention) so it's unit-testable with fixture arrays, no live DB
+ * required. `costByOffering` keys off `requests.offering` (cost_events joins through requests;
+ * see the migration's comment for why cost isn't itself channel-split).
+ */
+export function computeMarginReport(
+  revenueRows: Array<Pick<RevenueEventRow, 'channel' | 'offering' | 'revenueUsd'>>,
+  costByOffering: Map<string, number>,
+): MarginReportRow[] {
+  const byOffering = new Map<string, Record<string, number>>();
+  for (const row of revenueRows) {
+    const channels = byOffering.get(row.offering) ?? {};
+    channels[row.channel] = (channels[row.channel] ?? 0) + row.revenueUsd;
+    byOffering.set(row.offering, channels);
+  }
+  // Union of offerings that have EITHER revenue or cost — an offering with cost but zero
+  // settled revenue yet (e.g. mid-rollout) should still surface a (negative) margin, not vanish.
+  const offerings = new Set<string>([...byOffering.keys(), ...costByOffering.keys()]);
+
+  return [...offerings].sort().map((offering) => {
+    const revenueByChannelUsd = byOffering.get(offering) ?? {};
+    const totalRevenueUsd = Object.values(revenueByChannelUsd).reduce((a, b) => a + b, 0);
+    const totalCostUsd = costByOffering.get(offering) ?? 0;
+    return {
+      offering,
+      revenueByChannelUsd,
+      totalRevenueUsd,
+      totalCostUsd,
+      realizedMarginUsd: totalRevenueUsd - totalCostUsd,
+    };
+  });
+}
+
+export class MarginRepo {
+  constructor(private db: GreyDb) {}
+
+  /** All revenue_events rows (channel, offering, revenueUsd) since `since`. */
+  async getRevenueRows(
+    since: Date,
+  ): Promise<Array<Pick<RevenueEventRow, 'channel' | 'offering' | 'revenueUsd'>>> {
+    return this.db
+      .select({
+        channel: revenueEvents.channel,
+        offering: revenueEvents.offering,
+        revenueUsd: revenueEvents.revenueUsd,
+      })
+      .from(revenueEvents)
+      .where(gte(revenueEvents.settledAt, since));
+  }
+
+  /** Total compute spend per offering since `since`, via cost_events JOIN requests (requests is
+   *  where `offering` lives — cost_events itself carries no offering column). */
+  async getCostByOffering(since: Date): Promise<Map<string, number>> {
+    const rows = await this.db
+      .select({ offering: requests.offering, costUsd: costEvents.costUsd })
+      .from(costEvents)
+      .innerJoin(requests, eq(costEvents.requestId, requests.id))
+      .where(gte(costEvents.createdAt, since));
+    const out = new Map<string, number>();
+    for (const r of rows) out.set(r.offering, (out.get(r.offering) ?? 0) + r.costUsd);
+    return out;
+  }
+
+  async getMarginReport(since: Date): Promise<MarginReportRow[]> {
+    const [revenueRows, costByOffering] = await Promise.all([
+      this.getRevenueRows(since),
+      this.getCostByOffering(since),
+    ]);
+    return computeMarginReport(revenueRows, costByOffering);
   }
 }

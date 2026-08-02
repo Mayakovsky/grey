@@ -9,13 +9,19 @@ import type { OfferingSlug } from '../responses/types';
 export type ComputeClass = 'CACHE_ONLY' | 'LIVE_ALLOWED' | 'LIVE_PRIORITY';
 
 /**
- * One canonical USD price per offering (spec §2.3, Invariant #31) — channel-agnostic. `null`
- * means no canonical price has been sourced yet (flagged for Desktop, not a value to invent).
+ * One canonical USD price per offering (spec §2.3, Invariant #31) — channel-agnostic.
+ *
+ * `enabled: false` (merge-prep ruling, Forces 2026-07-26 session) means the offering is not being
+ * sold yet, period — a deliberate not-yet-offered status, not a pricing gap. `canonicalUsd` stays
+ * `null` for a disabled offering; don't invent a price for one that isn't for sale. Toggle-on is a
+ * separate, later Forces decision (needs daily-customer usage data first per the ruling) — this
+ * field is not something Kov or Bion flips.
  */
 export interface OfferingPricing {
   readonly slug: OfferingSlug;
   readonly canonicalUsd: number | null;
   readonly computeClass: ComputeClass;
+  readonly enabled: boolean;
 }
 
 /** A channel this canonical price is realised on. Grows with each expansion (E2 Kite, E3 Olas, ...). */

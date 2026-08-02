@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/legitimacy_scan_trust_rung.schema.json",
+  "title": "LegitimacyScanTrustRungResponse",
+  "description": "Response body for the $0.10 CACHE_ONLY trust-rung offering (E1-C, spec §2.4). A cheap teaser of legitimacy_scan's verdict, never live-computed — BUILT BUT BLOCKED from live exposure on every channel per Forces ruling B-1, Invariant #34.",
+  "type": "object",
+  "properties": {
+    "projectName": { "type": "string" },
+    "tokenAddress": { "type": ["string", "null"] },
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "CONDITIONAL", "FAIL", "INSUFFICIENT_DATA", "NOT_IN_DATABASE"]
+    },
+    "generatedAt": { "type": "string" },
+    "note": { "type": "string" }
+  },
+  "required": ["projectName", "tokenAddress", "verdict", "generatedAt", "note"],
+  "additionalProperties": false
+}

@@ -23,7 +23,8 @@
     "start": "tsx src/start.ts",
     "smoke": "tsx scripts/smoke.ts",
     "dist-boot-smoke": "tsx scripts/dist-boot-smoke.ts",
-    "parity-diff": "tsx scripts/parity-diff.ts"
+    "parity-diff": "tsx scripts/parity-diff.ts",
+    "margin-report": "tsx scripts/margin-report.ts"
   },
   "dependencies": {
     "@grey/pipeline": "workspace:*",

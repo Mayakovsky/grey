@@ -31,6 +31,7 @@ export default defineConfig({
       { find: /^@grey\/schemas\/envelope$/, replacement: src('./packages/grey-schemas/src/envelope/index.ts') },
       { find: /^@grey\/schemas\/validators$/, replacement: src('./packages/grey-schemas/src/validators/index.ts') },
       { find: /^@grey\/schemas\/pricing$/, replacement: src('./packages/grey-schemas/src/pricing/index.ts') },
+      { find: /^@grey\/schemas\/evaluationKit$/, replacement: src('./packages/grey-schemas/src/evaluationKit/index.ts') },
       { find: /^@grey\/pipeline$/, replacement: src('./packages/grey-pipeline/src/index.ts') },
       { find: /^@grey\/x402-middleware$/, replacement: src('./adapters/x402-middleware/src/index.ts') },
     ],

@@ -1,5 +1,6 @@
 // @grey/x402-middleware — shared types for the x402 `exact`-scheme sell-side gate.
 import type { Address, Hex } from 'viem';
+import type { EvaluationKitEntry } from '@grey/schemas/evaluationKit';
 
 export type X402Network = 'eip155:8453' | 'eip155:84532';
 
@@ -68,8 +69,22 @@ export interface PaymentRequirements {
     payTo: Address;
     maxTimeoutSeconds: number;
     asset: Address;
-    /** EIP-712 domain hints the buyer needs to sign the authorization. */
-    extra: { name: string; version: string };
+    /** EIP-712 domain hints the buyer needs to sign the authorization, plus (E1-B) the Bazaar
+     *  discovery metadata projected from @grey/schemas/evaluationKit — "on every x402 route". */
+    extra: {
+      name: string;
+      version: string;
+      bazaar: Pick<
+        EvaluationKitEntry,
+        | 'discoverable'
+        | 'serviceName'
+        | 'tags'
+        | 'description'
+        | 'inputSchema'
+        | 'outputSchema'
+        | 'iconUrl'
+      >;
+    };
   }>;
   error?: string;
 }

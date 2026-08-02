@@ -34,13 +34,24 @@ function reqReply(url: string, header?: string) {
     },
   };
   const req = { url, headers: header ? { 'x-payment': header } : {} };
-  return { req: req as unknown as FastifyRequest, reply: reply as unknown as FastifyReply, m: reply };
+  return {
+    req: req as unknown as FastifyRequest,
+    reply: reply as unknown as FastifyReply,
+    m: reply,
+  };
 }
 
 // Cast to a plain 2-arg callable — the Fastify hook type carries a `this: FastifyInstance`
 // context this handler never uses, so a direct call would trip TS2684.
-function gate(clients: { wallet: ReturnType<typeof mockWallet>; publicClient: ReturnType<typeof mockPublicClient> }) {
-  const h = makeX402PreHandler(TEST_CFG, { wallet: clients.wallet, publicClient: clients.publicClient, now });
+function gate(clients: {
+  wallet: ReturnType<typeof mockWallet>;
+  publicClient: ReturnType<typeof mockPublicClient>;
+}) {
+  const h = makeX402PreHandler(TEST_CFG, {
+    wallet: clients.wallet,
+    publicClient: clients.publicClient,
+    now,
+  });
   return h as unknown as (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
 }
 
@@ -53,6 +64,13 @@ describe('slugFromUrl', () => {
     expect(slugFromUrl('/v1/resources/scam_alert_feed')).toBeNull();
     expect(slugFromUrl('/v1/offerings/not_a_slug')).toBeNull();
   });
+
+  it('merge-prep Task 2 check: not-yet-offered offerings can never reach a 402/buildPaymentRequirements body — they are mounted (if at all) at /v1/resources/*, which x402PreHandler never gates, and even under /v1/offerings/* would resolve to no slug (isPaidSlug false)', () => {
+    for (const slug of ['daily_greenlight_list', 'scam_alert_feed']) {
+      expect(slugFromUrl(`/v1/resources/${slug}`), slug).toBeNull();
+      expect(slugFromUrl(`/v1/offerings/${slug}`), slug).toBeNull();
+    }
+  });
 });
 
 describe('makeX402PreHandler — orchestration', () => {
@@ -60,7 +78,9 @@ describe('makeX402PreHandler — orchestration', () => {
     const { req, reply, m } = reqReply('/v1/offerings/legitimacy_scan');
     await gate({ wallet: mockWallet(), publicClient: mockPublicClient() })(req, reply);
     expect(m.statusCode).toBe(402);
-    expect((m.body as { accepts: { maxAmountRequired: string }[] }).accepts[0].maxAmountRequired).toBe('250000');
+    expect(
+      (m.body as { accepts: { maxAmountRequired: string }[] }).accepts[0].maxAmountRequired,
+    ).toBe('250000');
   });
 
   it('402 on a malformed header', async () => {
@@ -72,7 +92,10 @@ describe('makeX402PreHandler — orchestration', () => {
   it('402 on a verify failure (underpayment)', async () => {
     const { header } = await signedPayment(TEST_CFG, { value: 1n });
     const { req, reply, m } = reqReply('/v1/offerings/legitimacy_scan', header);
-    await gate({ wallet: mockWallet(), publicClient: mockPublicClient({ used: false }) })(req, reply);
+    await gate({ wallet: mockWallet(), publicClient: mockPublicClient({ used: false }) })(
+      req,
+      reply,
+    );
     expect(m.statusCode).toBe(402);
     expect((m.body as { error: string }).error).toBe('underpayment');
   });
@@ -107,7 +130,10 @@ describe('makeX402PreHandler — orchestration', () => {
     const { header } = await signedPayment(TEST_CFG);
     const { req, reply, m } = reqReply('/v1/offerings/legitimacy_scan', header);
     const wallet = mockWallet();
-    await gate({ wallet, publicClient: mockPublicClient({ used: false, simRevert: true }) })(req, reply);
+    await gate({ wallet, publicClient: mockPublicClient({ used: false, simRevert: true }) })(
+      req,
+      reply,
+    );
     expect(m.statusCode).toBe(402); // clean 402, not a 502 after a wasted reverted tx
     expect(wallet.calls).toHaveLength(0); // nothing broadcast → zero relayer gas
     expect(m.headers['X-PAYMENT-RESPONSE']).toBeUndefined();

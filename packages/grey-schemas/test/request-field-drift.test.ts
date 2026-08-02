@@ -8,7 +8,7 @@
 // the interface (or vice versa) fails the test and/or typecheck, naming the drifted side.
 // Plus a validator round-trip on the per-offering valid/invalid fixtures.
 //
-// Covers the 7 PAID offerings only (FDQ-10) — the 2 free GETs take no request body.
+// Covers the 8 PAID offerings only (FDQ-10) — the 2 free GETs take no request body.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,7 @@ import { offeringRequestValidators } from '../src/validators';
 import type { PaidOfferingSlug } from '../src/responses/types';
 import type {
   LegitimacyScanRequest,
+  LegitimacyScanTrustRungRequest,
   VerifyWhitepaperRequest,
   VerifyFullTechRequest,
   DailyTechBriefRequest,
@@ -38,6 +39,10 @@ const fixture = (slug: string, kind: 'valid' | 'invalid'): unknown =>
 const legitimacyScanKeys = ['token_address', 'project_name'] as const satisfies readonly (keyof LegitimacyScanRequest)[];
 type _CkLegit = Exclude<keyof LegitimacyScanRequest, (typeof legitimacyScanKeys)[number]> extends never ? true : never;
 const _ckLegit: _CkLegit = true;
+
+const legitimacyScanTrustRungKeys = ['token_address', 'project_name'] as const satisfies readonly (keyof LegitimacyScanTrustRungRequest)[];
+type _CkTrustRung = Exclude<keyof LegitimacyScanTrustRungRequest, (typeof legitimacyScanTrustRungKeys)[number]> extends never ? true : never;
+const _ckTrustRung: _CkTrustRung = true;
 
 const verifyWhitepaperKeys = ['token_address', 'project_name', 'document_url'] as const satisfies readonly (keyof VerifyWhitepaperRequest)[];
 type _CkVw = Exclude<keyof VerifyWhitepaperRequest, (typeof verifyWhitepaperKeys)[number]> extends never ? true : never;
@@ -65,6 +70,7 @@ const _ckCe: _CkCe = true;
 
 const mirrors: Record<PaidOfferingSlug, readonly string[]> = {
   legitimacy_scan: legitimacyScanKeys,
+  legitimacy_scan_trust_rung: legitimacyScanTrustRungKeys,
   verify_whitepaper: verifyWhitepaperKeys,
   verify_full_tech: verifyFullTechKeys,
   daily_tech_brief: dailyTechBriefKeys,
@@ -77,8 +83,8 @@ const paidSlugs = Object.keys(mirrors) as PaidOfferingSlug[];
 
 describe('request-field-drift (Pattern 4b): schema properties ≡ keyof Interface', () => {
   it('compile-time mirror guards hold', () => {
-    expect([_ckLegit, _ckVw, _ckVft, _ckDtb, _ckCh, _ckQpf, _ckCe]).toEqual([
-      true, true, true, true, true, true, true,
+    expect([_ckLegit, _ckTrustRung, _ckVw, _ckVft, _ckDtb, _ckCh, _ckQpf, _ckCe]).toEqual([
+      true, true, true, true, true, true, true, true,
     ]);
   });
 

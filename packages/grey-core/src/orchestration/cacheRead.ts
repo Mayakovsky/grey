@@ -94,6 +94,35 @@ export function buildLegitimacyMiss(
   };
 }
 
+// ── tier 0: legitimacy_scan_trust_rung (E1-C, $0.10 CACHE_ONLY — BUILT BUT BLOCKED) ──
+// A cheap teaser of the tier-1 verdict, read from the SAME cache row legitimacy_scan reads —
+// never a live-compute path (this offering is not in ComputeOfferingSlug; cacheOrLive cannot even
+// be called with it). Reduced field set on purpose: it's meant to make the $0.25 offering's value
+// self-evident, not substitute for it.
+
+export function buildTrustRungHit(wp: WhitepaperRow, v: VerificationRow): Record<string, unknown> {
+  return {
+    projectName: wp.projectName,
+    tokenAddress: wp.tokenAddress,
+    verdict: v.verdict ?? 'INSUFFICIENT_DATA',
+    generatedAt: iso(v.verifiedAt),
+    note: 'Cache-only teaser — see legitimacy_scan for the full structural read.',
+  };
+}
+
+export function buildTrustRungMiss(
+  deps: HandlerDeps,
+  fallback: { tokenAddress?: string | null; projectName?: string },
+): Record<string, unknown> {
+  return {
+    projectName: fallback.projectName ?? 'Unknown',
+    tokenAddress: fallback.tokenAddress ?? null,
+    verdict: 'NOT_IN_DATABASE',
+    generatedAt: iso(deps.clock()),
+    note: 'Project not found in the Grey verification cache.',
+  };
+}
+
 // ── tier 2: verify_whitepaper (legitimacy + claims) ──
 
 export function buildVerifyWhitepaperHit(
