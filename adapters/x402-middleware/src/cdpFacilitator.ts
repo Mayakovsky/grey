@@ -5,32 +5,46 @@
 // discovery (confirmed empirically: `GET /platform/v2/x402/discovery/resources` is unauthenticated
 // and lists resources CDP has itself seen settle, independent of what a 402 body advertises).
 //
-// Buyer-facing wire format is UNCHANGED: the 402 challenge on the CDP-routed route
-// (`/v1/cdp/offerings/<slug>`) is byte-identical to the primary route's (same buildPaymentRequirements,
-// same X-PAYMENT header shape the buyer signs). Only the SERVER-SIDE call differs — instead of
-// Grey's own verify.ts/settle.ts against the local relayer, this file translates the decoded
-// payload into CDP's wire format and calls CDP's hosted /verify + /settle over HTTP.
+// v2-shaped challenge (CDP-route-only revision, see CDP-PHASE2-v2-challenge-CDP-route-only-KOV-
+// directive.md): `POST /v2/x402/validate` against the live route revealed that CDP's Bazaar
+// indexer requires the SELLER-FACING 402 response itself to be x402 protocol v2, not just the
+// CDP-facing verify/settle call — confirmed against @x402/core's own compiled source (not
+// guessed): "Create HTTP payment required response (v1 puts in body, v2 puts in header)". v2
+// puts the full PaymentRequired payload (base64 JSON) in a `PAYMENT-REQUIRED` response header and
+// leaves the JSON body empty; settlement success uses a `PAYMENT-RESPONSE` header (not
+// `X-PAYMENT-RESPONSE`). This is scoped ENTIRELY to this file / the `/v1/cdp/offerings/<slug>`
+// route — challenge.ts's buildPaymentRequirements (v1) and the primary/trust-rung routes are
+// untouched, per the directive's explicit scope ruling. The buyer's REQUEST header ALSO changes in
+// v2 — confirmed against the same compiled source (encodePaymentSignatureHeader switches on
+// x402Version: case 2 -> `PAYMENT-SIGNATURE`, case 1 -> `X-PAYMENT`) — an earlier revision of this
+// file wrongly assumed `X-PAYMENT` was unchanged and read that header on this route; fixed to read
+// `payment-signature`, per CDP-PHASE2-fix-payment-signature-header-KOV-directive.md. A v2-native
+// buyer signs against this route's v2-shaped `accepts[]` entry, so their payload is v2-shaped too
+// (`{x402Version:2, accepted, payload, ...}`) — decoded natively below, no v1-decode-then-translate
+// step needed anymore (that translation is gone from this file).
 //
-// Wire-shape note (load-bearing, verified live 2026-08-02): CDP's discovery endpoint returns
+// Wire-shape note (load-bearing, verified live 2026-08-02/03): CDP's discovery endpoint returns
 // `x402Version: 2` items whose `accepts[]` entries match @x402/core's (non-V1) `PaymentRequirements`
-// shape almost exactly (`scheme, network, asset, amount, payTo, maxTimeoutSeconds, extra` — NOT the
-// v1 `maxAmountRequired`/`resource`/`description` shape Grey's own types.ts uses for the buyer-facing
-// challenge). This confirms CDP's live facilitator speaks x402 protocol v2, so this file builds v2
-// PaymentPayload/PaymentRequirements for the CDP call specifically, translating from Grey's own
-// (unchanged, buyer-facing) v1 PaymentPayload. The INNER payload contents (EIP-3009
-// `{signature, authorization}`) are kept as-is — discovery's `extra.credentialTypes: ["authorization"]`
-// on "exact"-scheme entries indicates the same EIP-3009 credential shape carries through unchanged.
+// shape (`scheme, network, asset, amount, payTo, maxTimeoutSeconds, extra`). `extra.credentialTypes:
+// ["authorization"]` on live "exact"-scheme entries is included below on the same empirical basis.
 //
 // Auth: CDP_API_KEY_ID/CDP_API_KEY_SECRET are read ONCE by loadX402Config (cfg.cdp) — this file
 // does not re-read process.env itself, keeping Grey's own config loader the single source, even
 // though @coinbase/x402's createFacilitatorConfig() is *capable* of reading the env directly.
 import { createFacilitatorConfig } from '@coinbase/x402';
-import { HTTPFacilitatorClient, type FacilitatorClient } from '@x402/core/http';
+import {
+  HTTPFacilitatorClient,
+  type FacilitatorClient,
+  encodePaymentRequiredHeader,
+  encodePaymentResponseHeader,
+  decodePaymentSignatureHeader,
+} from '@x402/core/http';
 import {
   VerifyError,
   SettleError,
   type PaymentPayload as CdpPaymentPayload,
   type PaymentRequirements as CdpPaymentRequirements,
+  type PaymentRequired as CdpPaymentRequired,
 } from '@x402/core/types';
 import type {
   FastifyReply,
@@ -39,11 +53,12 @@ import type {
   preValidationHookHandler,
 } from 'fastify';
 import type { Hex } from 'viem';
-import type { X402Config, PaymentPayload } from './types.js';
+import type { OfferingSlug } from '@grey/schemas/responses';
+import { buildEvaluationArtifact } from '@grey/schemas/evaluationKit';
+import type { X402Config } from './types.js';
 import type { SettleOutcome } from './settle.js';
 import { isPaidSlug, priceAtomicFor } from './prices.js';
-import { buildPaymentRequirements } from './challenge.js';
-import { decodePaymentHeader } from './verify.js';
+import { buildCdpBazaarExtension } from './challenge.js';
 
 /** Extract the paid slug from `/v1/cdp/offerings/<slug>[?query]` — the CDP-routed mirror of
  *  preHandler.ts's slugFromUrl, deliberately a separate route family from `/v1/offerings/<slug>`
@@ -68,7 +83,12 @@ export function makeCdpFacilitatorClient(cfg: X402Config): FacilitatorClient {
   return new HTTPFacilitatorClient(facilitatorConfig);
 }
 
-function toCdpPaymentRequirements(cfg: X402Config, slug: string): CdpPaymentRequirements {
+/** The single `accepts[]` entry — same shape used both in the 402 challenge and handed to
+ *  verify/settle, so what's advertised and what's checked can never drift apart. */
+export function buildCdpPaymentRequirementsEntry(
+  cfg: X402Config,
+  slug: string,
+): CdpPaymentRequirements {
   return {
     scheme: 'exact',
     network: cfg.network,
@@ -76,30 +96,91 @@ function toCdpPaymentRequirements(cfg: X402Config, slug: string): CdpPaymentRequ
     amount: priceAtomicFor(slug).toString(),
     payTo: cfg.payTo,
     maxTimeoutSeconds: cfg.maxTimeoutSeconds,
-    extra: { name: cfg.usdc.name, version: cfg.usdc.version },
+    // name/version: EIP-712 domain hints (unchanged need from v1). credentialTypes: observed live
+    // on CDP's own discovery entries for "exact"-scheme accepts — empirical, not from docs.
+    extra: { name: cfg.usdc.name, version: cfg.usdc.version, credentialTypes: ['authorization'] },
   };
 }
 
-function toCdpPaymentPayload(
-  decoded: PaymentPayload,
-  requirements: CdpPaymentRequirements,
+/** The full v2 `PaymentRequired` 402 payload — CDP-route-only, never touches challenge.ts's v1
+ *  buildPaymentRequirements. Reuses buildCdpBazaarExtension (already shared with trustRung.ts)
+ *  for the discovery metadata, same EvaluationKit source as the primary route. */
+export function buildCdpChallenge(
+  cfg: X402Config,
+  slug: string,
   resourceUrl: string,
-): CdpPaymentPayload {
-  return {
+  error?: string,
+): CdpPaymentRequired {
+  const kit = buildEvaluationArtifact(slug as OfferingSlug);
+  const body: CdpPaymentRequired = {
     x402Version: 2,
-    resource: { url: resourceUrl },
-    accepted: requirements,
-    payload: {
-      signature: decoded.payload.signature,
-      authorization: decoded.payload.authorization,
+    resource: {
+      url: resourceUrl,
+      description: kit.description ?? undefined,
+      mimeType: 'application/json',
+      serviceName: kit.serviceName ?? undefined,
+      tags: [...kit.tags],
+      iconUrl: kit.iconUrl ?? undefined,
     },
+    accepts: [buildCdpPaymentRequirementsEntry(cfg, slug)],
+    // CdpBazaarExtension has no index signature, but is structurally a plain object — safe cast
+    // to the v2 spec's generic `extensions?: Record<string, unknown>` field.
+    extensions: buildCdpBazaarExtension(kit) as unknown as Record<string, unknown>,
   };
+  if (error) body.error = error;
+  return body;
+}
+
+/** Sends the v2 402: `PAYMENT-REQUIRED` header carries the full payload (base64 JSON); the JSON
+ *  body stays empty — @x402/core's own resource-server code does exactly this ("v1 puts in body,
+ *  v2 puts in header"), confirmed by reading its compiled source, not guessed. */
+function sendCdpChallenge(
+  reply: FastifyReply,
+  cfg: X402Config,
+  slug: string,
+  resourceUrl: string,
+  error?: string,
+): void {
+  const challenge = buildCdpChallenge(cfg, slug, resourceUrl, error);
+  reply.header('PAYMENT-REQUIRED', encodePaymentRequiredHeader(challenge));
+  reply.code(402).send({});
+}
+
+/** Decodes a buyer's PAYMENT-SIGNATURE header as a v2-native `PaymentPayload` (`{x402Version:2, accepted,
+ *  payload, ...}`) — a v2-native buyer signs against this route's v2-shaped `accepts[]` entry, so
+ *  there's no v1-decode-then-translate step here (unlike verify.ts's decodePaymentHeader, which
+ *  this route deliberately does not use). Never throws — every rejection is a machine-readable
+ *  reason so the caller always returns a clean 402, matching verify.ts's own discipline. */
+function decodeCdpPaymentPayload(
+  header: string,
+): { ok: true; payload: CdpPaymentPayload } | { ok: false; reason: string } {
+  let parsed: CdpPaymentPayload;
+  try {
+    parsed = decodePaymentSignatureHeader(header) as CdpPaymentPayload;
+  } catch {
+    return { ok: false, reason: 'PAYMENT-SIGNATURE is not valid base64 JSON' };
+  }
+  if (parsed?.x402Version !== 2) {
+    return { ok: false, reason: 'unsupported x402 version (expected 2)' };
+  }
+  if (parsed.accepted?.scheme !== 'exact') {
+    return { ok: false, reason: 'unsupported scheme (expected exact)' };
+  }
+  const inner = parsed.payload as
+    | { signature?: unknown; authorization?: { from?: unknown; to?: unknown } }
+    | undefined;
+  if (!inner?.signature || !inner?.authorization?.from || !inner?.authorization?.to) {
+    return { ok: false, reason: 'malformed payload' };
+  }
+  return { ok: true, payload: parsed };
 }
 
 /**
- * Verify + settle a decoded X-PAYMENT payload through CDP's facilitator instead of Grey's local
- * relayer. CDP's `/verify` does its own signature/nonce/chain-state checks server-side (that's the
- * facilitator's job in the x402 protocol) — this does NOT duplicate verify.ts's local checks.
+ * Verify + settle an already-v2 payload/requirements pair through CDP's facilitator instead of
+ * Grey's local relayer. Purely mechanical (protocol-version-agnostic) — the caller is responsible
+ * for building v2-shaped inputs; this does no translation. CDP's `/verify` does its own
+ * signature/nonce/chain-state checks server-side (that's the facilitator's job in the x402
+ * protocol) — this does NOT duplicate verify.ts's local checks.
  *
  * Failure classification (mirrors settle.ts's local posture, adapted for CDP's error shape):
  *  - `VerifyError`/`SettleError` (CDP returned a well-formed rejection) -> clean {ok:false}, no
@@ -109,15 +190,10 @@ function toCdpPaymentPayload(
  *    maps it to a 502, same as settle.ts's own infra-fault posture.
  */
 export async function verifyAndSettleViaCdp(
-  cfg: X402Config,
   client: FacilitatorClient,
-  slug: string,
-  resourceUrl: string,
-  decoded: PaymentPayload,
+  requirements: CdpPaymentRequirements,
+  payload: CdpPaymentPayload,
 ): Promise<SettleOutcome> {
-  const requirements = toCdpPaymentRequirements(cfg, slug);
-  const payload = toCdpPaymentPayload(decoded, requirements, resourceUrl);
-
   let verifyResult;
   try {
     verifyResult = await client.verify(payload, requirements);
@@ -152,13 +228,6 @@ export async function verifyAndSettleViaCdp(
   return { ok: true, txHash: settleResult.transaction as Hex };
 }
 
-function encodePaymentResponse(txHash: string, network: string): string {
-  return Buffer.from(
-    JSON.stringify({ success: true, transaction: txHash, network }),
-    'utf8',
-  ).toString('base64');
-}
-
 /** `preValidation` half of the CDP-routed gate — identical shape/intent to preHandler.ts's
  *  makeX402PaymentPresenceCheck, scoped to the `/v1/cdp/offerings/<slug>` route family. */
 export function makeCdpX402PaymentPresenceCheck(cfg: X402Config): preValidationHookHandler {
@@ -168,19 +237,22 @@ export function makeCdpX402PaymentPresenceCheck(cfg: X402Config): preValidationH
   ): Promise<void> {
     const slug = cdpSlugFromUrl(req.url);
     if (!slug) return;
-    const header = req.headers['x-payment'];
+    // v2's request header is PAYMENT-SIGNATURE, not X-PAYMENT (that's v1-only) — confirmed
+    // against @x402/core's own compiled source: encodePaymentSignatureHeader switches on
+    // x402Version, case 2 -> "PAYMENT-SIGNATURE", case 1 -> "X-PAYMENT".
+    const header = req.headers['payment-signature'];
     if (typeof header !== 'string' || header.length === 0) {
-      reply.code(402).send(buildPaymentRequirements(cfg, slug, req.url, 'payment required'));
+      sendCdpChallenge(reply, cfg, slug, req.url, 'payment required');
     }
   };
 }
 
-/** `preHandler` half of the CDP-routed gate — decode (Grey's own decodePaymentHeader, unchanged)
- *  then verify+settle THROUGH CDP instead of the local relayer. Builds its FacilitatorClient once,
- *  at hook-construction time (boot), so a missing CDP config fails closed immediately rather than
- *  on the first request — unless `deps.client` is injected (tests), in which case that fail-closed
- *  construction is skipped entirely, mirroring how makeX402PreHandler takes wallet/publicClient as
- *  injectable deps rather than building real viem clients internally. */
+/** `preHandler` half of the CDP-routed gate — decode (v2-native, this file's own
+ *  decodeCdpPaymentPayload) then verify+settle THROUGH CDP instead of the local relayer. Builds
+ *  its FacilitatorClient once, at hook-construction time (boot), so a missing CDP config fails
+ *  closed immediately rather than on the first request — unless `deps.client` is injected (tests),
+ *  in which case that fail-closed construction is skipped entirely, mirroring how makeX402PreHandler
+ *  takes wallet/publicClient as injectable deps rather than building real viem clients internally. */
 export interface CdpX402PreHandlerDeps {
   logger?: {
     error(msg: string, meta?: unknown): void;
@@ -200,34 +272,43 @@ export function makeCdpX402PreHandler(
     if (!slug) return;
 
     const resource = req.url;
-    const header = req.headers['x-payment'];
+    // Same PAYMENT-SIGNATURE-not-X-PAYMENT note as makeCdpX402PaymentPresenceCheck above.
+    const header = req.headers['payment-signature'];
     if (typeof header !== 'string' || header.length === 0) {
-      reply.code(402).send(buildPaymentRequirements(cfg, slug, resource, 'payment required'));
+      sendCdpChallenge(reply, cfg, slug, resource, 'payment required');
       return;
     }
 
-    const decoded = decodePaymentHeader(header);
+    const decoded = decodeCdpPaymentPayload(header);
     if (!decoded.ok) {
-      reply.code(402).send(buildPaymentRequirements(cfg, slug, resource, decoded.reason));
+      sendCdpChallenge(reply, cfg, slug, resource, decoded.reason);
       return;
     }
 
+    const requirements = buildCdpPaymentRequirementsEntry(cfg, slug);
     let outcome: SettleOutcome;
     try {
-      outcome = await verifyAndSettleViaCdp(cfg, client, slug, resource, decoded.payload);
+      outcome = await verifyAndSettleViaCdp(client, requirements, decoded.payload);
     } catch (err) {
       deps.logger?.error('x402: CDP settlement infra error', {
         slug,
         reason: err instanceof Error ? err.message : String(err),
       });
-      reply.code(502).send({ x402Version: 1, error: 'settlement failed' });
+      reply.code(502).send({ x402Version: 2, error: 'settlement failed' });
       return;
     }
     if (!outcome.ok) {
-      reply.code(402).send(buildPaymentRequirements(cfg, slug, resource, outcome.reason));
+      sendCdpChallenge(reply, cfg, slug, resource, outcome.reason);
       return;
     }
 
-    reply.header('X-PAYMENT-RESPONSE', encodePaymentResponse(outcome.txHash, cfg.network));
+    reply.header(
+      'PAYMENT-RESPONSE',
+      encodePaymentResponseHeader({
+        success: true,
+        transaction: outcome.txHash,
+        network: cfg.network,
+      }),
+    );
   };
 }

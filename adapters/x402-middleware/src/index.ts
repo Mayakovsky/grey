@@ -42,6 +42,8 @@ export type {
 export {
   cdpSlugFromUrl,
   makeCdpFacilitatorClient,
+  buildCdpPaymentRequirementsEntry,
+  buildCdpChallenge,
   verifyAndSettleViaCdp,
   makeCdpX402PaymentPresenceCheck,
   makeCdpX402PreHandler,
