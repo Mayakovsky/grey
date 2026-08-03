@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildPaymentRequirements, buildCdpBazaarExtension } from '../src/challenge.js';
+import { buildEvaluationArtifact } from '@grey/schemas/evaluationKit';
 import { TEST_CFG } from './_sign.js';
 
 describe('buildPaymentRequirements — strict-canonical x402', () => {
@@ -73,21 +74,35 @@ describe('buildPaymentRequirements — strict-canonical x402', () => {
     // extensions sits at the top of the body, sibling to accepts, not inside accepts[0].
     expect(body.extensions).toBeTruthy();
     expect(body).not.toHaveProperty('accepts[0].extensions');
-    const ext = body.extensions!.bazaar;
-    expect(ext.info.input).toEqual({ type: 'http', method: 'POST', bodyType: 'json' });
-    expect(ext.info.output?.example).toBeTruthy(); // legitimacy_scan has a sample response (Round 2)
-    // schema describes `info` itself (CDP validates info against schema) — the real request-body
-    // schema lives one level deeper, at schema.properties.input. See buildCdpBazaarExtension's
-    // doc comment for why (CDP-PHASE2-fix-bazaar-schema-nesting-KOV-directive.md).
-    const schema = ext.schema as {
-      type: string;
-      properties: { input: unknown; output: unknown };
-      required: string[];
+    // Real shape from @x402/extensions/bazaar's declareDiscoveryExtension — see
+    // buildCdpBazaarExtension's doc comment (CDP-PHASE2-use-declareDiscoveryExtension-KOV-
+    // directive.md) for the trace confirming this against the library's own compiled source.
+    const ext = body.extensions!.bazaar as {
+      info: { input: Record<string, unknown>; output?: { type: string; example: unknown } };
+      schema: {
+        type: string;
+        required: string[];
+        properties: {
+          input: { required: string[]; properties: { body: unknown } };
+          output?: unknown;
+        };
+      };
     };
-    expect(schema.type).toBe('object');
-    expect(schema.required).toEqual(['input']);
-    expect(schema.properties.input).toEqual(body.accepts[0].extra.bazaar.inputSchema);
-    expect(schema.properties.output).toEqual({ type: 'object' });
+    expect(ext.info.input.type).toBe('http');
+    expect(ext.info.input.method).toBe('POST');
+    expect(ext.info.input.bodyType).toBe('json');
+    // info.input.body is a REAL, schema-valid example request — not transport metadata. That was
+    // the actual bug behind two prior failed attempts (see buildCdpBazaarExtension's doc comment).
+    expect(ext.info.input.body).toEqual(buildEvaluationArtifact('legitimacy_scan').sample!.request);
+    expect(ext.info.output?.example).toBeTruthy(); // legitimacy_scan has a sample response (Round 2)
+    expect(ext.schema.type).toBe('object');
+    expect(ext.schema.required).toEqual(['input']);
+    expect(ext.schema.properties.input.required).toEqual(['type', 'method', 'bodyType', 'body']);
+    // the real per-offering request schema — nested two levels deep (schema.properties.input
+    // .properties.body), confirmed from @x402/extensions' own source, not guessed a third time.
+    expect(ext.schema.properties.input.properties.body).toEqual(
+      body.accepts[0].extra.bazaar.inputSchema,
+    );
   });
 
   it('buildCdpBazaarExtension is a pure reshape — same output for the same EvaluationKitEntry input', () => {
@@ -96,7 +111,19 @@ describe('buildPaymentRequirements — strict-canonical x402', () => {
     expect(extA.bazaar.schema).toEqual({
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       type: 'object',
-      properties: { input: { type: 'object' }, output: { type: 'object' } },
+      properties: {
+        input: {
+          type: 'object',
+          properties: {
+            type: { type: 'string', const: 'http' },
+            method: { type: 'string', enum: ['POST', 'PUT', 'PATCH'] },
+            bodyType: { type: 'string', enum: ['json', 'form-data', 'text'] },
+            body: { type: 'object' },
+          },
+          required: ['type', 'method', 'bodyType', 'body'],
+          additionalProperties: false,
+        },
+      },
       required: ['input'],
     });
     expect(extA.bazaar.info.output).toBeUndefined(); // no sample -> no output example, not a fabricated one

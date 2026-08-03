@@ -1,6 +1,7 @@
 // @grey/x402-middleware — shared types for the x402 `exact`-scheme sell-side gate.
 import type { Address, Hex } from 'viem';
 import type { EvaluationKitEntry } from '@grey/schemas/evaluationKit';
+import type { DiscoveryExtension } from '@x402/extensions/bazaar';
 
 export type X402Network = 'eip155:8453' | 'eip155:84532';
 
@@ -69,33 +70,16 @@ export interface PaymentPayload {
 }
 
 /**
- * CDP's canonical Bazaar discovery extension shape (CDP/Bazaar alignment Phase 1, Task 3).
- *
- * UNCERTAINTY, documented rather than hidden: CDP's public docs (docs.cdp.coinbase.com/x402/bazaar,
- * checked 2026-08-02) describe `bazaar.info.{input,output}` + `bazaar.schema` but do not publish a
- * complete worked JSON example of the surrounding `extensions` envelope — specifically, whether
- * `extensions` sits at the top of the PaymentRequirements body (sibling to `x402Version`/`accepts`)
- * or inside each `accepts[]` entry is not shown in a full example anywhere found (docs, the x402
- * gitbook, or the coinbase/x402 GitHub repo's visible structure). Placed at the TOP LEVEL here —
- * the more spec-consistent reading, since discovery metadata describes the RESOURCE, not a specific
- * payment option, and matches the docs' own description of it as "top-level". This is Grey's best
- * good-faith mapping from EvaluationKitEntry, not independently verified against a live
- * CDP-indexed endpoint — Grey has no CDP API keys yet (Phase 2). Re-verify against the real
- * facilitator once keys exist, before treating this shape as load-bearing.
+ * CDP's canonical Bazaar discovery extension shape (`{bazaar: DiscoveryExtension}`), built by
+ * `@x402/extensions/bazaar`'s own `declareDiscoveryExtension()` reference function — not
+ * hand-rolled (CDP-PHASE2-use-declareDiscoveryExtension-KOV-directive.md). Two prior hand-rolled
+ * attempts at this internal shape were both wrong when checked against CDP's live validator;
+ * the library's own builder is the actual source of truth, confirmed against the installed
+ * package's compiled source (adapters/x402-middleware/src/challenge.ts's buildCdpBazaarExtension
+ * has the full trace). Re-exported here (not just inlined at the call site) so `PaymentRequirements
+ * .extensions` has a named type independent of import depth.
  */
-export interface CdpBazaarExtension {
-  bazaar: {
-    info: {
-      input: { type: 'http'; method: 'GET' | 'POST'; bodyType?: 'json' };
-      output?: { example?: unknown };
-    };
-    /** A meta-schema describing `info` itself — `{type:'object', properties:{input:
-     *  <EvaluationKitEntry.inputSchema>, output:{...}}, required:['input']}` — NOT the raw
-     *  request-body schema directly. See buildCdpBazaarExtension's doc comment (challenge.ts) for
-     *  why: CDP validates `info` against `schema`, so `schema` must describe `info`'s own shape. */
-    schema: object | null;
-  };
-}
+export type CdpBazaarExtension = { bazaar: DiscoveryExtension };
 
 /** 402 body — strict-canonical x402 `PaymentRequirements` (Forces ruling: maxTimeoutSeconds only,
  *  no server nonce/expiresAt; the buyer chooses the EIP-3009 nonce). */
