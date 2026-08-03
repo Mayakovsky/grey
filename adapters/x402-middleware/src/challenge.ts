@@ -36,7 +36,19 @@ import { priceAtomicFor } from './prices.js';
  *  `kit.sample` is always populated in practice: every call site here uses `buildEvaluationArtifact`
  *  (not the leaner `buildEvaluationKit`), which always supplies `EVALUATION_SAMPLES[slug]` — a
  *  `Record<OfferingSlug, SampleExchange>` with no gaps. The `?? {}`/conditional fallbacks below are
- *  type-safety only (EvaluationKitEntry.sample is typed optional), never expected to be hit. */
+ *  type-safety only (EvaluationKitEntry.sample is typed optional), never expected to be hit.
+ *
+ *  `output.schema` deliberately OMITTED (CDP-PHASE2-fix-payment-signature-header-KOV-directive.md's
+ *  successor round): `kit.outputSchema` carries `$ref`s relative to its own `$id`
+ *  (`https://schemas.whitepapergrey.com/v1/...`) — e.g. `"$ref": "_shared.schema.json#/$defs
+ *  /Verdict"` — meant only for Grey's own local ajv registry (`@grey/schemas/validators` loads
+ *  `_shared.schema.json` via `addSchema`, never fetches it). CDP's live validator, given a schema
+ *  containing a `$ref`, tries to actually dereference it over HTTP against that `$id` — and
+ *  `schemas.whitepapergrey.com` isn't a real, DNS-resolving host (confirmed: `curl` to it fails to
+ *  resolve). Passing `output.schema` made `parse` fail with a live DNS lookup error, not a shape
+ *  problem. `output.schema` is optional (only tightens validation of `output.example`, which is
+ *  unaffected by omitting it) and every output-related CDP check is `severity: advisory`, not
+ *  required — so this is a safe drop, not a scope compromise. */
 export function buildCdpBazaarExtension(kit: EvaluationKitEntry): CdpBazaarExtension {
   return declareDiscoveryExtension({
     // `method` is stripped from the PUBLIC `DeclareDiscoveryExtensionInput` type (it's designed to
@@ -50,9 +62,7 @@ export function buildCdpBazaarExtension(kit: EvaluationKitEntry): CdpBazaarExten
     bodyType: 'json',
     input: (kit.sample?.request as Record<string, unknown> | undefined) ?? {},
     inputSchema: (kit.inputSchema as Record<string, unknown> | null) ?? {},
-    output: kit.sample
-      ? { example: kit.sample.response, schema: kit.outputSchema as Record<string, unknown> }
-      : undefined,
+    output: kit.sample ? { example: kit.sample.response } : undefined,
   } as unknown as Parameters<typeof declareDiscoveryExtension>[0]) as CdpBazaarExtension;
 }
 
