@@ -14,12 +14,19 @@ export interface UsdcAsset {
   decimals: 6;
 }
 
-/** CDP Facilitator Phase 2: `CDP_API_KEY_ID`/`CDP_API_KEY_SECRET`, present only when BOTH are set
- *  in the environment (loadX402Config fails closed if only one is set — see config.ts). Consumed
- *  by cdpFacilitator.ts to build a `@coinbase/x402` facilitator config; never read anywhere else. */
+/** CDP Facilitator Phase 2: `CDP_API_KEY_ID`/`CDP_API_KEY_SECRET`/`CDP_RESOURCE_BASE_URL`, present
+ *  only when ALL THREE are set in the environment (loadX402Config fails closed if only some are
+ *  set — see config.ts). Consumed by cdpFacilitator.ts; never read anywhere else. */
 export interface X402CdpConfig {
   apiKeyId: string;
   apiKeySecret: string;
+  /** Grey's own public origin (e.g. `https://api.whitepapergrey.com`), no trailing slash. Needed
+   *  because CDP's discovery registration requires `PaymentRequired.resource.url` to be an
+   *  ABSOLUTE https URL ("resource must start with 'https://' when protocol type is http" —
+   *  confirmed live against CDP's validator); Fastify's `req.url` is only ever the path. Not
+   *  derived from the request itself (e.g. Host/X-Forwarded-* headers) — explicit and testable
+   *  beats depending on reverse-proxy trust configuration being exactly right. */
+  resourceBaseUrl: string;
 }
 
 export interface X402Config {

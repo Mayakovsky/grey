@@ -58,20 +58,59 @@ describe('loadX402Config — fail-closed', () => {
       expect(loadX402Config(BASE).cdp).toBeNull();
     });
 
-    it('is populated when both are set', () => {
+    it('is populated when all three are set', () => {
       const cfg = loadX402Config({
         ...BASE,
         CDP_API_KEY_ID: 'test-key-id',
         CDP_API_KEY_SECRET: 'test-key-secret',
+        CDP_RESOURCE_BASE_URL: 'https://api.whitepapergrey.com',
       });
-      expect(cfg.cdp).toEqual({ apiKeyId: 'test-key-id', apiKeySecret: 'test-key-secret' });
+      expect(cfg.cdp).toEqual({
+        apiKeyId: 'test-key-id',
+        apiKeySecret: 'test-key-secret',
+        resourceBaseUrl: 'https://api.whitepapergrey.com',
+      });
     });
 
-    it.each(['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET'])(
-      'throws if only %s is set (both-or-neither)',
+    it('strips a trailing slash from CDP_RESOURCE_BASE_URL', () => {
+      const cfg = loadX402Config({
+        ...BASE,
+        CDP_API_KEY_ID: 'test-key-id',
+        CDP_API_KEY_SECRET: 'test-key-secret',
+        CDP_RESOURCE_BASE_URL: 'https://api.whitepapergrey.com/',
+      });
+      expect(cfg.cdp?.resourceBaseUrl).toBe('https://api.whitepapergrey.com');
+    });
+
+    it.each(['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_RESOURCE_BASE_URL'])(
+      'throws if only %s is set (all-or-none)',
       (key) => {
         expect(() => loadX402Config({ ...BASE, [key]: 'only-one-set' })).toThrow(/CDP_API_KEY/);
       },
     );
+
+    it.each(['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET'])(
+      'throws if %s is missing while the other two are set (all-or-none)',
+      (missingKey) => {
+        const all: Record<string, string> = {
+          CDP_API_KEY_ID: 'test-key-id',
+          CDP_API_KEY_SECRET: 'test-key-secret',
+          CDP_RESOURCE_BASE_URL: 'https://api.whitepapergrey.com',
+        };
+        delete all[missingKey];
+        expect(() => loadX402Config({ ...BASE, ...all })).toThrow(/CDP_API_KEY/);
+      },
+    );
+
+    it('rejects a CDP_RESOURCE_BASE_URL that does not start with https://', () => {
+      expect(() =>
+        loadX402Config({
+          ...BASE,
+          CDP_API_KEY_ID: 'test-key-id',
+          CDP_API_KEY_SECRET: 'test-key-secret',
+          CDP_RESOURCE_BASE_URL: 'http://api.whitepapergrey.com',
+        }),
+      ).toThrow(/CDP_RESOURCE_BASE_URL must start with https/);
+    });
   });
 });

@@ -104,14 +104,23 @@ export function buildCdpPaymentRequirementsEntry(
 
 /** The full v2 `PaymentRequired` 402 payload — CDP-route-only, never touches challenge.ts's v1
  *  buildPaymentRequirements. Reuses buildCdpBazaarExtension (already shared with trustRung.ts)
- *  for the discovery metadata, same EvaluationKit source as the primary route. */
+ *  for the discovery metadata, same EvaluationKit source as the primary route.
+ *
+ *  `resource.url` must be an ABSOLUTE `https://` URL — confirmed live against CDP's discovery
+ *  validator ("resource must start with 'https://' when protocol type is http"), not guessed:
+ *  `resourcePath` (Fastify's `req.url`, always just a path) is prefixed with `cfg.cdp
+ *  .resourceBaseUrl` here, the one place this route's absolute-URL construction happens. Falls
+ *  back to the bare path when `cfg.cdp` is null (cdp-unconfigured callers, e.g. this function's
+ *  own unit tests using a plain TEST_CFG) rather than throwing — this function has never required
+ *  CDP to be configured to build A challenge, just to build a CDP-DISCOVERABLE one. */
 export function buildCdpChallenge(
   cfg: X402Config,
   slug: string,
-  resourceUrl: string,
+  resourcePath: string,
   error?: string,
 ): CdpPaymentRequired {
   const kit = buildEvaluationArtifact(slug as OfferingSlug);
+  const resourceUrl = (cfg.cdp?.resourceBaseUrl ?? '') + resourcePath;
   const body: CdpPaymentRequired = {
     x402Version: 2,
     resource: {
@@ -138,10 +147,10 @@ function sendCdpChallenge(
   reply: FastifyReply,
   cfg: X402Config,
   slug: string,
-  resourceUrl: string,
+  resourcePath: string,
   error?: string,
 ): void {
-  const challenge = buildCdpChallenge(cfg, slug, resourceUrl, error);
+  const challenge = buildCdpChallenge(cfg, slug, resourcePath, error);
   reply.header('PAYMENT-REQUIRED', encodePaymentRequiredHeader(challenge));
   reply.code(402).send({});
 }

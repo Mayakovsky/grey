@@ -63,18 +63,29 @@ export function loadX402Config(env: Env = process.env): X402Config {
   }
 
   // CDP Facilitator Phase 2: optional — the primary self-hosted relayer path never reads these.
-  // Both-or-neither: one set without the other is a config mistake, fail closed rather than
+  // All-or-none: any subset set without the rest is a config mistake, fail closed rather than
   // silently treating it as "not configured".
   const cdpApiKeyId = env.CDP_API_KEY_ID?.trim() || null;
   const cdpApiKeySecret = env.CDP_API_KEY_SECRET?.trim() || null;
-  if ((cdpApiKeyId === null) !== (cdpApiKeySecret === null)) {
+  const cdpResourceBaseUrl = env.CDP_RESOURCE_BASE_URL?.trim().replace(/\/+$/, '') || null;
+  const cdpFieldsPresent = [cdpApiKeyId, cdpApiKeySecret, cdpResourceBaseUrl].map(
+    (v) => v !== null,
+  );
+  if (cdpFieldsPresent.some(Boolean) && !cdpFieldsPresent.every(Boolean)) {
     throw new Error(
-      'x402-middleware: CDP_API_KEY_ID and CDP_API_KEY_SECRET must both be set, or both be absent',
+      'x402-middleware: CDP_API_KEY_ID, CDP_API_KEY_SECRET, and CDP_RESOURCE_BASE_URL must all be set, or all be absent',
     );
   }
+  if (cdpResourceBaseUrl !== null && !/^https:\/\//.test(cdpResourceBaseUrl)) {
+    throw new Error('x402-middleware: CDP_RESOURCE_BASE_URL must start with https://');
+  }
   const cdp =
-    cdpApiKeyId && cdpApiKeySecret
-      ? { apiKeyId: cdpApiKeyId, apiKeySecret: cdpApiKeySecret }
+    cdpApiKeyId && cdpApiKeySecret && cdpResourceBaseUrl
+      ? {
+          apiKeyId: cdpApiKeyId,
+          apiKeySecret: cdpApiKeySecret,
+          resourceBaseUrl: cdpResourceBaseUrl,
+        }
       : null;
 
   return {
