@@ -56,6 +56,16 @@ describe('trustRung — E1-C disable flag (Forces ruling B-1, Invariant #34)', (
       method: 'POST',
       bodyType: 'json',
     });
-    expect(body.extensions!.bazaar.schema).toEqual(body.accepts[0].extra.bazaar.inputSchema);
+    // schema describes `info` itself; the real request-body schema lives one level deeper, at
+    // schema.properties.input — see challenge.test.ts / buildCdpBazaarExtension's doc comment.
+    const schema = body.extensions!.bazaar.schema as {
+      type: string;
+      properties: { input: unknown; output: unknown };
+      required: string[];
+    };
+    expect(schema.type).toBe('object');
+    expect(schema.required).toEqual(['input']);
+    expect(schema.properties.input).toEqual(body.accepts[0].extra.bazaar.inputSchema);
+    expect(schema.properties.output).toEqual({ type: 'object' });
   });
 });

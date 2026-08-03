@@ -8,7 +8,20 @@ import type { X402Config, PaymentRequirements, CdpBazaarExtension } from './type
 import { priceAtomicFor } from './prices.js';
 
 /** Reshape Grey's EvaluationKitEntry into CDP's `extensions.bazaar` wire shape (Task 3). Shared
- *  by challenge.ts and trustRung.ts's buildTrustRungPaymentRequirements — one mapping, not two. */
+ *  by challenge.ts, trustRung.ts's buildTrustRungPaymentRequirements, and cdpFacilitator.ts's
+ *  buildCdpChallenge — one mapping, not three.
+ *
+ *  `schema` nesting (fixed per CDP-PHASE2-fix-bazaar-schema-nesting-KOV-directive.md): CDP's docs
+ *  state the rule directly — "ensure your extension input strictly matches schema.properties.input"
+ *  — confirmed against a second, independent worked example (Binance's B402 x402v2 Bazaar
+ *  implementation). `schema` must describe the shape of `info` itself (`{input, output}`), NOT the
+ *  offering's real request-body schema directly at its root. The real per-offering request schema
+ *  now lives one level deeper, at `schema.properties.input`. Previously `schema` WAS the raw
+ *  request-body schema (requiring e.g. `token_address`), so CDP's validator rejected `info` against
+ *  it — `info` has `input`/`output` keys, not `token_address`. `output` is in `properties` but not
+ *  `required`: `info.output` is only ever `{example: <response>}` (an example value, not a formal
+ *  schema) or absent (no `kit.sample`) — matching the advisory (not required) severity CDP's own
+ *  validator gives `bazaar.info.output`. */
 export function buildCdpBazaarExtension(kit: EvaluationKitEntry): CdpBazaarExtension {
   return {
     bazaar: {
@@ -18,7 +31,15 @@ export function buildCdpBazaarExtension(kit: EvaluationKitEntry): CdpBazaarExten
         input: { type: 'http', method: 'POST', bodyType: 'json' },
         output: kit.sample ? { example: kit.sample.response } : undefined,
       },
-      schema: kit.inputSchema,
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          input: kit.inputSchema ?? {},
+          output: { type: 'object' },
+        },
+        required: ['input'],
+      },
     },
   };
 }
