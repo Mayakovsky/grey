@@ -4,6 +4,7 @@
 import type { OfferingSlug } from '@grey/schemas/responses';
 import { buildEvaluationArtifact } from '@grey/schemas/evaluationKit';
 import type { EvaluationKitEntry } from '@grey/schemas/evaluationKit';
+import { declareDiscoveryExtension } from '@x402/extensions/bazaar';
 import type { X402Config, PaymentRequirements, CdpBazaarExtension } from './types.js';
 import { priceAtomicFor } from './prices.js';
 
@@ -11,37 +12,48 @@ import { priceAtomicFor } from './prices.js';
  *  by challenge.ts, trustRung.ts's buildTrustRungPaymentRequirements, and cdpFacilitator.ts's
  *  buildCdpChallenge — one mapping, not three.
  *
- *  `schema` nesting (fixed per CDP-PHASE2-fix-bazaar-schema-nesting-KOV-directive.md): CDP's docs
- *  state the rule directly — "ensure your extension input strictly matches schema.properties.input"
- *  — confirmed against a second, independent worked example (Binance's B402 x402v2 Bazaar
- *  implementation). `schema` must describe the shape of `info` itself (`{input, output}`), NOT the
- *  offering's real request-body schema directly at its root. The real per-offering request schema
- *  now lives one level deeper, at `schema.properties.input`. Previously `schema` WAS the raw
- *  request-body schema (requiring e.g. `token_address`), so CDP's validator rejected `info` against
- *  it — `info` has `input`/`output` keys, not `token_address`. `output` is in `properties` but not
- *  `required`: `info.output` is only ever `{example: <response>}` (an example value, not a formal
- *  schema) or absent (no `kit.sample`) — matching the advisory (not required) severity CDP's own
- *  validator gives `bazaar.info.output`. */
+ *  STOP HAND-ROLLING (CDP-PHASE2-use-declareDiscoveryExtension-KOV-directive.md): two prior
+ *  attempts at hand-constructing the internal `{info: {input, output}, schema}` object were both
+ *  wrong when checked against CDP's live validator. The actual fix — confirmed by reading
+ *  `@x402/extensions/bazaar`'s own compiled source (`node_modules/.../dist/cjs/bazaar/index.js`'s
+ *  `createBodyDiscoveryExtension`), not just its docs/types — is to call the library's own
+ *  `declareDiscoveryExtension()` builder instead of guessing the shape it produces:
+ *
+ *    - `input` is a REAL, schema-valid EXAMPLE REQUEST VALUE (e.g. `{token_address: "0x...", ...}`)
+ *      — becomes `info.input.body`, NOT transport metadata. This was the actual bug behind both
+ *      prior failures: `info.input` was being filled with `{type,method,bodyType}` (protocol
+ *      description), but CDP's validator checks `info.input.body` against the real request schema
+ *      — it needs an example that SATISFIES that schema, not a description of the HTTP transport.
+ *    - `inputSchema` is the offering's real request schema — becomes `schema.properties.input
+ *      .properties.body` (nested two levels deep, confirmed from the library source — one level
+ *      deeper than the last attempt guessed).
+ *    - `method`/`bodyType` are top-level config, not nested under `input` — the library places them
+ *      into `info.input.method`/`info.input.bodyType` itself. `method` must be passed explicitly
+ *      here: it's normally filled at request time by `bazaarResourceServerExtension`'s enrichment
+ *      hook, which Grey's hand-rolled Fastify routes never run (no `x402ResourceServer` framework).
+ *    - `output: {example, schema}` maps directly to `info.output`/the output branch of `schema`.
+ *
+ *  `kit.sample` is always populated in practice: every call site here uses `buildEvaluationArtifact`
+ *  (not the leaner `buildEvaluationKit`), which always supplies `EVALUATION_SAMPLES[slug]` — a
+ *  `Record<OfferingSlug, SampleExchange>` with no gaps. The `?? {}`/conditional fallbacks below are
+ *  type-safety only (EvaluationKitEntry.sample is typed optional), never expected to be hit. */
 export function buildCdpBazaarExtension(kit: EvaluationKitEntry): CdpBazaarExtension {
-  return {
-    bazaar: {
-      info: {
-        // Every x402 route buildPaymentRequirements is called for is a paid POST/JSON route
-        // (the 2 free GETs never go through x402 at all) — method is not derived per-slug.
-        input: { type: 'http', method: 'POST', bodyType: 'json' },
-        output: kit.sample ? { example: kit.sample.response } : undefined,
-      },
-      schema: {
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        type: 'object',
-        properties: {
-          input: kit.inputSchema ?? {},
-          output: { type: 'object' },
-        },
-        required: ['input'],
-      },
-    },
-  };
+  return declareDiscoveryExtension({
+    // `method` is stripped from the PUBLIC `DeclareDiscoveryExtensionInput` type (it's designed to
+    // be filled by `bazaarResourceServerExtension`'s request-time enrichment hook), but the actual
+    // runtime function this resolves to (`createBodyDiscoveryExtension`, confirmed in the compiled
+    // source) destructures and honors `method` directly when supplied — matching the library's own
+    // doc-comment example (`declareDiscoveryExtension({method: "POST", ...})`). Grey's hand-rolled
+    // Fastify routes never run that enrichment hook (no `x402ResourceServer` framework), so it must
+    // be supplied here; cast around the type gap rather than the runtime gap.
+    method: 'POST',
+    bodyType: 'json',
+    input: (kit.sample?.request as Record<string, unknown> | undefined) ?? {},
+    inputSchema: (kit.inputSchema as Record<string, unknown> | null) ?? {},
+    output: kit.sample
+      ? { example: kit.sample.response, schema: kit.outputSchema as Record<string, unknown> }
+      : undefined,
+  } as unknown as Parameters<typeof declareDiscoveryExtension>[0]) as CdpBazaarExtension;
 }
 
 export function buildPaymentRequirements(

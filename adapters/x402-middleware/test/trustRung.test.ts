@@ -6,6 +6,7 @@ import {
   trustRungPriceUsd,
   buildTrustRungPaymentRequirements,
 } from '../src/trustRung.js';
+import { buildEvaluationArtifact } from '@grey/schemas/evaluationKit';
 import { TEST_CFG } from './_sign.js';
 
 const ORIGINAL = process.env.TRUST_RUNG_ENABLED;
@@ -51,21 +52,26 @@ describe('trustRung — E1-C disable flag (Forces ruling B-1, Invariant #34)', (
   it('CDP/Bazaar alignment Phase 1: also carries top-level extensions.bazaar, same shape as the normal 7 routes', () => {
     const body = buildTrustRungPaymentRequirements(TEST_CFG, `/v1/offerings/${TRUST_RUNG_SLUG}`);
     expect(body.extensions).toBeTruthy();
-    expect(body.extensions!.bazaar.info.input).toEqual({
-      type: 'http',
-      method: 'POST',
-      bodyType: 'json',
-    });
-    // schema describes `info` itself; the real request-body schema lives one level deeper, at
-    // schema.properties.input — see challenge.test.ts / buildCdpBazaarExtension's doc comment.
-    const schema = body.extensions!.bazaar.schema as {
-      type: string;
-      properties: { input: unknown; output: unknown };
-      required: string[];
+    // Real shape from @x402/extensions/bazaar's declareDiscoveryExtension — see
+    // buildCdpBazaarExtension's doc comment (CDP-PHASE2-use-declareDiscoveryExtension-KOV-
+    // directive.md) for the trace confirming this against the library's own compiled source.
+    const ext = body.extensions!.bazaar as {
+      info: { input: Record<string, unknown> };
+      schema: {
+        type: string;
+        required: string[];
+        properties: { input: { required: string[]; properties: { body: unknown } } };
+      };
     };
-    expect(schema.type).toBe('object');
-    expect(schema.required).toEqual(['input']);
-    expect(schema.properties.input).toEqual(body.accepts[0].extra.bazaar.inputSchema);
-    expect(schema.properties.output).toEqual({ type: 'object' });
+    expect(ext.info.input.type).toBe('http');
+    expect(ext.info.input.method).toBe('POST');
+    expect(ext.info.input.bodyType).toBe('json');
+    expect(ext.info.input.body).toEqual(buildEvaluationArtifact(TRUST_RUNG_SLUG).sample!.request);
+    expect(ext.schema.type).toBe('object');
+    expect(ext.schema.required).toEqual(['input']);
+    expect(ext.schema.properties.input.required).toEqual(['type', 'method', 'bodyType', 'body']);
+    expect(ext.schema.properties.input.properties.body).toEqual(
+      body.accepts[0].extra.bazaar.inputSchema,
+    );
   });
 });
