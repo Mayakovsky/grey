@@ -12,6 +12,8 @@ import {
   trustRungEnabled,
   makeTrustRungPreHandler,
   makeTrustRungPaymentPresenceCheck,
+  makeCdpX402PreHandler,
+  makeCdpX402PaymentPresenceCheck,
 } from '@grey/x402-middleware';
 import { createHandlerDeps } from './deps';
 import { X402Adapter } from './channels/x402Adapter';
@@ -48,6 +50,17 @@ const trustRungGate = trustRungOn
     }
   : undefined;
 
+// CDP Facilitator Phase 2: a PARALLEL settlement path, additive only — mounted at
+// /v1/cdp/offerings/<slug> only when CDP_API_KEY_ID/CDP_API_KEY_SECRET are configured
+// (x402Config.cdp non-null). Does not touch x402Gate/relayer above; the primary revenue rail is
+// unaffected either way. No local relayer clients involved — CDP does its own verify/settle.
+const cdpGate = x402Config.cdp
+  ? {
+      preValidation: makeCdpX402PaymentPresenceCheck(x402Config),
+      preHandler: makeCdpX402PreHandler(x402Config, { logger: deps.logger }),
+    }
+  : undefined;
+
 // M6 Phase A: x402 now boots THROUGH the ChannelIngress seam. The adapter runs the SAME
 // buildServer(deps, gate) + listen path this file used inline — zero per-request change.
 const port = Number(process.env.GREY_CORE_PORT ?? 3002);
@@ -58,6 +71,7 @@ const adapter = new X402Adapter({
   relayerAddress: relayer.relayerAddress,
   trustRungEnabled: trustRungOn,
   trustRungGate,
+  cdpGate,
   // E1-D: MCP is unconditional (unlike the trust rung) — reuses the SAME relayer clients as the
   // HTTP gate, verify/settle against the same USDC contract, just a different transport.
   mcp: { x402Config, wallet: relayer.wallet, publicClient: relayer.publicClient },

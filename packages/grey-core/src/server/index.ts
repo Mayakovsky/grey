@@ -8,6 +8,7 @@ import type { HandlerDeps } from '../deps';
 import { installValidatorCompiler } from './validators';
 import { registerProbes } from './routes/probes';
 import { registerOfferingRoutes, type X402Gate } from './routes/offerings';
+import { registerCdpOfferingRoutes } from './routes/cdpOfferings';
 import { registerResourceRoutes } from './routes/resources';
 import { registerDiscoveryRoutes } from './routes/discovery';
 import { registerTrustRungRoute } from './routes/trustRung';
@@ -20,6 +21,11 @@ export interface BuildServerOptions {
   /** Required when trustRungEnabled is true — both hooks from @grey/x402-middleware's trust-rung
    *  factories. NOT the general x402Gate (different slug/price). */
   trustRungGate?: X402Gate;
+  /** CDP Facilitator Phase 2: mounts POST /v1/cdp/offerings/<slug> × 7 when present — presence
+   *  IS the enable signal (unlike trustRungEnabled, there's no separate boolean; "is CDP
+   *  configured" and "was a gate built for it" are the same question). start.ts only builds this
+   *  when X402Config.cdp is non-null; tests omit it entirely to leave the routes unmounted. */
+  cdpGate?: X402Gate;
   /** E1-D: mounts POST /v1/mcp when present. Optional so existing callers (and most tests) are
    *  unaffected; start.ts always passes it (MCP is unconditional — only the trust rung is gated). */
   mcp?: McpRouteDeps;
@@ -43,6 +49,7 @@ export function buildServer(
     }
     registerTrustRungRoute(app, deps, opts.trustRungGate); // E1-C, default off
   }
+  if (opts.cdpGate) registerCdpOfferingRoutes(app, deps, opts.cdpGate); // CDP Facilitator Phase 2
   if (opts.mcp) registerMcpRoute(app, deps, opts.mcp); // E1-D: paid MCP tools, POST × 1
   return app;
 }

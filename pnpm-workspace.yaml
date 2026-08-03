@@ -32,6 +32,9 @@ allowBuilds:
   bufferutil: false
   utf-8-validate: false
   es5-ext: false
+  # CDP Facilitator Phase 2: @coinbase/x402's postinstall (scripts/postinstall.js) is a single
+  # console.log Bazaar-search TOS notice — no filesystem/network side effects. Inspected 2026-08-02.
+  '@coinbase/x402': true
 
 patchedDependencies:
   '@virtuals-protocol/acp-node-v2@0.0.4': patches/@virtuals-protocol__acp-node-v2@0.0.4.patch

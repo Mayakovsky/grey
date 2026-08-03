@@ -28,6 +28,10 @@ export interface X402AdapterOptions {
   /** Required when trustRungEnabled is true — both hooks from @grey/x402-middleware's trust-rung
    *  factories. NOT the same as `gate`: different slug/price, so a different verify/settle path. */
   trustRungGate?: X402Gate;
+  /** CDP Facilitator Phase 2: both hooks from @grey/x402-middleware's makeCdpX402Payment
+   *  PresenceCheck/makeCdpX402PreHandler. Mounts POST /v1/cdp/offerings/<slug> × 7 when present —
+   *  start.ts only builds this when X402Config.cdp is non-null (CDP keys configured). */
+  cdpGate?: X402Gate;
   /** E1-D: mounts POST /v1/mcp when present. Unconditional (unlike the trust rung) — MCP exposes
    *  the same 7+2 normal offerings, not a blocked one. */
   mcp?: McpRouteDeps;
@@ -47,6 +51,7 @@ export class X402Adapter implements ChannelIngress {
   private readonly relayerAddress?: string;
   private readonly trustRungEnabled: boolean;
   private readonly trustRungGate?: X402Gate;
+  private readonly cdpGate?: X402Gate;
   private readonly mcp?: McpRouteDeps;
   private readonly offerings: OfferingRegistration[] = [];
   private app: FastifyInstance | null = null;
@@ -60,6 +65,7 @@ export class X402Adapter implements ChannelIngress {
     this.relayerAddress = opts.relayerAddress;
     this.trustRungEnabled = opts.trustRungEnabled ?? false;
     this.trustRungGate = opts.trustRungGate;
+    this.cdpGate = opts.cdpGate;
     this.mcp = opts.mcp;
   }
 
@@ -69,6 +75,7 @@ export class X402Adapter implements ChannelIngress {
     const app = buildServer(this.deps, this.gate, {
       trustRungEnabled: this.trustRungEnabled,
       trustRungGate: this.trustRungGate,
+      cdpGate: this.cdpGate,
       mcp: this.mcp,
     });
     this.app = app;

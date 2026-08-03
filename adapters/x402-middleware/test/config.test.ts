@@ -52,4 +52,26 @@ describe('loadX402Config — fail-closed', () => {
     expect(() => loadX402Config({ ...BASE, X402_MAX_TIMEOUT_SECONDS: '0' })).toThrow();
     expect(() => loadX402Config({ ...BASE, X402_MAX_TIMEOUT_SECONDS: 'abc' })).toThrow();
   });
+
+  describe('CDP Facilitator Phase 2 — cdp field', () => {
+    it('is null when neither CDP env var is set — the primary path never needs it', () => {
+      expect(loadX402Config(BASE).cdp).toBeNull();
+    });
+
+    it('is populated when both are set', () => {
+      const cfg = loadX402Config({
+        ...BASE,
+        CDP_API_KEY_ID: 'test-key-id',
+        CDP_API_KEY_SECRET: 'test-key-secret',
+      });
+      expect(cfg.cdp).toEqual({ apiKeyId: 'test-key-id', apiKeySecret: 'test-key-secret' });
+    });
+
+    it.each(['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET'])(
+      'throws if only %s is set (both-or-neither)',
+      (key) => {
+        expect(() => loadX402Config({ ...BASE, [key]: 'only-one-set' })).toThrow(/CDP_API_KEY/);
+      },
+    );
+  });
 });

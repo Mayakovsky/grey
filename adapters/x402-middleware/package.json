@@ -15,7 +15,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@coinbase/x402": "^2.1.0",
     "@grey/schemas": "workspace:*",
+    "@x402/core": "^2.20.0",
     "fastify": "^5.8.5",
     "viem": "^2.53.1"
   }

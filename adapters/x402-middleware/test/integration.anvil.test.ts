@@ -51,6 +51,7 @@ const cfg: X402Config = {
   relayerPrivateKey: RELAYER_PK,
   maxTimeoutSeconds: 120,
   usdc,
+  cdp: null,
 };
 
 d('x402 anvil integration (fork Base, real USDC)', () => {
@@ -68,7 +69,18 @@ d('x402 anvil integration (fork Base, real USDC)', () => {
       account: WHALE as Address,
       to: usdc.address,
       data: encodeFunctionData({
-        abi: [{ type: 'function', name: 'transfer', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }, { name: 'v', type: 'uint256' }], outputs: [{ type: 'bool' }] }],
+        abi: [
+          {
+            type: 'function',
+            name: 'transfer',
+            stateMutability: 'nonpayable',
+            inputs: [
+              { name: 'to', type: 'address' },
+              { name: 'v', type: 'uint256' },
+            ],
+            outputs: [{ type: 'bool' }],
+          },
+        ],
         functionName: 'transfer',
         args: [buyer.address, 1_000_000n], // 1 USDC
       }),
@@ -80,7 +92,15 @@ d('x402 anvil integration (fork Base, real USDC)', () => {
     const balanceOf = (who: Address) =>
       publicClient.readContract({
         address: usdc.address,
-        abi: [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }],
+        abi: [
+          {
+            type: 'function',
+            name: 'balanceOf',
+            stateMutability: 'view',
+            inputs: [{ name: 'a', type: 'address' }],
+            outputs: [{ type: 'uint256' }],
+          },
+        ],
         functionName: 'balanceOf',
         args: [who],
       }) as Promise<bigint>;
@@ -94,13 +114,22 @@ d('x402 anvil integration (fork Base, real USDC)', () => {
     if (!decoded.ok) return;
 
     const nowSec = BigInt(Math.floor(Date.now() / 1000));
-    const verdict = await verifyPayment(cfg, decoded.payload, 250_000n, publicClient as never, nowSec);
+    const verdict = await verifyPayment(
+      cfg,
+      decoded.payload,
+      250_000n,
+      publicClient as never,
+      nowSec,
+    );
     expect(verdict.ok).toBe(true);
     if (!verdict.ok) return;
 
     // Relayer settles on-chain (real viem clients — simulateContract runs against the fork first).
     const auth: TransferAuthorization = verdict.authorization;
-    const res = await settle(cfg, auth, verdict.signature as Hex, { wallet: wallet as never, publicClient: publicClient as never });
+    const res = await settle(cfg, auth, verdict.signature as Hex, {
+      wallet: wallet as never,
+      publicClient: publicClient as never,
+    });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     const txHash = res.txHash;
