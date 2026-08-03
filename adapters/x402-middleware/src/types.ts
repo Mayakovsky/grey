@@ -89,7 +89,10 @@ export interface CdpBazaarExtension {
       input: { type: 'http'; method: 'GET' | 'POST'; bodyType?: 'json' };
       output?: { example?: unknown };
     };
-    /** The request body's JSON Schema, verbatim from EvaluationKitEntry.inputSchema. */
+    /** A meta-schema describing `info` itself — `{type:'object', properties:{input:
+     *  <EvaluationKitEntry.inputSchema>, output:{...}}, required:['input']}` — NOT the raw
+     *  request-body schema directly. See buildCdpBazaarExtension's doc comment (challenge.ts) for
+     *  why: CDP validates `info` against `schema`, so `schema` must describe `info`'s own shape. */
     schema: object | null;
   };
 }

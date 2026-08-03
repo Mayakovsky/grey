@@ -76,13 +76,29 @@ describe('buildPaymentRequirements — strict-canonical x402', () => {
     const ext = body.extensions!.bazaar;
     expect(ext.info.input).toEqual({ type: 'http', method: 'POST', bodyType: 'json' });
     expect(ext.info.output?.example).toBeTruthy(); // legitimacy_scan has a sample response (Round 2)
-    expect(ext.schema).toEqual(body.accepts[0].extra.bazaar.inputSchema); // same JSON Schema, reshaped location
+    // schema describes `info` itself (CDP validates info against schema) — the real request-body
+    // schema lives one level deeper, at schema.properties.input. See buildCdpBazaarExtension's
+    // doc comment for why (CDP-PHASE2-fix-bazaar-schema-nesting-KOV-directive.md).
+    const schema = ext.schema as {
+      type: string;
+      properties: { input: unknown; output: unknown };
+      required: string[];
+    };
+    expect(schema.type).toBe('object');
+    expect(schema.required).toEqual(['input']);
+    expect(schema.properties.input).toEqual(body.accepts[0].extra.bazaar.inputSchema);
+    expect(schema.properties.output).toEqual({ type: 'object' });
   });
 
   it('buildCdpBazaarExtension is a pure reshape — same output for the same EvaluationKitEntry input', () => {
     const kitA = { inputSchema: { type: 'object' }, sample: undefined } as never;
     const extA = buildCdpBazaarExtension(kitA);
-    expect(extA.bazaar.schema).toEqual({ type: 'object' });
+    expect(extA.bazaar.schema).toEqual({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: { input: { type: 'object' }, output: { type: 'object' } },
+      required: ['input'],
+    });
     expect(extA.bazaar.info.output).toBeUndefined(); // no sample -> no output example, not a fabricated one
   });
 });
