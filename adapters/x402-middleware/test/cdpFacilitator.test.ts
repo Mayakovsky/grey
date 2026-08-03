@@ -2,8 +2,9 @@
 // facilitator instead of the local relayer. Mocks FacilitatorClient (verify/settle) so these run
 // with zero network calls, same discipline as preHandler.test.ts's mockWallet/mockPublicClient.
 //
-// v2-shaped challenge revision: this route's 402/X-PAYMENT wire format is x402 protocol v2
-// (PAYMENT-REQUIRED/PAYMENT-RESPONSE headers, empty JSON body) — see cdpFacilitator.ts's header
+// v2-shaped challenge revision: this route's wire format is x402 protocol v2 throughout —
+// PAYMENT-REQUIRED/PAYMENT-RESPONSE response headers (empty JSON body) and PAYMENT-SIGNATURE as
+// the buyer's request header (not X-PAYMENT, that's v1-only) — see cdpFacilitator.ts's header
 // comment for why. Tests build real v2-shaped payloads (genuine EIP-3009 signatures via
 // signedPayment, wrapped in the v2 envelope) rather than reusing Grey's v1 X-PAYMENT shape.
 import { describe, it, expect } from 'vitest';
@@ -71,7 +72,10 @@ function reqReply(url: string, header?: string) {
       return this;
     },
   };
-  const req = { url, headers: header ? { 'x-payment': header } : {} };
+  // v2's request header is PAYMENT-SIGNATURE, not X-PAYMENT — this local reqReply is a copy
+  // scoped to this file's own tests; preHandler.test.ts's separate copy correctly stays on
+  // x-payment for the primary (v1) route.
+  const req = { url, headers: header ? { 'payment-signature': header } : {} };
   return {
     req: req as unknown as FastifyRequest,
     reply: reply as unknown as FastifyReply,
@@ -263,7 +267,7 @@ describe('verifyAndSettleViaCdp — mechanical verify+settle over an already-v2 
 });
 
 describe('makeCdpX402PaymentPresenceCheck — v2 challenge', () => {
-  it('402 + empty body + PAYMENT-REQUIRED header when X-PAYMENT is absent', async () => {
+  it('402 + empty body + PAYMENT-REQUIRED header when PAYMENT-SIGNATURE is absent', async () => {
     const { req, reply, m } = reqReply(RESOURCE);
     await presenceCheck(TEST_CFG)(req, reply);
     expect(m.statusCode).toBe(402);
@@ -276,7 +280,7 @@ describe('makeCdpX402PaymentPresenceCheck — v2 challenge', () => {
     expect(decoded.accepts[0].amount).toBe('250000');
   });
 
-  it('passes through (no-op) when X-PAYMENT is present', async () => {
+  it('passes through (no-op) when PAYMENT-SIGNATURE is present', async () => {
     const { req, reply, m } = reqReply(RESOURCE, 'some-header');
     await presenceCheck(TEST_CFG)(req, reply);
     expect(m.statusCode).toBe(0);
@@ -290,7 +294,7 @@ describe('makeCdpX402PaymentPresenceCheck — v2 challenge', () => {
 });
 
 describe('makeCdpX402PreHandler — orchestration (mocked FacilitatorClient), v2 wire format', () => {
-  it('402 + empty body + PAYMENT-REQUIRED header when X-PAYMENT is absent', async () => {
+  it('402 + empty body + PAYMENT-REQUIRED header when PAYMENT-SIGNATURE is absent', async () => {
     const { req, reply, m } = reqReply(RESOURCE);
     await preHandlerGate(CDP_CFG, { client: mockClient() })(req, reply);
     expect(m.statusCode).toBe(402);
@@ -298,7 +302,7 @@ describe('makeCdpX402PreHandler — orchestration (mocked FacilitatorClient), v2
     expect(m.headers['PAYMENT-REQUIRED']).toBeDefined();
   });
 
-  it('402 on a malformed X-PAYMENT header (never reaches CDP)', async () => {
+  it('402 on a malformed PAYMENT-SIGNATURE header (never reaches CDP)', async () => {
     let verifyCalled = false;
     const client = mockClient({
       verify: async () => {
@@ -312,7 +316,7 @@ describe('makeCdpX402PreHandler — orchestration (mocked FacilitatorClient), v2
     expect(verifyCalled).toBe(false);
   });
 
-  it('402 on a well-formed but v1-shaped X-PAYMENT (this route only accepts v2-native payloads)', async () => {
+  it('402 on a well-formed but v1-shaped PAYMENT-SIGNATURE (this route only accepts v2-native payloads)', async () => {
     const { header } = await signedPayment(TEST_CFG); // Grey's own v1 shape
     const { req, reply, m } = reqReply(RESOURCE, header);
     await preHandlerGate(CDP_CFG, { client: mockClient() })(req, reply);

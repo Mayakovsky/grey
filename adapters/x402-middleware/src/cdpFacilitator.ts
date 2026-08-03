@@ -14,11 +14,14 @@
 // leaves the JSON body empty; settlement success uses a `PAYMENT-RESPONSE` header (not
 // `X-PAYMENT-RESPONSE`). This is scoped ENTIRELY to this file / the `/v1/cdp/offerings/<slug>`
 // route — challenge.ts's buildPaymentRequirements (v1) and the primary/trust-rung routes are
-// untouched, per the directive's explicit scope ruling. The buyer's inbound X-PAYMENT header name
-// is unchanged (v1 and v2 both use `X-PAYMENT` — only the SERVER's response headers differ); what
-// changes is that a v2-native buyer signs against a v2-shaped `accepts[]` entry, so their X-PAYMENT
-// payload is v2-shaped too (`{x402Version:2, accepted, payload, ...}`) — decoded natively below,
-// no v1-decode-then-translate step needed anymore (that translation is gone from this file).
+// untouched, per the directive's explicit scope ruling. The buyer's REQUEST header ALSO changes in
+// v2 — confirmed against the same compiled source (encodePaymentSignatureHeader switches on
+// x402Version: case 2 -> `PAYMENT-SIGNATURE`, case 1 -> `X-PAYMENT`) — an earlier revision of this
+// file wrongly assumed `X-PAYMENT` was unchanged and read that header on this route; fixed to read
+// `payment-signature`, per CDP-PHASE2-fix-payment-signature-header-KOV-directive.md. A v2-native
+// buyer signs against this route's v2-shaped `accepts[]` entry, so their payload is v2-shaped too
+// (`{x402Version:2, accepted, payload, ...}`) — decoded natively below, no v1-decode-then-translate
+// step needed anymore (that translation is gone from this file).
 //
 // Wire-shape note (load-bearing, verified live 2026-08-02/03): CDP's discovery endpoint returns
 // `x402Version: 2` items whose `accepts[]` entries match @x402/core's (non-V1) `PaymentRequirements`
@@ -234,7 +237,10 @@ export function makeCdpX402PaymentPresenceCheck(cfg: X402Config): preValidationH
   ): Promise<void> {
     const slug = cdpSlugFromUrl(req.url);
     if (!slug) return;
-    const header = req.headers['x-payment'];
+    // v2's request header is PAYMENT-SIGNATURE, not X-PAYMENT (that's v1-only) — confirmed
+    // against @x402/core's own compiled source: encodePaymentSignatureHeader switches on
+    // x402Version, case 2 -> "PAYMENT-SIGNATURE", case 1 -> "X-PAYMENT".
+    const header = req.headers['payment-signature'];
     if (typeof header !== 'string' || header.length === 0) {
       sendCdpChallenge(reply, cfg, slug, req.url, 'payment required');
     }
@@ -266,7 +272,8 @@ export function makeCdpX402PreHandler(
     if (!slug) return;
 
     const resource = req.url;
-    const header = req.headers['x-payment'];
+    // Same PAYMENT-SIGNATURE-not-X-PAYMENT note as makeCdpX402PaymentPresenceCheck above.
+    const header = req.headers['payment-signature'];
     if (typeof header !== 'string' || header.length === 0) {
       sendCdpChallenge(reply, cfg, slug, resource, 'payment required');
       return;
