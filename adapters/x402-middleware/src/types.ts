@@ -13,6 +13,14 @@ export interface UsdcAsset {
   decimals: 6;
 }
 
+/** CDP Facilitator Phase 2: `CDP_API_KEY_ID`/`CDP_API_KEY_SECRET`, present only when BOTH are set
+ *  in the environment (loadX402Config fails closed if only one is set — see config.ts). Consumed
+ *  by cdpFacilitator.ts to build a `@coinbase/x402` facilitator config; never read anywhere else. */
+export interface X402CdpConfig {
+  apiKeyId: string;
+  apiKeySecret: string;
+}
+
 export interface X402Config {
   /** Receiver address (Tier-A hot wallet). Buyer signs `to` = this; relayer cannot redirect. */
   payTo: Address;
@@ -25,6 +33,11 @@ export interface X402Config {
   relayerPrivateKey: Hex;
   maxTimeoutSeconds: number;
   usdc: UsdcAsset;
+  /** CDP Facilitator Phase 2: null when CDP routing isn't configured (the primary self-hosted
+   *  relayer path — makeX402PreHandler/makeTrustRungPreHandler — never reads this field and works
+   *  identically either way). The CDP-routed parallel path (cdpFacilitator.ts) fails closed —
+   *  throws a clear error — if invoked while this is null, rather than silently no-op'ing. */
+  cdp: X402CdpConfig | null;
 }
 
 /** EIP-3009 authorization the buyer signs (x402 `exact`, EVM). */

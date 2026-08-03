@@ -62,6 +62,21 @@ export function loadX402Config(env: Env = process.env): X402Config {
     );
   }
 
+  // CDP Facilitator Phase 2: optional — the primary self-hosted relayer path never reads these.
+  // Both-or-neither: one set without the other is a config mistake, fail closed rather than
+  // silently treating it as "not configured".
+  const cdpApiKeyId = env.CDP_API_KEY_ID?.trim() || null;
+  const cdpApiKeySecret = env.CDP_API_KEY_SECRET?.trim() || null;
+  if ((cdpApiKeyId === null) !== (cdpApiKeySecret === null)) {
+    throw new Error(
+      'x402-middleware: CDP_API_KEY_ID and CDP_API_KEY_SECRET must both be set, or both be absent',
+    );
+  }
+  const cdp =
+    cdpApiKeyId && cdpApiKeySecret
+      ? { apiKeyId: cdpApiKeyId, apiKeySecret: cdpApiKeySecret }
+      : null;
+
   return {
     payTo,
     network,
@@ -71,5 +86,6 @@ export function loadX402Config(env: Env = process.env): X402Config {
     relayerPrivateKey,
     maxTimeoutSeconds,
     usdc: USDC_BY_NETWORK[network],
+    cdp,
   };
 }

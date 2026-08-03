@@ -37,4 +37,13 @@ export type {
   PaymentPayload,
   TransferAuthorization,
   CdpBazaarExtension,
+  X402CdpConfig,
 } from './types.js';
+export {
+  cdpSlugFromUrl,
+  makeCdpFacilitatorClient,
+  verifyAndSettleViaCdp,
+  makeCdpX402PaymentPresenceCheck,
+  makeCdpX402PreHandler,
+} from './cdpFacilitator.js';
+export type { CdpX402PreHandlerDeps } from './cdpFacilitator.js';
