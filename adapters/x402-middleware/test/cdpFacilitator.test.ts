@@ -30,7 +30,11 @@ import { TEST_CFG, signedPayment } from './_sign.js';
 
 const CDP_CFG: X402Config = {
   ...TEST_CFG,
-  cdp: { apiKeyId: 'test-key-id', apiKeySecret: 'test-key-secret' },
+  cdp: {
+    apiKeyId: 'test-key-id',
+    apiKeySecret: 'test-key-secret',
+    resourceBaseUrl: 'https://api.whitepapergrey.com',
+  },
 };
 const RESOURCE = '/v1/cdp/offerings/legitimacy_scan';
 
@@ -162,6 +166,17 @@ describe('buildCdpChallenge — v2-shaped PaymentRequired', () => {
       maxTimeoutSeconds: TEST_CFG.maxTimeoutSeconds,
     });
     expect(challenge.accepts[0].extra.credentialTypes).toEqual(['authorization']);
+  });
+
+  it('resource.url stays the bare path when cfg.cdp is null (defensive fallback, not a crash)', () => {
+    const challenge = buildCdpChallenge(TEST_CFG, 'legitimacy_scan', RESOURCE);
+    expect(challenge.resource.url).toBe(RESOURCE);
+  });
+
+  it('resource.url is an ABSOLUTE https URL when cfg.cdp is configured — CDP discovery registration requires this', () => {
+    const challenge = buildCdpChallenge(CDP_CFG, 'legitimacy_scan', RESOURCE);
+    expect(challenge.resource.url).toBe(`https://api.whitepapergrey.com${RESOURCE}`);
+    expect(challenge.resource.url.startsWith('https://')).toBe(true);
   });
 
   it('carries the Bazaar discovery extension (same EvaluationKit source as the primary route)', () => {
@@ -300,6 +315,9 @@ describe('makeCdpX402PreHandler — orchestration (mocked FacilitatorClient), v2
     expect(m.statusCode).toBe(402);
     expect(m.body).toEqual({});
     expect(m.headers['PAYMENT-REQUIRED']).toBeDefined();
+    // resource.url must be absolute for CDP discovery registration — confirmed live, not guessed.
+    const decoded = decodeHeader<{ resource: { url: string } }>(m.headers['PAYMENT-REQUIRED']);
+    expect(decoded.resource.url).toBe(`https://api.whitepapergrey.com${RESOURCE}`);
   });
 
   it('402 on a malformed PAYMENT-SIGNATURE header (never reaches CDP)', async () => {
