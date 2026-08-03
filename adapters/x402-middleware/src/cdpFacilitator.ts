@@ -146,7 +146,7 @@ function sendCdpChallenge(
   reply.code(402).send({});
 }
 
-/** Decodes a buyer's X-PAYMENT header as a v2-native `PaymentPayload` (`{x402Version:2, accepted,
+/** Decodes a buyer's PAYMENT-SIGNATURE header as a v2-native `PaymentPayload` (`{x402Version:2, accepted,
  *  payload, ...}`) — a v2-native buyer signs against this route's v2-shaped `accepts[]` entry, so
  *  there's no v1-decode-then-translate step here (unlike verify.ts's decodePaymentHeader, which
  *  this route deliberately does not use). Never throws — every rejection is a machine-readable
@@ -158,7 +158,7 @@ function decodeCdpPaymentPayload(
   try {
     parsed = decodePaymentSignatureHeader(header) as CdpPaymentPayload;
   } catch {
-    return { ok: false, reason: 'X-PAYMENT is not valid base64 JSON' };
+    return { ok: false, reason: 'PAYMENT-SIGNATURE is not valid base64 JSON' };
   }
   if (parsed?.x402Version !== 2) {
     return { ok: false, reason: 'unsupported x402 version (expected 2)' };
