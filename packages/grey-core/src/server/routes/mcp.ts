@@ -20,6 +20,7 @@ import type { FastifyInstance } from 'fastify';
 import type { OfferingSlug, PaidOfferingSlug } from '@grey/schemas/responses';
 import { buildEvaluationKit } from '@grey/schemas/evaluationKit';
 import { isEnabled } from '@grey/schemas/pricing';
+import { offeringRequestValidators } from '@grey/schemas/validators';
 import {
   isPaidSlug,
   priceAtomicFor,
@@ -89,6 +90,14 @@ function textResult(value: unknown, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(value) }], isError };
 }
 
+/** Human-readable summary of ajv's error array, for the isError CallToolResult body. */
+function summarizeValidationErrors(
+  errors: { instancePath: string; message?: string }[] | null | undefined,
+): string {
+  if (!errors || errors.length === 0) return 'invalid arguments';
+  return errors.map((e) => `${e.instancePath || 'body'} ${e.message ?? 'is invalid'}`).join('; ');
+}
+
 function toolDef(slug: OfferingSlug): { name: string; description: string; inputSchema: object } {
   const kit = buildEvaluationKit(slug);
   return {
@@ -155,6 +164,20 @@ export function registerMcpRoute(
           );
           return;
         }
+
+        // Validate BEFORE decode/verify/settle — same lesson as the HTTP split-gate fix
+        // (CDP-BAZAAR-PHASE1-REVISION-split-gate-KOV-directive.md): a caller with a malformed
+        // request must never be charged for a call that was always going to fail. The
+        // no-payment-header check above still runs first (mirrors the HTTP route's
+        // body-independent presence check staying ahead of shape validation).
+        const validateArgs = offeringRequestValidators[paidSlug];
+        if (!validateArgs(args)) {
+          reply.send(
+            ok(id, textResult({ error: summarizeValidationErrors(validateArgs.errors) }, true)),
+          );
+          return;
+        }
+
         const decoded = decodePaymentHeader(paymentHeader);
         if (!decoded.ok) {
           reply.send(ok(id, textResult({ error: decoded.reason }, true)));

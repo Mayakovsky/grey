@@ -117,4 +117,49 @@ describe('MCP — tools/call (E1-D)', () => {
     expect(body.error).toBeDefined();
     expect(body.result).toBeUndefined();
   });
+
+  it('a paid tool call with a payment header but malformed arguments -> clean isError, no settlement (nothing broadcast)', async () => {
+    // Same "nothing broadcast" proof pattern as preHandler.test.ts's FDQ-40 test — a genuinely
+    // signed payment isn't needed here: validation runs BEFORE decode/verify/settle now, so any
+    // non-empty header is enough to get past the presence check and reach the new validation
+    // step, and wallet.calls staying empty proves settle() was never reached either way.
+    const calls: unknown[] = [];
+    const deps = {
+      ...mcpDeps,
+      wallet: {
+        writeContract: async (args: unknown) => {
+          calls.push(args);
+          return ('0x' + 'ee'.repeat(32)) as `0x${string}`;
+        },
+      },
+    };
+    const app = makeApp({}, undefined, { mcp: deps });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/mcp',
+      payload: rpc('tools/call', {
+        name: 'legitimacy_scan',
+        arguments: {}, // missing required token_address
+        _meta: { x402Payment: 'present-but-not-necessarily-valid' },
+      }),
+    });
+    const body = res.json();
+    expect(body.result.isError).toBe(true);
+    const parsed = JSON.parse(body.result.content[0].text);
+    expect(parsed.error).toContain('token_address');
+    expect(calls).toHaveLength(0); // settle() never reached — nothing broadcast
+  });
+
+  it('malformed arguments with no payment header at all still returns PaymentRequirements first (presence check wins, same precedence as the HTTP route)', async () => {
+    const app = makeApp({}, undefined, { mcp: mcpDeps });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/mcp',
+      payload: rpc('tools/call', { name: 'legitimacy_scan', arguments: {} }),
+    });
+    const body = res.json();
+    expect(body.result.isError).toBe(true);
+    const parsed = JSON.parse(body.result.content[0].text);
+    expect(parsed.accepts).toBeDefined(); // PaymentRequirements shape, not a validation-error shape
+  });
 });
