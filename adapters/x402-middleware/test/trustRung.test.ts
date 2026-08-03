@@ -47,4 +47,15 @@ describe('trustRung — E1-C disable flag (Forces ruling B-1, Invariant #34)', (
     expect(body.accepts[0].description).toContain(TRUST_RUNG_SLUG);
     expect(body.accepts[0].extra.bazaar.serviceName).toBe('Legitimacy Trust Rung');
   });
+
+  it('CDP/Bazaar alignment Phase 1: also carries top-level extensions.bazaar, same shape as the normal 7 routes', () => {
+    const body = buildTrustRungPaymentRequirements(TEST_CFG, `/v1/offerings/${TRUST_RUNG_SLUG}`);
+    expect(body.extensions).toBeTruthy();
+    expect(body.extensions!.bazaar.info.input).toEqual({
+      type: 'http',
+      method: 'POST',
+      bodyType: 'json',
+    });
+    expect(body.extensions!.bazaar.schema).toEqual(body.accepts[0].extra.bazaar.inputSchema);
+  });
 });

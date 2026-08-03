@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildServer } from '../src/server';
 import type { HandlerDeps, GreyCoreConfig } from '../src/deps';
-import { passThroughX402 } from './_helpers';
+import { passThroughX402Gate } from './_helpers';
 
 const CONFIG: GreyCoreConfig = {
   version: '0.1.0-test',
@@ -34,7 +34,7 @@ function fakeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
 
 describe('probes (app.inject)', () => {
   it('GET /health → 200 ok + version + numeric uptimeSec', async () => {
-    const app = buildServer(fakeDeps(), passThroughX402);
+    const app = buildServer(fakeDeps(), passThroughX402Gate);
     const res = await app.inject({ method: 'GET', url: '/health' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -45,7 +45,7 @@ describe('probes (app.inject)', () => {
   });
 
   it('GET /identity → DID + agent shape', async () => {
-    const app = buildServer(fakeDeps(), passThroughX402);
+    const app = buildServer(fakeDeps(), passThroughX402Gate);
     const res = await app.inject({ method: 'GET', url: '/identity' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
@@ -58,7 +58,7 @@ describe('probes (app.inject)', () => {
   });
 
   it('GET /openapi → 200 application/yaml with the spec body', async () => {
-    const app = buildServer(fakeDeps(), passThroughX402);
+    const app = buildServer(fakeDeps(), passThroughX402Gate);
     const res = await app.inject({ method: 'GET', url: '/openapi' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('application/yaml');

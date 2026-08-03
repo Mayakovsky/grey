@@ -3,7 +3,7 @@
 // ledger write failure must never cost the buyer their already-paid-for response.
 import { describe, it, expect } from 'vitest';
 import { loadX402Config } from '@grey/x402-middleware';
-import { makeApp, passThroughX402 } from './_helpers';
+import { makeApp, passThroughX402Gate } from './_helpers';
 
 const cfg = loadX402Config({
   X402_NETWORK: 'eip155:84532',
@@ -35,8 +35,12 @@ describe('revenue ledger — recorded at settlement (E1-F)', () => {
 
   it('a 402 (no payment, real gate) records NOTHING — settlement never happened', async () => {
     const sink: Array<unknown> = [];
-    const { makeX402PreHandler } = await import('@grey/x402-middleware');
-    const gate = makeX402PreHandler(cfg, relayerStubs);
+    const { makeX402PreHandler, makeX402PaymentPresenceCheck } =
+      await import('@grey/x402-middleware');
+    const gate = {
+      preValidation: makeX402PaymentPresenceCheck(cfg),
+      preHandler: makeX402PreHandler(cfg, relayerStubs),
+    };
     const app = makeApp({ revenueEventsSink: sink as never }, gate);
     const res = await app.inject({
       method: 'POST',
@@ -52,9 +56,9 @@ describe('revenue ledger — recorded at settlement (E1-F)', () => {
     // passThroughX402 here too — same "settlement already handled" convention as the first test
     // above; makeTrustRungPreHandler's own verify/settle gating is covered by the 402-records-
     // nothing test and by x402-middleware's own trustRung.test.ts.
-    const app = makeApp({ revenueEventsSink: sink }, passThroughX402, {
+    const app = makeApp({ revenueEventsSink: sink }, passThroughX402Gate, {
       trustRungEnabled: true,
-      trustRungPreHandler: passThroughX402,
+      trustRungGate: passThroughX402Gate,
     });
     await app.inject({
       method: 'POST',

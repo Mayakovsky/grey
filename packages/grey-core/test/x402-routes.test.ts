@@ -3,7 +3,11 @@
 // clean 402 (never 500), and the free GET resources are ungated. The valid-payment→settle→200
 // path is unit-covered in @grey/x402-middleware's preHandler.test + the anvil integration.
 import { describe, it, expect } from 'vitest';
-import { loadX402Config, makeX402PreHandler } from '@grey/x402-middleware';
+import {
+  loadX402Config,
+  makeX402PreHandler,
+  makeX402PaymentPresenceCheck,
+} from '@grey/x402-middleware';
 import { makeApp } from './_helpers';
 
 const cfg = loadX402Config({
@@ -14,15 +18,20 @@ const cfg = loadX402Config({
 });
 
 // Mock clients — never reached on the no-payment paths (402 precedes settle).
-const gate = makeX402PreHandler(cfg, {
-  wallet: { writeContract: async () => ('0x' + 'ee'.repeat(32)) as `0x${string}` },
-  publicClient: {
-    readContract: async () => false,
-    simulateContract: async () => ({ request: {} }),
-    waitForTransactionReceipt: async () => ({ status: 'success' as const }),
-  },
-  now: () => 1_000_000_000_000,
-});
+// CDP/Bazaar alignment Phase 1 revision: the gate is two hooks — see offerings.ts's header
+// comment. The new preValidation half + the unchanged preHandler half.
+const gate = {
+  preValidation: makeX402PaymentPresenceCheck(cfg),
+  preHandler: makeX402PreHandler(cfg, {
+    wallet: { writeContract: async () => ('0x' + 'ee'.repeat(32)) as `0x${string}` },
+    publicClient: {
+      readContract: async () => false,
+      simulateContract: async () => ({ request: {} }),
+      waitForTransactionReceipt: async () => ({ status: 'success' as const }),
+    },
+    now: () => 1_000_000_000_000,
+  }),
+};
 
 const PRICE: Record<string, string> = {
   legitimacy_scan: '250000',
@@ -66,6 +75,40 @@ describe('x402 gate on the 7 paid routes', () => {
       expect(body.accepts[0].maxAmountRequired).toBe(PRICE[slug]);
       expect(body.accepts[0].payTo).toBe(cfg.payTo);
       expect(body.accepts[0].asset).toBe(cfg.usdc.address);
+      await app.close();
+    },
+  );
+
+  // CDP/Bazaar alignment Phase 1, Task 2: the gap the audit report found — a probe that doesn't
+  // already know the required body shape (no payment, empty/schema-invalid body) must still get a
+  // 402 carrying the Bazaar metadata, not a 400 that never reaches the payment gate at all. Every
+  // offering here has SOME way to violate its schema even with no required fields
+  // (daily_tech_brief has none, so its "malformed" case is an additionalProperties:false trip).
+  const MALFORMED: Record<string, object> = {
+    legitimacy_scan: {}, // missing required token_address
+    verify_whitepaper: {}, // missing required token_address
+    verify_full_tech: {}, // missing required token_address
+    claim_extraction: {}, // missing required whitepaperUrl
+    claim_history: {}, // missing required projectIdentifier
+    quick_protocol_facts: {}, // missing required projectQuery
+    daily_tech_brief: { bogus_field: true }, // no required fields; additionalProperties:false trips instead
+  };
+
+  it.each(Object.keys(PRICE))(
+    'POST /v1/offerings/%s with an empty/malformed body and no payment → still 402 with Bazaar metadata, never 400',
+    async (slug) => {
+      const app = makeApp({}, gate);
+      const res = await app.inject({
+        method: 'POST',
+        url: `/v1/offerings/${slug}`,
+        payload: MALFORMED[slug],
+      });
+      expect(res.statusCode, JSON.stringify(res.json())).toBe(402);
+      const body = res.json();
+      expect(body.x402Version).toBe(1);
+      expect(body.accepts[0].maxAmountRequired).toBe(PRICE[slug]);
+      expect(body.accepts[0].extra.bazaar).toBeTruthy();
+      expect(body.accepts[0].extra.bazaar.discoverable).toBe(true);
       await app.close();
     },
   );
