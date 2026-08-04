@@ -55,6 +55,7 @@ import type {
 import type { Hex } from 'viem';
 import type { OfferingSlug } from '@grey/schemas/responses';
 import { buildEvaluationArtifact } from '@grey/schemas/evaluationKit';
+import type { EvaluationKitEntry } from '@grey/schemas/evaluationKit';
 import type { X402Config } from './types.js';
 import type { SettleOutcome } from './settle.js';
 import { isPaidSlug, priceAtomicFor } from './prices.js';
@@ -102,6 +103,24 @@ export function buildCdpPaymentRequirementsEntry(
   };
 }
 
+/** The `resource` object shared between the 402 challenge (`PaymentRequired.resource`) and the
+ *  payment payload Grey forwards to CDP (`PaymentPayload.resource`) — same shape, same source,
+ *  so they can never drift apart (mirrors buildCdpPaymentRequirementsEntry's rationale). */
+function buildCdpResourceInfo(
+  cfg: X402Config,
+  resourcePath: string,
+  kit: EvaluationKitEntry,
+): CdpPaymentRequired['resource'] {
+  return {
+    url: (cfg.cdp?.resourceBaseUrl ?? '') + resourcePath,
+    description: kit.description ?? undefined,
+    mimeType: 'application/json',
+    serviceName: kit.serviceName ?? undefined,
+    tags: [...kit.tags],
+    iconUrl: kit.iconUrl ?? undefined,
+  };
+}
+
 /** The full v2 `PaymentRequired` 402 payload — CDP-route-only, never touches challenge.ts's v1
  *  buildPaymentRequirements. Reuses buildCdpBazaarExtension (already shared with trustRung.ts)
  *  for the discovery metadata, same EvaluationKit source as the primary route.
@@ -120,17 +139,9 @@ export function buildCdpChallenge(
   error?: string,
 ): CdpPaymentRequired {
   const kit = buildEvaluationArtifact(slug as OfferingSlug);
-  const resourceUrl = (cfg.cdp?.resourceBaseUrl ?? '') + resourcePath;
   const body: CdpPaymentRequired = {
     x402Version: 2,
-    resource: {
-      url: resourceUrl,
-      description: kit.description ?? undefined,
-      mimeType: 'application/json',
-      serviceName: kit.serviceName ?? undefined,
-      tags: [...kit.tags],
-      iconUrl: kit.iconUrl ?? undefined,
-    },
+    resource: buildCdpResourceInfo(cfg, resourcePath, kit),
     accepts: [buildCdpPaymentRequirementsEntry(cfg, slug)],
     // CdpBazaarExtension has no index signature, but is structurally a plain object — safe cast
     // to the v2 spec's generic `extensions?: Record<string, unknown>` field.
@@ -293,6 +304,20 @@ export function makeCdpX402PreHandler(
       sendCdpChallenge(reply, cfg, slug, resource, decoded.reason);
       return;
     }
+
+    // `paymentPayload.resource` is not part of the base x402 spec and settlement succeeds
+    // without it — but CDP's indexer requires it populated to submit the discovery job at all
+    // (confirmed directly by Coinbase's own indexing-pipeline engineer, x402-foundation/x402#2112
+    // — exactly Grey's observed symptom: clean validate, confirmed settlements, never indexed).
+    // A spec-compliant buyer client (`@x402/core`'s own `x402Client`) copies this from the 402
+    // challenge automatically, but Grey never relied on that — it re-derives its own canonical
+    // resource here and overwrites whatever (if anything) the buyer's payload carried, since Grey
+    // is the authoritative source and no buyer client should be trusted to carry it correctly.
+    decoded.payload.resource = buildCdpResourceInfo(
+      cfg,
+      resource,
+      buildEvaluationArtifact(slug as OfferingSlug),
+    );
 
     const requirements = buildCdpPaymentRequirementsEntry(cfg, slug);
     let outcome: SettleOutcome;

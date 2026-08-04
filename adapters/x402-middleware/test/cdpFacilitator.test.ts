@@ -355,6 +355,44 @@ describe('makeCdpX402PreHandler — orchestration (mocked FacilitatorClient), v2
     expect(decoded.transaction).toMatch(/^0x/);
   });
 
+  it("overwrites payload.resource with Grey's own canonical resource before verify/settle — CDP's indexer requires this field populated to submit the discovery job at all (confirmed by Coinbase's indexing-pipeline engineer, x402-foundation/x402#2112), and Grey must never trust a buyer client to carry it correctly", async () => {
+    const { payload: v1 } = await signedPayment(TEST_CFG);
+    const buyerPayload: CdpPaymentPayload = {
+      x402Version: 2,
+      // Buyer's own payload omits `resource` entirely (a spec-compliant buyer isn't required to
+      // send it, and plenty of real clients won't) — Grey must supply it itself, not rely on this.
+      accepted: buildCdpPaymentRequirementsEntry(CDP_CFG, 'legitimacy_scan'),
+      payload: { signature: v1.payload.signature, authorization: v1.payload.authorization },
+    };
+    const header = encodeHeader(buyerPayload);
+    const { req, reply, m } = reqReply(RESOURCE, header);
+
+    let verifyPayload: CdpPaymentPayload | undefined;
+    let settlePayload: CdpPaymentPayload | undefined;
+    const client = mockClient({
+      verify: async (payload) => {
+        verifyPayload = payload as CdpPaymentPayload;
+        return { isValid: true };
+      },
+      settle: async (payload) => {
+        settlePayload = payload as CdpPaymentPayload;
+        return { success: true, transaction: '0x' + 'cd'.repeat(32), network: 'eip155:84532' };
+      },
+    });
+    await preHandlerGate(CDP_CFG, { client })(req, reply);
+
+    expect(m.statusCode).toBe(0); // settled — never hit an error reply path
+    expect(verifyPayload?.resource).toEqual({
+      url: `https://api.whitepapergrey.com${RESOURCE}`,
+      description: expect.any(String),
+      mimeType: 'application/json',
+      serviceName: expect.any(String),
+      tags: expect.any(Array),
+      iconUrl: expect.any(String),
+    });
+    expect(settlePayload?.resource).toEqual(verifyPayload?.resource);
+  });
+
   it('402 when CDP verify rejects', async () => {
     const header = encodeHeader(await v2Payload(TEST_CFG, 'legitimacy_scan', RESOURCE));
     const { req, reply, m } = reqReply(RESOURCE, header);
