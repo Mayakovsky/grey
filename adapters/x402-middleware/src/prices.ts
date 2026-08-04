@@ -8,6 +8,7 @@
 import type { PaidOfferingSlug } from '@grey/schemas/responses';
 import { resolvePriceUsd } from '@grey/schemas/pricing';
 import type { X402Network, UsdcAsset } from './types.js';
+import { NETWORK_REGISTRY } from './registry.js';
 
 export type PaidSlug = PaidOfferingSlug;
 
@@ -60,20 +61,11 @@ export function priceUsdFor(slug: string): number {
   return resolvePriceUsd(slug as PaidSlug, CHANNEL);
 }
 
-/** Per-network USDC asset literals — the ONE place addresses + EIP-712 domains live.
- *  Base mainnet name/version are the well-known FiatToken values; Base Sepolia must be
- *  re-verified against the live contract before the Phase D testnet round-trip. */
+/** Per-network USDC asset — derived from `registry.ts` (E2-A), NOT the source anymore. Base
+ *  mainnet name/version are the well-known FiatToken values; Base Sepolia must be re-verified
+ *  against the live contract before the Phase D testnet round-trip. Kept as a named export with
+ *  the same shape/values for existing consumers (this file's own resolvers below, tests). */
 export const USDC_BY_NETWORK: Record<X402Network, UsdcAsset> = {
-  'eip155:8453': {
-    address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    name: 'USD Coin',
-    version: '2',
-    decimals: 6,
-  },
-  'eip155:84532': {
-    address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-    name: 'USDC',
-    version: '2',
-    decimals: 6,
-  },
+  'eip155:8453': NETWORK_REGISTRY['eip155:8453'].usdc,
+  'eip155:84532': NETWORK_REGISTRY['eip155:84532'].usdc,
 };

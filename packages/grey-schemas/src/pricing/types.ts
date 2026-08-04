@@ -24,5 +24,7 @@ export interface OfferingPricing {
   readonly enabled: boolean;
 }
 
-/** A channel this canonical price is realised on. Grows with each expansion (E2 Kite, E3 Olas, ...). */
-export type Channel = 'x402' | 'acp';
+/** A channel this canonical price is realised on. Grows with each expansion (E2 Kite, E3 Olas, ...).
+ *  E2-A adds 'kite' as a pricing constant only — no wallet, RPC, or live surface implied by its
+ *  presence here (see MARKET-EXPANSION-PROJECT.md §3 E2-A). */
+export type Channel = 'x402' | 'acp' | 'kite';

@@ -89,10 +89,13 @@ export const PRICING_TABLE: Record<OfferingSlug, OfferingPricing> = {
   },
 };
 
-/** Spec §2.3: x402/Base and Virtuals ACP are both grandfathered at 1.00× — no repricing. */
+/** Spec §2.3: x402/Base and Virtuals ACP are both grandfathered at 1.00× — no repricing.
+ *  Kite (E2) mirrors x402 exactly until Kite volume is legible — pricing constant only, added
+ *  in E2-A; no Kite wallet/RPC/live surface exists yet (that's E2-B/D territory). */
 export const NETWORK_MULTIPLIER: Record<Channel, number> = {
   x402: 1.0,
   acp: 1.0,
+  kite: 1.0,
 };
 
 export function computeClassFor(slug: OfferingSlug): ComputeClass {

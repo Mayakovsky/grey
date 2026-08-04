@@ -2,19 +2,10 @@
 // Every field required at runtime is validated here or the process refuses to serve paid routes.
 import process from 'node:process';
 import { getAddress, isHex, type Address, type Hex } from 'viem';
-import type { X402Config, X402Network } from './types.js';
-import { USDC_BY_NETWORK } from './prices.js';
+import type { X402Config } from './types.js';
+import { isRegisteredNetwork, networkRegistryEntry } from './registry.js';
 
 type Env = Record<string, string | undefined>;
-
-const NETWORK_CHAIN_ID: Record<X402Network, number> = {
-  'eip155:8453': 8453,
-  'eip155:84532': 84532,
-};
-
-function isNetwork(v: string): v is X402Network {
-  return v === 'eip155:8453' || v === 'eip155:84532';
-}
 
 function required(env: Env, key: string): string {
   const v = env[key];
@@ -31,12 +22,13 @@ function required(env: Env, key: string): string {
  */
 export function loadX402Config(env: Env = process.env): X402Config {
   const networkRaw = required(env, 'X402_NETWORK');
-  if (!isNetwork(networkRaw)) {
+  if (!isRegisteredNetwork(networkRaw)) {
     throw new Error(
       `x402-middleware: X402_NETWORK must be eip155:8453 or eip155:84532, got "${networkRaw}"`,
     );
   }
   const network = networkRaw;
+  const { chainId, usdc } = networkRegistryEntry(network);
 
   let payTo: Address;
   try {
@@ -91,12 +83,12 @@ export function loadX402Config(env: Env = process.env): X402Config {
   return {
     payTo,
     network,
-    chainId: NETWORK_CHAIN_ID[network],
+    chainId,
     rpcUrl,
     rpcUrlFallback,
     relayerPrivateKey,
     maxTimeoutSeconds,
-    usdc: USDC_BY_NETWORK[network],
+    usdc,
     cdp,
   };
 }

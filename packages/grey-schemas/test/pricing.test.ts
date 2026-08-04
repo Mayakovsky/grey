@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { OfferingSlug } from '../src/responses/types';
+import type { Channel } from '../src/pricing';
 import {
   PRICING_TABLE,
   NETWORK_MULTIPLIER,
@@ -94,6 +95,13 @@ describe('pricing — computeClass + canonical table (E1-A, Invariant #30/#31)',
     expect(NETWORK_MULTIPLIER.acp).toBe(1.0);
     expect(networkMultiplierFor('x402')).toBe(1.0);
     expect(networkMultiplierFor('acp')).toBe(1.0);
+  });
+
+  it('E2-A: Channel accepts "kite", mirroring x402 at 1.00x (spec §2.3, no Kite surface live yet)', () => {
+    const kite: Channel = 'kite';
+    expect(NETWORK_MULTIPLIER[kite]).toBe(1.0);
+    expect(networkMultiplierFor('kite')).toBe(1.0);
+    expect(resolvePriceUsd('legitimacy_scan', 'kite')).toBe(0.25);
   });
 
   it('resolvePriceUsd = canonicalUsd × networkMultiplier (identity at 1.00×)', () => {

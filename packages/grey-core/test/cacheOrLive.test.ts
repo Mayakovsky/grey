@@ -1,7 +1,7 @@
 // @grey/core — cacheOrLive unit tests (M3.5 Phase B, spec §6.2). The pipeline run variants are
 // mocked (Q7) so these assert grey-core's orchestration only: FDQ-8 routing + builder selection,
 // the §2.10 discovery step, subject derivation, and the failure/miss → typed-empty sentinel.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { runL1, runL1L2, runFullPipeline, withTimeout } = vi.hoisted(() => ({
   runL1: vi.fn(),
@@ -212,5 +212,27 @@ describe('createHandlerDeps — M3.5 wiring sanity', () => {
     expect(deps.pipeline.cryptoResolver).toBeDefined();
     expect(typeof deps.discovery.discover).toBe('function');
     expect(deps.whitepapers).toBeDefined();
+  });
+
+  describe('E2-A — config.payTo/network resolve through CHANNEL_IDENTITY_REGISTRY, byte-identical to the pre-refactor direct env reads', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('surfaces BASE_X402_PAY_TO / X402_NETWORK unchanged when set', () => {
+      vi.stubEnv('BASE_X402_PAY_TO', '0x70997970C51812dc3A010C7d01b50e0d17dc79C8');
+      vi.stubEnv('X402_NETWORK', 'eip155:8453');
+      const deps = createHandlerDeps({ databaseUrl: '' });
+      expect(deps.config.payTo).toBe('0x70997970C51812dc3A010C7d01b50e0d17dc79C8');
+      expect(deps.config.network).toBe('eip155:8453');
+    });
+
+    it('falls back to "" for both fields when unset, same as pre-refactor', () => {
+      vi.stubEnv('BASE_X402_PAY_TO', undefined);
+      vi.stubEnv('X402_NETWORK', undefined);
+      const deps = createHandlerDeps({ databaseUrl: '' });
+      expect(deps.config.payTo).toBe('');
+      expect(deps.config.network).toBe('');
+    });
   });
 });
