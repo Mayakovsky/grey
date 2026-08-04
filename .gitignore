@@ -20,6 +20,9 @@ coverage/
 # extracted keys. Worthless-by-design but NEVER committed (keys stay off git).
 .sepolia/
 
+# CDP indexing mainnet test — single-purpose real-funds keystore. NEVER committed.
+.cdp-mainnet-test/
+
 # logs
 *.log
 
