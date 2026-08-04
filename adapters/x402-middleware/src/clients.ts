@@ -3,6 +3,7 @@
 import { createWalletClient, createPublicClient, fallback, http, defineChain, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { X402Config } from './types.js';
+import { networkRegistryEntry } from './registry.js';
 
 export interface PublicClientLike {
   readContract(args: unknown): Promise<unknown>;
@@ -37,8 +38,9 @@ export function makeRelayerClients(cfg: X402Config): RelayerClients {
   const transport = fallback([
     http(cfg.rpcUrl),
     // Phase F nit 3 (platform-death rail): a dead/rate-limited primary degrades to
-    // the fallback instead of failing verify/settle. Chain-matched public default.
-    http(cfg.rpcUrlFallback ?? (cfg.chainId === 84532 ? 'https://sepolia.base.org' : 'https://mainnet.base.org')),
+    // the fallback instead of failing verify/settle. Chain-matched public default,
+    // now registry-driven (E2-A) rather than an inline chainId ternary — same values.
+    http(cfg.rpcUrlFallback ?? networkRegistryEntry(cfg.network).defaultRpcFallbackUrl),
   ]);
   const wallet = createWalletClient({ account, chain, transport });
   const publicClient = createPublicClient({ chain, transport });

@@ -19,6 +19,34 @@ describe('loadX402Config — fail-closed', () => {
     expect(cfg.maxTimeoutSeconds).toBe(120);
   });
 
+  describe('E2-A — registry-driven resolution is byte-identical to the pre-refactor literals', () => {
+    it('golden value: eip155:84532 (Base Sepolia)', () => {
+      const cfg = loadX402Config(BASE);
+      expect(cfg.chainId).toBe(84532);
+      expect(cfg.usdc).toEqual({
+        address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        name: 'USDC',
+        version: '2',
+        decimals: 6,
+      });
+    });
+
+    it('golden value: eip155:8453 (Base mainnet)', () => {
+      const cfg = loadX402Config({ ...BASE, X402_NETWORK: 'eip155:8453' });
+      expect(cfg.chainId).toBe(8453);
+      expect(cfg.usdc).toEqual({
+        address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        name: 'USD Coin',
+        version: '2',
+        decimals: 6,
+      });
+    });
+
+    it('rejects a well-formed but unregistered CAIP-2 network (Kite mainnet chain id), same as any other unsupported network', () => {
+      expect(() => loadX402Config({ ...BASE, X402_NETWORK: 'eip155:2317' })).toThrow(/X402_NETWORK/);
+    });
+  });
+
   it('defaults maxTimeoutSeconds to 120 when unset', () => {
     const { X402_MAX_TIMEOUT_SECONDS: _omit, ...rest } = BASE;
     expect(loadX402Config(rest).maxTimeoutSeconds).toBe(120);

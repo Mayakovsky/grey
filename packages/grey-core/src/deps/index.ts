@@ -77,6 +77,34 @@ const IDENTITY: Omit<GreyCoreConfig, 'version' | 'payTo' | 'network'> = {
 };
 
 /**
+ * E2-A: registry for the read-only payTo/network pair `config` below surfaces on /health +
+ * /identity. Keyed by network (CAIP-2 string) so a second live channel (Kite, E2-B/D) is a new
+ * entry here, not a second pair of inline env reads. Only `eip155:8453` (Base) is registered in
+ * this phase — no behavior change, same two env vars, same fallback-to-'' on absence.
+ *
+ * Deliberately a SEPARATE, narrower registry from `@grey/x402-middleware`'s `NETWORK_REGISTRY`
+ * (chainId/RPC-fallback/USDC — adapters/x402-middleware/src/registry.ts): that package's
+ * `loadX402Config()` is the authoritative, validated config and requires the relayer private
+ * key to run. This surface exists purely to populate an informational config field without
+ * requiring that key just to boot (see the comment on `config` below, unchanged from
+ * pre-E2-A) — reusing the x402-middleware registry here would reintroduce that coupling.
+ */
+const CHANNEL_IDENTITY_REGISTRY: Record<string, { payToEnvVar: string; networkEnvVar: string }> = {
+  'eip155:8453': { payToEnvVar: 'BASE_X402_PAY_TO', networkEnvVar: 'X402_NETWORK' },
+};
+
+function resolveChannelIdentity(network: string): { payTo: string; network: string } {
+  const entry = CHANNEL_IDENTITY_REGISTRY[network];
+  if (!entry) {
+    throw new Error(`grey-core: no channel-identity registry entry for network "${network}"`);
+  }
+  return {
+    payTo: process.env[entry.payToEnvVar] ?? '',
+    network: process.env[entry.networkEnvVar] ?? '',
+  };
+}
+
+/**
  * Build the runtime deps for production (start.ts). Reads GREY_DATABASE_URL (same credential
  * pipeline uses). NOT used in tests — tests construct HandlerDeps directly with mocked repos.
  */
@@ -99,10 +127,10 @@ export function createHandlerDeps(env: CreateHandlerDepsEnv = {}): HandlerDeps {
       ...IDENTITY,
       // Informational read-only x402 context. Authoritative validation of these (plus the
       // relayer key + RPC) happens in @grey/x402-middleware's loadX402Config, used by start.ts
-      // to build the paid-route gate. A plain env read here avoids requiring the key just to
-      // populate the config surface.
-      payTo: process.env.BASE_X402_PAY_TO ?? '',
-      network: process.env.X402_NETWORK ?? '',
+      // to build the paid-route gate. A registry-driven env read here (E2-A) avoids requiring
+      // the key just to populate the config surface — same two env vars, same values, now
+      // resolved through CHANNEL_IDENTITY_REGISTRY instead of two inline literals.
+      ...resolveChannelIdentity('eip155:8453'),
     },
     pipeline,
     discovery: createDiscoveryStack({
