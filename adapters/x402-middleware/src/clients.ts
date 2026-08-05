@@ -35,13 +35,14 @@ export function makeRelayerClients(cfg: X402Config): RelayerClients {
     nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
     rpcUrls: { default: { http: [cfg.rpcUrl] } },
   });
-  const transport = fallback([
-    http(cfg.rpcUrl),
-    // Phase F nit 3 (platform-death rail): a dead/rate-limited primary degrades to
-    // the fallback instead of failing verify/settle. Chain-matched public default,
-    // now registry-driven (E2-A) rather than an inline chainId ternary — same values.
-    http(cfg.rpcUrlFallback ?? networkRegistryEntry(cfg.network).defaultRpcFallbackUrl),
-  ]);
+  // Phase F nit 3 (platform-death rail): a dead/rate-limited primary degrades to
+  // the fallback instead of failing verify/settle. Chain-matched public default(s),
+  // registry-driven (E2-A). A config-supplied override is always a single URL; the
+  // registry default may be an array (e.g. Kite's four regional endpoints, G4 wrap-check).
+  const fallbackUrls = cfg.rpcUrlFallback
+    ? [cfg.rpcUrlFallback]
+    : ([networkRegistryEntry(cfg.network).defaultRpcFallbackUrl].flat());
+  const transport = fallback([http(cfg.rpcUrl), ...fallbackUrls.map((url) => http(url))]);
   const wallet = createWalletClient({ account, chain, transport });
   const publicClient = createPublicClient({ chain, transport });
   return {
