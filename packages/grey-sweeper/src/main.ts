@@ -6,7 +6,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { createPublicClient, createWalletClient, fallback, http, defineChain } from 'viem';
 import pg from 'pg';
-import { loadConfig } from './config.js';
+import { loadConfig, type ChainId } from './config.js';
 import { loadAgentAccount } from './wallet.js';
 import { runLoop, type TickDeps } from './index.js';
 import { loadRefuelSettings } from './refuel/settings.js';
@@ -14,11 +14,25 @@ import { logError } from './errors.js';
 
 const { Pool } = pg;
 
-function buildChain(chainId: number, rpcUrl: string) {
+/**
+ * E2-BE correctness fix: `buildChain` previously hardcoded `{name:'Ether',symbol:'ETH'}`
+ * unconditionally — harmless while only Base (native ETH) existed, but simply wrong once
+ * chainId can be 2366 (Kite mainnet, native token KITE — confirmed live against
+ * docs.gokite.ai/kite-chain/1-getting-started/network-information). Keyed by the same
+ * `ChainId` union `loadConfig` already validates against, so an unhandled chain is a
+ * compile error here, not a silent wrong-label at runtime.
+ */
+const NATIVE_CURRENCY_BY_CHAIN_ID: Record<ChainId, { name: string; symbol: string; decimals: 18 }> = {
+  8453: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  84532: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  2366: { name: 'KITE', symbol: 'KITE', decimals: 18 },
+};
+
+function buildChain(chainId: ChainId, rpcUrl: string) {
   return defineChain({
     id: chainId,
     name: `chain-${chainId}`,
-    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    nativeCurrency: NATIVE_CURRENCY_BY_CHAIN_ID[chainId],
     rpcUrls: { default: { http: [rpcUrl] } },
   });
 }

@@ -1,10 +1,15 @@
 // Per-chain network registry (E2-A, MARKET-EXPANSION-PROJECT.md §3 E2-A). Replaces the three
 // parallel hardcoded 2-value structures this package used to carry (config.ts's NETWORK_CHAIN_ID
 // + isNetwork, clients.ts's inline RPC-fallback ternary, prices.ts's USDC_BY_NETWORK literal)
-// with ONE table-driven source. Only `eip155:8453` (Base mainnet) and `eip155:84532` (Base
-// Sepolia) are registered in this phase — Kite's real chain-id/RPC/wallet entry is E2-B
-// territory, not this one. Values below are carried over byte-identical from the pre-refactor
-// literals; this phase changes WHERE they live, not what they are.
+// with ONE table-driven source. Base mainnet/Sepolia values are carried over byte-identical from
+// the pre-refactor literals; this phase changes WHERE they live, not what they are.
+//
+// E2-BE adds Kite mainnet (`eip155:2366`) with its real `payTo` (Tier A, ceremony-generated,
+// ADDRESS ONLY — never a key, per invariant #16's "source literal" pattern) and real USDC.e
+// asset data. No live Kite payment route/adapter exists yet (e2-cd+ territory) — this entry is
+// data only, exercised by its own tests and the parallel grey-core/src/deps/index.ts
+// CHANNEL_IDENTITY_REGISTRY entry this same directive wires in.
+import type { Address } from 'viem';
 import type { X402Network, UsdcAsset } from './types.js';
 
 export interface NetworkRegistryEntry {
@@ -13,6 +18,11 @@ export interface NetworkRegistryEntry {
    *  `rpcUrlFallback` (BASE_RPC_URL_FALLBACK) is set (Phase F nit 3: platform-death rail). */
   defaultRpcFallbackUrl: string;
   usdc: UsdcAsset;
+  /** Tier-A receiving address for this network, when a live payment surface exists on it.
+   *  Source literal (invariant #16 pattern) — never env-configurable. Optional: Base's two
+   *  entries leave this unset because Base's payTo is (and stays) env-driven via
+   *  BASE_X402_PAY_TO/loadX402Config — this field does not change that, byte-identical. */
+  payTo?: Address;
 }
 
 export const NETWORK_REGISTRY: Record<X402Network, NetworkRegistryEntry> = {
@@ -35,6 +45,24 @@ export const NETWORK_REGISTRY: Record<X402Network, NetworkRegistryEntry> = {
       version: '2',
       decimals: 6,
     },
+  },
+  /** E2-BE. chainId/RPC verified live against docs.gokite.ai/kite-chain/1-getting-started/
+   *  network-information (2026-08-04). USDC.e address from docs.gokite.ai/kite-chain/3-
+   *  developing/smart-contracts-list ("Bridged USDC (Kite AI)", deployed by Lucid Labs);
+   *  name/version/decimals confirmed via a direct eth_call to name()/version()/decimals() on
+   *  0x7aB6f3ed87C42eF0aDb67Ed95090f8bF5240149e at Kite's public RPC — NOT guessed from docs
+   *  prose, which doesn't state the exact on-chain EIP-712 domain string. payTo = KITE_PAY_TO,
+   *  ceremony-generated 2026-08-04 (address only, per EXPANSION-E2-BE-REVISED-KOV-directive.md). */
+  'eip155:2366': {
+    chainId: 2366,
+    defaultRpcFallbackUrl: 'https://rpc.gokite.ai/',
+    usdc: {
+      address: '0x7aB6f3ed87C42eF0aDb67Ed95090f8bF5240149e',
+      name: 'Bridged USDC (Kite AI)',
+      version: '2',
+      decimals: 6,
+    },
+    payTo: '0x06B29A204A2dB5dEA63b2d14cdfb2cFC4C90aA0C',
   },
 };
 

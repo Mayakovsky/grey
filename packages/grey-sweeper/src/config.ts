@@ -22,6 +22,15 @@ export const SEPOLIA_TEST_POOL_WALLET_ADDRESS =
   '0x9a1fCfCA9f5F396295e903CB64b561a1415a441f' as const;
 
 /**
+ * Kite mainnet (2366) Tier-B pool wallet — KITE_POOL_WALLET, ceremony-generated 2026-08-04
+ * (address only; see EXPANSION-E2-BE-REVISED-KOV-directive.md). Same invariant #16 posture as
+ * {@link BASE_POOL_WALLET_ADDRESS}: a source literal, never env-configurable. No Kite testnet
+ * entry exists — there is no real testnet Tier-B address to put here, and fabricating one would
+ * violate the same discipline this file exists to enforce.
+ */
+export const KITE_POOL_WALLET_ADDRESS = '0xb20634383Af7BBFD3592f763FE293b7387867fb8' as const;
+
+/**
  * chainId → hard-coded sweep destination. Every entry is a SOURCE LITERAL; env
  * CANNOT redirect the destination (invariant #16). Typed `Record<number, …>`
  * (mirrors REGISTRY_BY_CHAIN_ID) so an unlisted chainId reads back falsy and
@@ -30,6 +39,7 @@ export const SEPOLIA_TEST_POOL_WALLET_ADDRESS =
 export const POOL_WALLET_BY_CHAIN_ID: Record<number, `0x${string}`> = {
   8453: BASE_POOL_WALLET_ADDRESS,
   84532: SEPOLIA_TEST_POOL_WALLET_ADDRESS,
+  2366: KITE_POOL_WALLET_ADDRESS,
 };
 
 /**
@@ -56,7 +66,7 @@ export const CADENCE_MS = 7 * 24 * 60 * 60 * 1000;
 /** Default tick interval (5 minutes). */
 export const DEFAULT_TICK_MS = 300_000;
 
-export type ChainId = 8453 | 84532;
+export type ChainId = 8453 | 84532 | 2366;
 
 export interface SweeperConfig {
   rpcUrl: string;
@@ -89,7 +99,10 @@ function required(env: Env, key: string): string {
 function parseChainId(raw: string): ChainId {
   if (raw === '8453') return 8453;
   if (raw === '84532') return 84532;
-  throw new Error(`grey-sweeper: GREY_SWEEPER_CHAIN_ID must be 8453 or 84532, got "${raw}"`);
+  if (raw === '2366') return 2366;
+  throw new Error(
+    `grey-sweeper: GREY_SWEEPER_CHAIN_ID must be 8453, 84532, or 2366, got "${raw}"`,
+  );
 }
 
 function parseTickMs(raw: string | undefined): number {

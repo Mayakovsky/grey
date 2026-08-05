@@ -68,4 +68,5 @@ export function priceUsdFor(slug: string): number {
 export const USDC_BY_NETWORK: Record<X402Network, UsdcAsset> = {
   'eip155:8453': NETWORK_REGISTRY['eip155:8453'].usdc,
   'eip155:84532': NETWORK_REGISTRY['eip155:84532'].usdc,
+  'eip155:2366': NETWORK_REGISTRY['eip155:2366'].usdc,
 };

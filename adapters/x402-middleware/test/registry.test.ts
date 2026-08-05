@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { NETWORK_REGISTRY, isRegisteredNetwork, networkRegistryEntry } from '../src/registry.js';
 
-describe('registry — per-chain network table (E2-A)', () => {
-  it('registers exactly the two Base networks in this phase', () => {
-    expect(Object.keys(NETWORK_REGISTRY).sort()).toEqual(['eip155:8453', 'eip155:84532']);
+describe('registry — per-chain network table (E2-A, +Kite E2-BE)', () => {
+  it('registers exactly Base mainnet, Base Sepolia, and Kite mainnet', () => {
+    expect(Object.keys(NETWORK_REGISTRY).sort()).toEqual([
+      'eip155:2366',
+      'eip155:8453',
+      'eip155:84532',
+    ]);
   });
 
   it('golden values: Base mainnet entry matches the pre-refactor literals byte-for-byte', () => {
@@ -16,6 +20,7 @@ describe('registry — per-chain network table (E2-A)', () => {
       version: '2',
       decimals: 6,
     });
+    expect(entry.payTo).toBeUndefined(); // Base's payTo stays env-driven, unchanged by E2-BE
   });
 
   it('golden values: Base Sepolia entry matches the pre-refactor literals byte-for-byte', () => {
@@ -28,18 +33,50 @@ describe('registry — per-chain network table (E2-A)', () => {
       version: '2',
       decimals: 6,
     });
+    expect(entry.payTo).toBeUndefined();
   });
 
-  it('isRegisteredNetwork accepts both Base networks', () => {
+  it('golden values: Kite mainnet entry (E2-BE) — verified live against Kite RPC + docs, not guessed', () => {
+    const entry = networkRegistryEntry('eip155:2366');
+    expect(entry.chainId).toBe(2366);
+    expect(entry.defaultRpcFallbackUrl).toBe('https://rpc.gokite.ai/');
+    expect(entry.usdc).toEqual({
+      address: '0x7aB6f3ed87C42eF0aDb67Ed95090f8bF5240149e',
+      name: 'Bridged USDC (Kite AI)',
+      version: '2',
+      decimals: 6,
+    });
+    expect(entry.payTo).toBe('0x06B29A204A2dB5dEA63b2d14cdfb2cFC4C90aA0C');
+  });
+
+  it('Kite payTo is distinct from every Base/ACP address in this registry', () => {
+    const kite = networkRegistryEntry('eip155:2366');
+    const baseUsdcAddresses = [
+      networkRegistryEntry('eip155:8453').usdc.address,
+      networkRegistryEntry('eip155:84532').usdc.address,
+    ];
+    for (const addr of baseUsdcAddresses) {
+      expect(kite.payTo?.toLowerCase()).not.toBe(addr.toLowerCase());
+    }
+  });
+
+  it('isRegisteredNetwork accepts Base mainnet, Base Sepolia, and Kite mainnet', () => {
     expect(isRegisteredNetwork('eip155:8453')).toBe(true);
     expect(isRegisteredNetwork('eip155:84532')).toBe(true);
+    expect(isRegisteredNetwork('eip155:2366')).toBe(true);
   });
 
   it('fails closed for an unregistered network — no silent fallback to Base', () => {
     expect(isRegisteredNetwork('eip155:1')).toBe(false);
-    expect(isRegisteredNetwork('eip155:2317')).toBe(false); // Kite mainnet chain id — not registered yet
+    // NOTE (correction, E2-BE): the E2-A version of this test used 'eip155:2317' here, labeled
+    // "Kite mainnet chain id" — that number was an unverified placeholder, and it was WRONG.
+    // Kite's real mainnet chain id, confirmed live against docs.gokite.ai, is 2366 (now
+    // registered above). 2368 is Kite's real TESTNET chain id (also confirmed live) — used here
+    // instead as the "well-formed but unregistered" example, since it's real and still
+    // deliberately not registered in this phase (no testnet Tier A/B addresses exist).
+    expect(isRegisteredNetwork('eip155:2368')).toBe(false);
     expect(() => networkRegistryEntry('eip155:1')).toThrow(/no registry entry/);
-    expect(() => networkRegistryEntry('eip155:2317')).toThrow(/no registry entry/);
+    expect(() => networkRegistryEntry('eip155:2368')).toThrow(/no registry entry/);
   });
 
   it('fails closed for a garbage string, not just a plausible-looking unknown network', () => {

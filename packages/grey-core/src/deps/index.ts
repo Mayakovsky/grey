@@ -79,8 +79,8 @@ const IDENTITY: Omit<GreyCoreConfig, 'version' | 'payTo' | 'network'> = {
 /**
  * E2-A: registry for the read-only payTo/network pair `config` below surfaces on /health +
  * /identity. Keyed by network (CAIP-2 string) so a second live channel (Kite, E2-B/D) is a new
- * entry here, not a second pair of inline env reads. Only `eip155:8453` (Base) is registered in
- * this phase — no behavior change, same two env vars, same fallback-to-'' on absence.
+ * entry here, not a second pair of inline env reads. Base (`eip155:8453`) is env-driven — no
+ * behavior change, same two env vars, same fallback-to-'' on absence.
  *
  * Deliberately a SEPARATE, narrower registry from `@grey/x402-middleware`'s `NETWORK_REGISTRY`
  * (chainId/RPC-fallback/USDC — adapters/x402-middleware/src/registry.ts): that package's
@@ -88,15 +88,38 @@ const IDENTITY: Omit<GreyCoreConfig, 'version' | 'payTo' | 'network'> = {
  * key to run. This surface exists purely to populate an informational config field without
  * requiring that key just to boot (see the comment on `config` below, unchanged from
  * pre-E2-A) — reusing the x402-middleware registry here would reintroduce that coupling.
+ *
+ * E2-BE: a channel identity entry is now one of two shapes — Base's original env-var-name
+ * lookup (unchanged), or a source literal (invariant #16 pattern: never env-configurable,
+ * changing it requires a code change + review). Kite's entry is a literal because its address
+ * was ceremony-generated once and handed down as a fixed value (EXPANSION-E2-BE-REVISED-KOV-
+ * directive.md) — there is no per-deployment reason for it to vary the way Base's historically
+ * has. `resolveChannelIdentity` dispatches on which shape a given entry is.
  */
-const CHANNEL_IDENTITY_REGISTRY: Record<string, { payToEnvVar: string; networkEnvVar: string }> = {
+type ChannelIdentityEntry =
+  | { payToEnvVar: string; networkEnvVar: string }
+  | { payTo: string; network: string };
+
+const CHANNEL_IDENTITY_REGISTRY: Record<string, ChannelIdentityEntry> = {
   'eip155:8453': { payToEnvVar: 'BASE_X402_PAY_TO', networkEnvVar: 'X402_NETWORK' },
+  /** Kite mainnet. payTo = KITE_PAY_TO (Tier A), ceremony-generated 2026-08-04, address only —
+   *  no key or passphrase ever passed through this codebase. No live Kite payment route
+   *  consumes this yet (e2-cd+ territory); this entry is data only, same posture as the
+   *  parallel entry in adapters/x402-middleware/src/registry.ts's NETWORK_REGISTRY. */
+  'eip155:2366': { payTo: '0x06B29A204A2dB5dEA63b2d14cdfb2cFC4C90aA0C', network: 'eip155:2366' },
 };
 
-function resolveChannelIdentity(network: string): { payTo: string; network: string } {
+/** Exported for tests only (E2-BE Task 3: confirm Kite's entry is correctly distinct from
+ *  Base's, and that resolution dispatches to the right shape per entry). */
+export { CHANNEL_IDENTITY_REGISTRY };
+
+export function resolveChannelIdentity(network: string): { payTo: string; network: string } {
   const entry = CHANNEL_IDENTITY_REGISTRY[network];
   if (!entry) {
     throw new Error(`grey-core: no channel-identity registry entry for network "${network}"`);
+  }
+  if ('payTo' in entry) {
+    return { payTo: entry.payTo, network: entry.network };
   }
   return {
     payTo: process.env[entry.payToEnvVar] ?? '',

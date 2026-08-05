@@ -56,4 +56,17 @@ describe('prices — single price source', () => {
     expect(USDC_BY_NETWORK['eip155:8453'].decimals).toBe(6);
     expect(USDC_BY_NETWORK['eip155:84532'].decimals).toBe(6);
   });
+
+  it('E2-BE: Kite mainnet USDC.e is a distinct literal, verified live against Kite RPC', () => {
+    expect(USDC_BY_NETWORK['eip155:2366'].address).toBe(
+      '0x7aB6f3ed87C42eF0aDb67Ed95090f8bF5240149e',
+    );
+    expect(USDC_BY_NETWORK['eip155:2366'].decimals).toBe(6);
+    expect(USDC_BY_NETWORK['eip155:2366'].address.toLowerCase()).not.toBe(
+      USDC_BY_NETWORK['eip155:8453'].address.toLowerCase(),
+    );
+    expect(USDC_BY_NETWORK['eip155:2366'].address.toLowerCase()).not.toBe(
+      USDC_BY_NETWORK['eip155:84532'].address.toLowerCase(),
+    );
+  });
 });
