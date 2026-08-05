@@ -14,9 +14,12 @@ import type { X402Network, UsdcAsset } from './types.js';
 
 export interface NetworkRegistryEntry {
   chainId: number;
-  /** Public default RPC used as the fallback transport leg when neither a config-supplied
-   *  `rpcUrlFallback` (BASE_RPC_URL_FALLBACK) is set (Phase F nit 3: platform-death rail). */
-  defaultRpcFallbackUrl: string;
+  /** Public default RPC used as the fallback transport leg(s) when no config-supplied
+   *  `rpcUrlFallback` (BASE_RPC_URL_FALLBACK) is set (Phase F nit 3: platform-death rail).
+   *  A single URL for networks with a dedicated-provider app (G4) or no documented regional
+   *  layout. An array (e.g. Kite, E2 wrap-checks) for networks with no managed-provider app
+   *  yet, wiring in every regional endpoint the network's own docs recommend for redundancy. */
+  defaultRpcFallbackUrl: string | string[];
   usdc: UsdcAsset;
   /** Tier-A receiving address for this network, when a live payment surface exists on it.
    *  Source literal (invariant #16 pattern) — never env-configurable. Optional: Base's two
@@ -55,7 +58,18 @@ export const NETWORK_REGISTRY: Record<X402Network, NetworkRegistryEntry> = {
    *  ceremony-generated 2026-08-04 (address only, per EXPANSION-E2-BE-REVISED-KOV-directive.md). */
   'eip155:2366': {
     chainId: 2366,
-    defaultRpcFallbackUrl: 'https://rpc.gokite.ai/',
+    // G4 wrap-check (2026-08-05): confirmed no managed RPC provider supports Kite mainnet yet
+    // (checked directly against Alchemy's chain directory — no "Kite"/"Kite AI" entry). No
+    // dedicated-provider app is possible here, so this stays Kite's own public endpoints —
+    // but per docs.gokite.ai/kite-chain/1-getting-started/tools's production-redundancy
+    // recommendation, all four regional endpoints are wired in via fallback() (clients.ts)
+    // instead of just the single global one. Revisit if a managed provider adds Kite support.
+    defaultRpcFallbackUrl: [
+      'https://rpc.gokite.ai/',
+      'https://rpc-virginia.gokite.ai/',
+      'https://rpc-tokyo.gokite.ai/',
+      'https://rpc-ireland.gokite.ai/',
+    ],
     usdc: {
       address: '0x7aB6f3ed87C42eF0aDb67Ed95090f8bF5240149e',
       name: 'Bridged USDC (Kite AI)',

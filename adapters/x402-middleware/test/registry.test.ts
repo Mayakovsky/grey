@@ -39,7 +39,14 @@ describe('registry — per-chain network table (E2-A, +Kite E2-BE)', () => {
   it('golden values: Kite mainnet entry (E2-BE) — verified live against Kite RPC + docs, not guessed', () => {
     const entry = networkRegistryEntry('eip155:2366');
     expect(entry.chainId).toBe(2366);
-    expect(entry.defaultRpcFallbackUrl).toBe('https://rpc.gokite.ai/');
+    // G4 wrap-check: no managed RPC provider supports Kite mainnet yet, so this stays Kite's
+    // own endpoints — but all four regional ones now, not just the single global one.
+    expect(entry.defaultRpcFallbackUrl).toEqual([
+      'https://rpc.gokite.ai/',
+      'https://rpc-virginia.gokite.ai/',
+      'https://rpc-tokyo.gokite.ai/',
+      'https://rpc-ireland.gokite.ai/',
+    ]);
     expect(entry.usdc).toEqual({
       address: '0x7aB6f3ed87C42eF0aDb67Ed95090f8bF5240149e',
       name: 'Bridged USDC (Kite AI)',
