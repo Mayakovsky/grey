@@ -3,7 +3,9 @@ import type { Address, Hex } from 'viem';
 import type { EvaluationKitEntry } from '@grey/schemas/evaluationKit';
 import type { DiscoveryExtension } from '@x402/extensions/bazaar';
 
-export type X402Network = 'eip155:8453' | 'eip155:84532';
+/** E2-BE: 'eip155:2366' (Kite mainnet) added — registry entry only, no live Kite
+ *  payment route exists yet (that's e2-cd+ territory). See registry.ts. */
+export type X402Network = 'eip155:8453' | 'eip155:84532' | 'eip155:2366';
 
 /** Per-network USDC asset. The EIP-712 domain name/version MUST match the on-chain token
  *  or buyer signatures won't validate at settlement. */

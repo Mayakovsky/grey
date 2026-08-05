@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   BASE_POOL_WALLET_ADDRESS,
   SEPOLIA_TEST_POOL_WALLET_ADDRESS,
+  KITE_POOL_WALLET_ADDRESS,
   POOL_WALLET_BY_CHAIN_ID,
   poolWalletFor,
   CADENCE_MS,
@@ -56,7 +57,7 @@ describe('POOL_WALLET_BY_CHAIN_ID + poolWalletFor — FDQ-23 (fail-closed)', () 
     expect(poolWalletFor(84532)).toBe(SEPOLIA_TEST_POOL_WALLET_ADDRESS);
   });
 
-  it('the two destinations are distinct (Sepolia never routes to mainnet)', () => {
+  it('the two Base destinations are distinct (Sepolia never routes to mainnet)', () => {
     expect(SEPOLIA_TEST_POOL_WALLET_ADDRESS.toLowerCase()).not.toBe(
       BASE_POOL_WALLET_ADDRESS.toLowerCase(),
     );
@@ -65,6 +66,28 @@ describe('POOL_WALLET_BY_CHAIN_ID + poolWalletFor — FDQ-23 (fail-closed)', () 
   it('fails closed on an unlisted chainId — throws, never defaults to mainnet', () => {
     expect(() => poolWalletFor(1)).toThrow(/no sweep destination configured for chainId 1/);
     expect(() => poolWalletFor(0)).toThrow(/refusing to sweep/);
+  });
+
+  describe('E2-BE — Kite mainnet (2366)', () => {
+    it('maps 2366 to KITE_POOL_WALLET_ADDRESS', () => {
+      expect(POOL_WALLET_BY_CHAIN_ID[2366]).toBe(KITE_POOL_WALLET_ADDRESS);
+      expect(poolWalletFor(2366)).toBe(KITE_POOL_WALLET_ADDRESS);
+    });
+
+    it('is a valid 40-hex address', () => {
+      expect(KITE_POOL_WALLET_ADDRESS).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    });
+
+    it('is distinct from every Base destination (copy-paste-wrong-chain guard)', () => {
+      expect(KITE_POOL_WALLET_ADDRESS.toLowerCase()).not.toBe(BASE_POOL_WALLET_ADDRESS.toLowerCase());
+      expect(KITE_POOL_WALLET_ADDRESS.toLowerCase()).not.toBe(
+        SEPOLIA_TEST_POOL_WALLET_ADDRESS.toLowerCase(),
+      );
+    });
+
+    it('no Kite testnet chain id is registered — no fabricated address exists for one', () => {
+      expect(() => poolWalletFor(2368)).toThrow(/no sweep destination configured for chainId 2368/);
+    });
   });
 });
 
@@ -125,6 +148,11 @@ describe('loadConfig', () => {
   it('accepts testnet chain id 84532', () => {
     const env = { ...baseEnv(), GREY_SWEEPER_CHAIN_ID: '84532' };
     expect(loadConfig(env).chainId).toBe(84532);
+  });
+
+  it('accepts Kite mainnet chain id 2366 (E2-BE)', () => {
+    const env = { ...baseEnv(), GREY_SWEEPER_CHAIN_ID: '2366' };
+    expect(loadConfig(env).chainId).toBe(2366);
   });
 
   it('never sources the destination from env (no env key influences destination)', () => {

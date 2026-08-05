@@ -21,6 +21,8 @@ export * from './errors.js';
 export { shouldSweep } from './trigger.js';
 export { readUsdcBalance } from './balance.js';
 export { encodeUsdcTransfer, executeSweep } from './sweep.js';
+export { checkGasBalance, formatGasBalanceCheck } from './gasBalance.js';
+export type { NativeBalanceClientLike, GasBalanceStatus, GasBalanceCheckResult } from './gasBalance.js';
 export { appendSweepLog, getLastSweepTimestamp } from './log.js';
 export { alertCritical, alertOperational } from './alert.js';
 

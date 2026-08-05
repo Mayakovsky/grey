@@ -42,8 +42,25 @@ describe('loadX402Config — fail-closed', () => {
       });
     });
 
-    it('rejects a well-formed but unregistered CAIP-2 network (Kite mainnet chain id), same as any other unsupported network', () => {
-      expect(() => loadX402Config({ ...BASE, X402_NETWORK: 'eip155:2317' })).toThrow(/X402_NETWORK/);
+    it('rejects a well-formed but unregistered CAIP-2 network (Kite testnet, 2368 — real chain id, deliberately not registered), same as any other unsupported network', () => {
+      // Correction (E2-BE): this test previously used the fabricated placeholder 'eip155:2317'
+      // for "Kite mainnet chain id" — that number was never verified and was wrong. Kite's real
+      // mainnet id is 2366 (now registered — see the E2-BE describe block below); its real
+      // testnet id, 2368, is used here instead since it's real and still genuinely unregistered.
+      expect(() => loadX402Config({ ...BASE, X402_NETWORK: 'eip155:2368' })).toThrow(/X402_NETWORK/);
+    });
+  });
+
+  describe('E2-BE — Kite mainnet (eip155:2366) resolves through the registry same as Base', () => {
+    it('golden value: eip155:2366 (Kite mainnet) — chainId + usdc match the verified-live registry entry', () => {
+      const cfg = loadX402Config({ ...BASE, X402_NETWORK: 'eip155:2366' });
+      expect(cfg.chainId).toBe(2366);
+      expect(cfg.usdc).toEqual({
+        address: '0x7aB6f3ed87C42eF0aDb67Ed95090f8bF5240149e',
+        name: 'Bridged USDC (Kite AI)',
+        version: '2',
+        decimals: 6,
+      });
     });
   });
 
