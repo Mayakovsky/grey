@@ -23,6 +23,10 @@ coverage/
 # CDP indexing mainnet test — single-purpose real-funds keystore. NEVER committed.
 .cdp-mainnet-test/
 
+# CDP organic-settlement — single-purpose real-funds keystore for the organic-production
+# settlement + crawler-check directive. NEVER committed.
+.cdp-organic-settlement/
+
 # logs
 *.log
 
