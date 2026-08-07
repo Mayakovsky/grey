@@ -27,6 +27,14 @@ coverage/
 # settlement + crawler-check directive. NEVER committed.
 .cdp-organic-settlement/
 
+# one-off local review-diff artifacts (pre-merge review copies of branches that landed on main;
+# redundant with git history once merged — verified per-file before adding this, 2026-08-07).
+review-*.diff
+
+# one-off ops script: Cluster A (postgresql-x64-16) stop+disable, run by Forces and independently
+# verified complete (BION-POSTGRES-SERVICE-REGISTRATION-REPORT-KOV.md) — situation resolved.
+stop-disable-cluster-a.ps1
+
 # logs
 *.log
 
