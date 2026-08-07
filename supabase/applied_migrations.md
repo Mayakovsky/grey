@@ -85,6 +85,49 @@ This is grey's canonical pattern from Step 2 forward (Movement 4 `sweep_log`, CI
 - `supabase_migrations.schema_migrations` on remote: **untouched** (psql apply, not CLI push).
 - Anomalies: none reported. `\dp` visual grant verify (run-sheet block 6) confirmed by Forces: `grey_pipeline_rw=arw/...` on both tables, no `d` (DELETE) or `D` (TRUNCATE). FDQ-65 posture verified both by the in-transaction REVOKE and by visual `\dp` inspection.
 
+## 20260806224500_grey_two_enable_rls (CDP Bazaar investigation — RLS defense-in-depth)
+
+- File: `supabase/migrations/20260806224500_grey_two_enable_rls.sql`
+- sha256: `d47c7b975fc925f9eafd5a603f35b9a63c70d6275ae4ca487e32e46ebd0abd89` — computed by Desktop from
+  the file's read content (not run directly on the file by a separate tool on Forces' machine or
+  the VPS; noted for transparency, unlike every prior entry's hash).
+- Applied at: 2026-08-06 (UTC), exact time not recorded — Forces ran the apply himself via his own
+  owner-cred psql session; his Steps 1–4 console output was never relayed to Desktop. **Applied
+  state independently confirmed clean by Kov 2026-08-07**
+  (`CDP-BAZAAR-EXTENSION-RESPONSES-CHECK-REPORT-KOV.md`, Task 2) via direct `pg_class`/`pg_policies`
+  query through `grey_pipeline_rw` — not inferred from Forces' unconfirmed session. Ledger entry
+  written by Desktop 2026-08-07 once that independent confirmation was in hand.
+- Applied by: Forces-lane via `psql -w -v ON_ERROR_STOP=1 --single-transaction -d <WPV_DATABASE_URL> -f supabase/migrations/20260806224500_grey_two_enable_rls.sql` (PowerShell, local Windows machine — see `CDP-BAZAAR-RLS-APPLY-RUNBOOK-FORCES.md` for the exact step-by-step).
+- Purpose: enable RLS on all 10 `grey_two` tables in response to a Supabase advisory flag. Corrected
+  severity noted in the migration file's own header before drafting: `anon`/`authenticated` already
+  had zero schema-level `USAGE` and zero table grants on `grey_two` (checked live, not assumed), so
+  this closes no currently-open exposure — it's defense-in-depth against a future grant/schema
+  change failing open instead of failing safe. Drafted by Kov, reviewed by Desktop, approved by
+  Forces (`CDP-BAZAAR-SETTLEMENT-AUDIT-AND-RLS-DRAFT-KOV-directive.md`, Track A).
+- Tables affected: all 10 existing `grey_two` tables (no new tables) —
+  `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` + `CREATE POLICY`, one policy set per table scoped
+  to each table's real, traced call-site usage (full trace in the migration file's own comments
+  and in `CDP-BAZAAR-SETTLEMENT-AUDIT-AND-RLS-DRAFT-REPORT-KOV.md`). 24 policies total, every
+  `roles` array `{grey_pipeline_rw}` only — no `anon`/`authenticated`/`public` policy anywhere.
+  Deliberately no `FORCE ROW LEVEL SECURITY` (would break the existing owner-cred bypass pattern
+  this exact ledger's manual-psql apply mechanism depends on).
+- `supabase_migrations.schema_migrations` on remote: **untouched** (psql apply, not CLI push).
+- Verification (independent, 2026-08-07): `relrowsecurity = t` on all 10 tables; `pg_policies`
+  shows 24 rows, all scoped to `grey_pipeline_rw` only. Smoke test clean (health check + 2 fresh
+  unpaid-route `402`s). Stronger than the synthetic checks: settlement #5's real
+  `revenue_events` INSERT (2026-08-07 15:14:12 UTC) landed successfully *after* this migration
+  applied — the write path was proven under real production load, not just a permission-metadata
+  read.
+- Anomalies: two tables (`buyer_records`, `tracked_jobs`) are policied on trusted prior-migration
+  grant intent rather than independently re-derived call sites — nothing in this monorepo writes
+  either (likely the separate ElizaOS ACP adapter). Explicitly flagged as lower-confidence in the
+  migration file itself; not a reason this entry was held. Five of the eight remaining tables
+  (`requests`, `verifications`, `claims`, `cost_events`, and `refuel_log`'s SELECT) carry grants
+  broader than any call site in this repo currently exercises (default-privilege carryover from
+  `grey_two`'s original `ALTER DEFAULT PRIVILEGES`) — flagged inline in the migration, not
+  narrowed (narrowing an existing grant is a separate, riskier action than adding RLS on top, out
+  of scope for this pass).
+
 ## 20260730150000_create_grey_two_revenue_events (Expansion E1-F)
 
 - File: `supabase/migrations/20260730150000_create_grey_two_revenue_events.sql`
