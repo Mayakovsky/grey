@@ -122,15 +122,40 @@ To https://github.com/Mayakovsky/grey.git
 own file), clean, no conflicts. `git status` immediately after: `nothing to commit, working tree
 clean`.
 
-### Does the VPS need another pull for this batch?
+### Second VPS pull — done, same discipline as Part 1
 
-**Same answer as Part 1's underlying logic, yes — though nothing here is time-sensitive the way
-`deploy.md`'s section was.** This batch is 100% durable documentation (no `packages/` changes,
-confirmed the same way as Part 1), so there's no functional reason to pull immediately — but if a
-future Kov instance works from `/opt/grey/grey` and wants to reference any of this backlog (e.g. the
-Bion/EXPANSION/MCP/Postgres history, or the now-gitignored `review-*.diff`/`stop-disable-cluster-a
-.ps1` reasoning), it won't be there until another `git pull`. **Not pulling it myself** — Part 1's
-go-ahead was scoped to that specific pull, not a standing authorization for future ones.
+Authorized after this report's first draft. Same baseline-first approach: recorded `grey-core`
+state before touching anything (`MainPID=202201`, `ActiveEnterTimestamp=Wed 2026-08-05 17:31:49
+UTC`, `/opt/grey/grey` on `9b30c26`, matching where Part 1 left it).
+
+```
+$ cd /opt/grey/grey && git pull
+From github-grey:Mayakovsky/grey
+   9b30c26..7c23a58  main       -> origin/main
+Updating 9b30c26..7c23a58
+Fast-forward
+ 108 files changed, 4899 insertions(+)
+```
+Full file list checked — `.gitignore` plus 107 markdown files (the entire committed backlog: all 15
+thread groups from the table above, plus this directive's own file and its report). **Nothing under
+`packages/`**, confirmed the same way as Part 1: read the complete changed-file list, not assumed.
+No rebuild, no restart warranted or attempted.
+
+```
+$ git log --oneline -3
+7c23a58 docs: VPS pull + backlog classification delivery report
+85712a3 docs: VPS pull (docs-only) + untracked-backlog classification directive
+e9a54b1 chore: gitignore merged review-diffs + resolved one-off ops script
+```
+
+`grey-core` confirmed untouched, same PID and start time before and after:
+```
+MainPID=202201
+ActiveState=active
+ActiveEnterTimestamp=Wed 2026-08-05 17:31:49 UTC
+```
+`/opt/grey/grey` is now fully current with `origin/main` — no further pull needed for anything in
+this round.
 
 ## Deliver checklist
 
@@ -139,6 +164,6 @@ go-ahead was scoped to that specific pull, not a standing authorization for futu
 - [x] Part 2: full classification delivered — 106 files committed (15 thread commits), 13
       `review-*.diff` independently verified merged and gitignored, 1 one-off script confirmed
       resolved and gitignored, 0 left ambiguous
-- [x] Push confirmed (`9b30c26..85712a3`)
-- [x] VPS pull-need for this batch stated explicitly (yes, for future reference; not urgent, not
-      pulled)
+- [x] Push confirmed (`9b30c26..85712a3`, then `85712a3..7c23a58` for this report itself)
+- [x] Second VPS pull done (`9b30c26..7c23a58`), confirmed clean, `grey-core` confirmed untouched —
+      `/opt/grey/grey` now fully current
