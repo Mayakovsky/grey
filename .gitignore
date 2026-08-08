@@ -11,6 +11,10 @@ dist/
 # test coverage
 coverage/
 
+# per-package vitest JSON result, written by `pnpm test` for Bion's test watcher to poll
+# (directive-27 Task 2) — regenerated every run, never committed.
+.bion-test-result.json
+
 # env — NEVER commit real secrets. .env.example IS committed.
 .env
 .env.local
