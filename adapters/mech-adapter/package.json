@@ -1,0 +1,28 @@
+{
+  "name": "@grey/mech-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint . --no-error-on-unmatched-pattern",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:fork": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json NODE_OPTIONS=--loader=ts-node/esm hardhat test test/fork/marketplaceRead.forkcheck.ts"
+  },
+  "dependencies": {
+    "@grey/core": "workspace:*",
+    "@grey/schemas": "workspace:*",
+    "viem": "^2.53.1"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "cross-env": "^7.0.3",
+    "hardhat": "^2.22.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.22.4"
+  }
+}

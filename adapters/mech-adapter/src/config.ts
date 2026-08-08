@@ -1,0 +1,92 @@
+// Fail-closed config load — mirrors acp-adapter/x402-middleware/grey-sweeper discipline (hand-
+// rolled, no zod). Any missing required env → throw → the systemd unit exits non-zero rather
+// than running half-configured.
+//
+// Contract addresses are Base-mainnet literals (source literal pattern, invariant #16), not
+// env-configurable — verified 2026-08-08 against two independent primary sources (mech-client's
+// mech_client/configs/mechs.json and autonolas-marketplace's docs/configuration.json) plus a
+// direct eth_getCode RPC check confirming real deployed bytecode. See MARKETPLACE_ADDRESSES below
+// for the full citation. RPC URL and the two wallet addresses ARE env-configurable (G4 — wallets
+// are ceremony-generated, address only, never a key in this repo).
+import process from 'node:process';
+import type { Address } from 'viem';
+
+/** Grey's on-chain ERC-8004 DID — the unifying identity layer (Base mainnet, tokenId 58618). */
+export const GREY_DID = 'did:erc8004:8453:58618';
+
+/** Base mainnet Mech Marketplace deployment (chain id 8453). Source: autonolas-marketplace
+ *  docs/configuration.json (raw-fetched, not summarized), cross-checked against mech-client's
+ *  mech_client/configs/mechs.json (independent repo, same values) and a direct eth_getCode call
+ *  against MECH_MARKETPLACE_PROXY on Base mainnet confirming real deployed bytecode (2026-08-08).
+ *  MECH_MARKETPLACE_PROXY is the address callers use — MechMarketplace (no "Proxy" suffix) is the
+ *  implementation contract behind it, kept here for reference only; never call it directly. */
+export const MARKETPLACE_ADDRESSES = {
+  chainId: 8453,
+  mechMarketplaceProxy: '0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020' as Address,
+  mechMarketplaceImplementation: '0x155547857680A6D51bebC5603397488988DEb1c8' as Address,
+  usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as Address,
+  /** MechFactory* addresses — one per payment type. All five confirmed deployed on Base
+   *  (contrary to the directive's caution not to assume parity with Gnosis — Base actually has
+   *  full parity, verified via the same configuration.json source). `createMech(serviceRegistry,
+   *  serviceId, payload)` on any of these requires an existing Olas `serviceId` from the
+   *  ServiceRegistry contract — a separate, unresolved prerequisite. See mechAdapter.ts's
+   *  `registerAsMech` doc comment. */
+  factories: {
+    NATIVE: '0x2E008211f34b25A7d7c102403c6C2C3B665a1abe' as Address,
+    USDC_TOKEN: '0x5B70A66fe68c4c86FFd724B58cc56049c70e9D3D' as Address,
+    OLAS_TOKEN: '0x97371B1C0cDA1D04dFc43DFb50a04645b7Bc9BEe' as Address,
+    NATIVE_NVM: '0x847bBE8b474e0820215f818858e23F5f5591855A' as Address,
+    TOKEN_NVM_USDC: '0x7beD01f8482fF686F025628e7780ca6C1f0559fc' as Address,
+  },
+} as const;
+
+export type MechPaymentType = keyof typeof MARKETPLACE_ADDRESSES.factories;
+
+export interface MechAdapterConfig {
+  /** Tier A hot wallet — receives mech task payments. Ceremony-generated, address only. */
+  payToAddress: Address;
+  /** Tier B pool wallet — consolidation point before eventual Tier D sweep. Address only. */
+  poolWalletAddress: Address;
+  /** Base RPC endpoint. Defaults to Base's own public RPC (verified reachable without a
+   *  Cloudflare challenge, unlike some third-party RPCs hit during research). */
+  rpcUrl: string;
+  /** grey_pipeline_rw runtime credential for the shared handlers' cache reads. */
+  databaseUrl: string;
+  /** FDQ-63-style safety gate, same seam as acp-adapter's observeOnly — suppresses every
+   *  on-chain write path (create/request/deliverMarketplace) when true. Defaults true: this
+   *  adapter has no confirmed mainnet registration yet (Olas ServiceRegistry prerequisite
+   *  unresolved — see mechAdapter.ts), so shipping with writes enabled by default would be wrong. */
+  observeOnly: boolean;
+}
+
+type Env = Record<string, string | undefined>;
+
+function required(env: Env, key: string): string {
+  const v = env[key];
+  if (v === undefined || v.trim() === '') {
+    throw new Error(`mech-adapter: missing required env ${key}`);
+  }
+  return v.trim();
+}
+
+function isAddress(v: string): v is Address {
+  return /^0x[0-9a-fA-F]{40}$/.test(v);
+}
+
+function requiredAddress(env: Env, key: string): Address {
+  const raw = required(env, key);
+  if (!isAddress(raw)) {
+    throw new Error(`mech-adapter: ${key} is not a valid 0x-address, got "${raw}"`);
+  }
+  return raw as Address;
+}
+
+export function loadConfig(env: Env = process.env): MechAdapterConfig {
+  return {
+    payToAddress: requiredAddress(env, 'BASE_MECH_PAY_TO'),
+    poolWalletAddress: requiredAddress(env, 'BASE_MECH_POOL_WALLET'),
+    rpcUrl: env.BASE_RPC_URL?.trim() || 'https://mainnet.base.org',
+    databaseUrl: required(env, 'GREY_DATABASE_URL'),
+    observeOnly: (env.MECH_ADAPTER_OBSERVE_ONLY?.trim() ?? 'true') !== 'false',
+  };
+}

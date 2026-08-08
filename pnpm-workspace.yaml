@@ -35,6 +35,11 @@ allowBuilds:
   # CDP Facilitator Phase 2: @coinbase/x402's postinstall (scripts/postinstall.js) is a single
   # console.log Bazaar-search TOS notice — no filesystem/network side effects. Inspected 2026-08-02.
   '@coinbase/x402': true
+  # e3-b1: hardhat (mech-adapter devDependency, local Base-fork test) pulls in keccak transitively
+  # (ethereumjs tooling). Its install script is `node-gyp-build || exit 0` — links a prebuilt
+  # native Keccak-256 binding, falls back silently if none matches. Same category as the already-
+  # approved argon2 (maintained native crypto binding, prebuilt binaries). Inspected 2026-08-08.
+  keccak: true
 
 patchedDependencies:
   '@virtuals-protocol/acp-node-v2@0.0.4': patches/@virtuals-protocol__acp-node-v2@0.0.4.patch
