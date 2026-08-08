@@ -11,3 +11,5 @@ export { createLogger, silentLogger } from './logger.js';
 export type { AdapterLogger } from './logger.js';
 export { MECH_OFFERING_SLUGS, mechPriceUsdFor } from './prices.js';
 export type { MechOfferingSlug } from './prices.js';
+export { buildMechListing } from './listing.js';
+export type { MechListingEntry } from './listing.js';
