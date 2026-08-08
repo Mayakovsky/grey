@@ -42,6 +42,18 @@ export const MARKETPLACE_ADDRESSES = {
 
 export type MechPaymentType = keyof typeof MARKETPLACE_ADDRESSES.factories;
 
+/** Ceremony complete (2026-08-08, Forces-run per EXPANSION-E3-B1-MECH-KEY-CEREMONY-RUNBOOK-
+ *  FORCES.md) — address only, no key or passphrase ever passed through this codebase. Recorded
+ *  here for reference/traceability (same posture as KITE_POOL_WALLET_ADDRESS in grey-sweeper's
+ *  config.ts); `loadConfig()` above still resolves these from env at runtime and stays the
+ *  actual, tested source of truth — these constants are not wired into it. Deployment sets
+ *  BASE_MECH_PAY_TO / BASE_MECH_POOL_WALLET to the values below; not done by this directive
+ *  (no deploy in scope), so leaving the env mechanism authoritative rather than hardcoding these
+ *  into loadConfig and re-touching an already-gated test surface for a shape the directive didn't
+ *  ask for. */
+export const BASE_MECH_PAY_TO_ADDRESS = '0x36c4a16ED1DD12056150E36dFe2271733366BAC5' as const;
+export const BASE_MECH_POOL_WALLET_ADDRESS = '0xB98A06D0D92A429dFeb95438BaE9e624A6401727' as const;
+
 export interface MechAdapterConfig {
   /** Tier A hot wallet — receives mech task payments. Ceremony-generated, address only. */
   payToAddress: Address;
