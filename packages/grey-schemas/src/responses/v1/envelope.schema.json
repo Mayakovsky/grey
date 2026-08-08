@@ -21,7 +21,9 @@
         "quick_protocol_facts",
         "daily_tech_brief",
         "daily_greenlight_list",
-        "scam_alert_feed"
+        "scam_alert_feed",
+        "prediction_market_research",
+        "resolution_evidence_compiler"
       ]
     },
     "requestId": { "type": "string", "description": "Correlation id (UUID)." },
@@ -123,6 +125,14 @@
     {
       "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "scam_alert_feed" } } },
       "then": { "type": "object", "properties": { "payload": { "$ref": "scam_alert_feed.schema.json" } } }
+    },
+    {
+      "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "prediction_market_research" } } },
+      "then": { "type": "object", "properties": { "payload": { "$ref": "prediction_market_research.schema.json" } } }
+    },
+    {
+      "if": { "type": "object", "required": ["payload"], "properties": { "offering": { "const": "resolution_evidence_compiler" } } },
+      "then": { "type": "object", "properties": { "payload": { "$ref": "resolution_evidence_compiler.schema.json" } } }
     }
   ],
   "unevaluatedProperties": false

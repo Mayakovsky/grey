@@ -87,15 +87,54 @@ export const PRICING_TABLE: Record<OfferingSlug, OfferingPricing> = {
     computeClass: 'CACHE_ONLY',
     enabled: false,
   },
+
+  // e3-b2 (Olas Mech Marketplace, Base first per MEP §3 E3 OD-8). Both CACHE_ONLY, both ship
+  // built-but-functionally-empty this phase (no cache-population pipeline for prediction-market
+  // content exists yet — see packages/grey-core/src/handlers/, both always return
+  // NOT_YET_ANALYSED). `enabled: true` regardless, same convention as legitimacy_scan_trust_rung:
+  // the offering IS real and priced, a separate mechanism (whether it's ever populated) gates
+  // whether it's *useful*, not whether it's *for sale*.
+  prediction_market_research: {
+    slug: 'prediction_market_research',
+    // $0.10 canonical — RATIFIED, MEP §2.5. Realised at $0.065 on Olas via the 0.65× 'mech'
+    // multiplier below (Invariant #31 — the multiplier resolves at the adapter boundary, not
+    // baked into this canonical figure). Don't read the two numbers as a conflict.
+    canonicalUsd: 0.1,
+    computeClass: 'CACHE_ONLY',
+    enabled: true,
+  },
+  resolution_evidence_compiler: {
+    slug: 'resolution_evidence_compiler',
+    // $0.20 canonical — NOT in the MEP or any prior document; priced here, not inherited from
+    // prediction_market_research's $0.10 (per the e3-b2 task's explicit instruction). Reasoning:
+    // this offering is a narrower, higher-precision DERIVATIVE of prediction_market_research —
+    // compiled, structured evidence bearing on one specific resolution question, not a general
+    // research pull — the same relationship claim_history ($0.25) has to a raw fact lookup like
+    // quick_protocol_facts ($0.30): a compiled/structured product commands a premium over its
+    // raw-research input. 2× prediction_market_research's $0.10 reflects that step up while
+    // staying meaningfully below claim_history's $0.25 (claim_history compiles across an entire
+    // verification history; this compiles evidence for one market) and far below the
+    // LIVE_ALLOWED floor (claim_extraction $0.75) — it's still CACHE_ONLY and, this phase, ships
+    // with no live compute path at all (§2.3's $0.05 floor is respected with margin either way).
+    canonicalUsd: 0.2,
+    computeClass: 'CACHE_ONLY',
+    enabled: true,
+  },
 };
 
 /** Spec §2.3: x402/Base and Virtuals ACP are both grandfathered at 1.00× — no repricing.
  *  Kite (E2) mirrors x402 exactly until Kite volume is legible — pricing constant only, added
- *  in E2-A; no Kite wallet/RPC/live surface exists yet (that's E2-B/D territory). */
+ *  in E2-A; no Kite wallet/RPC/live surface exists yet (that's E2-B/D territory). `mech` (e3-b2)
+ *  is the plan's only sub-1.00× multiplier — a deliberate volume play into cheap-to-serve
+ *  CACHE_ONLY traffic (spec §2.3/§2.5), uniform across both chains E3 lists on (Base now,
+ *  Gnosis later — the reasoning is about compute cost, not settlement chain, per MEP §2.3's
+ *  2026-08-08 correction). Enforced ONLY on CACHE_ONLY offerings — never apply this multiplier
+ *  to a LIVE_ALLOWED/LIVE_PRIORITY offering (Invariant #30/#31 still bind regardless of channel). */
 export const NETWORK_MULTIPLIER: Record<Channel, number> = {
   x402: 1.0,
   acp: 1.0,
   kite: 1.0,
+  mech: 0.65,
 };
 
 export function computeClassFor(slug: OfferingSlug): ComputeClass {

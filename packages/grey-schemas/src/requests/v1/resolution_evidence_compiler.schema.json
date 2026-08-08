@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/requests/resolution_evidence_compiler.schema.json",
+  "title": "ResolutionEvidenceCompilerRequest",
+  "description": "Request body for the resolution_evidence_compiler offering (e3-b2, Olas Mech Marketplace). A loose prediction-market identifier plus optional resolution criteria text.",
+  "type": "object",
+  "properties": {
+    "marketQuery": { "type": "string" },
+    "resolutionCriteria": {
+      "type": "string",
+      "description": "Optional free-text description of what would resolve the market YES/NO, if known."
+    }
+  },
+  "required": ["marketQuery"],
+  "additionalProperties": false
+}

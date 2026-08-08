@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/requests/prediction_market_research.schema.json",
+  "title": "PredictionMarketResearchRequest",
+  "description": "Request body for the prediction_market_research offering (e3-b2, Olas Mech Marketplace). A loose prediction-market identifier — market question, platform+id, or URL.",
+  "type": "object",
+  "properties": {
+    "marketQuery": { "type": "string" }
+  },
+  "required": ["marketQuery"],
+  "additionalProperties": false
+}

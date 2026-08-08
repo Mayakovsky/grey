@@ -68,4 +68,16 @@ export const EVALUATION_KIT_BRANDING: Record<OfferingSlug, EvaluationKitBranding
     description: 'Free feed of projects flagged by Grey verification as high-risk.',
     iconUrl: `${ICON_BASE}/scam_alert_feed.svg`,
   },
+  prediction_market_research: {
+    serviceName: 'Prediction Market Research',
+    tags: ['crypto', 'prediction-markets', 'cache-only'],
+    description: 'Cache-only research lookup for a prediction market — no live compute.',
+    iconUrl: `${ICON_BASE}/prediction_market_research.svg`,
+  },
+  resolution_evidence_compiler: {
+    serviceName: 'Resolution Evidence Compiler',
+    tags: ['crypto', 'prediction-markets', 'evidence', 'cache-only'],
+    description: 'Cache-only compiled evidence bearing on how a prediction market resolves.',
+    iconUrl: `${ICON_BASE}/resolution_evidence_compiler.svg`,
+  },
 };

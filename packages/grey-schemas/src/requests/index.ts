@@ -11,6 +11,8 @@ export type {
   ClaimHistoryRequest,
   QuickProtocolFactsRequest,
   ClaimExtractionRequest,
+  PredictionMarketResearchRequest,
+  ResolutionEvidenceCompilerRequest,
   // M3.5 (FDQ-1): additive request-side taxonomy + map
   ComputeOfferingSlug,
   RequestFor,

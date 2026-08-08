@@ -16,6 +16,8 @@ import { quickProtocolFacts } from './quick_protocol_facts';
 import { dailyTechBrief } from './daily_tech_brief';
 import { dailyGreenlightList } from './daily_greenlight_list';
 import { scamAlertFeed } from './scam_alert_feed';
+import { predictionMarketResearch } from './prediction_market_research';
+import { resolutionEvidenceCompiler } from './resolution_evidence_compiler';
 
 export const offeringHandlers: Record<OfferingSlug, OfferingHandler> = {
   legitimacy_scan: legitimacyScan,
@@ -28,4 +30,6 @@ export const offeringHandlers: Record<OfferingSlug, OfferingHandler> = {
   daily_tech_brief: dailyTechBrief,
   daily_greenlight_list: dailyGreenlightList,
   scam_alert_feed: scamAlertFeed,
+  prediction_market_research: predictionMarketResearch,
+  resolution_evidence_compiler: resolutionEvidenceCompiler,
 };

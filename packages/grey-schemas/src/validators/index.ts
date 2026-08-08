@@ -19,6 +19,8 @@ import quickProtocolFactsSchema from '../responses/v1/quick_protocol_facts.schem
 import dailyTechBriefSchema from '../responses/v1/daily_tech_brief.schema.json';
 import dailyGreenlightListSchema from '../responses/v1/daily_greenlight_list.schema.json';
 import scamAlertFeedSchema from '../responses/v1/scam_alert_feed.schema.json';
+import predictionMarketResearchSchema from '../responses/v1/prediction_market_research.schema.json';
+import resolutionEvidenceCompilerSchema from '../responses/v1/resolution_evidence_compiler.schema.json';
 import envelopeSchema from '../responses/v1/envelope.schema.json';
 
 // M3 (Q7): request-body schemas for the 7 paid offerings (FDQ-10 — the 2 free GETs take no body).
@@ -30,6 +32,8 @@ import claimExtractionRequestSchema from '../requests/v1/claim_extraction.schema
 import claimHistoryRequestSchema from '../requests/v1/claim_history.schema.json';
 import quickProtocolFactsRequestSchema from '../requests/v1/quick_protocol_facts.schema.json';
 import dailyTechBriefRequestSchema from '../requests/v1/daily_tech_brief.schema.json';
+import predictionMarketResearchRequestSchema from '../requests/v1/prediction_market_research.schema.json';
+import resolutionEvidenceCompilerRequestSchema from '../requests/v1/resolution_evidence_compiler.schema.json';
 
 const BASE = 'https://schemas.whitepapergrey.com/v1/';
 const id = (file: string): string => `${BASE}${file}`;
@@ -52,6 +56,8 @@ ajv.addSchema([
   dailyTechBriefSchema,
   dailyGreenlightListSchema,
   scamAlertFeedSchema,
+  predictionMarketResearchSchema,
+  resolutionEvidenceCompilerSchema,
   envelopeSchema,
   // M3 request schemas (distinct $id namespace: .../v1/requests/<file>).
   legitimacyScanRequestSchema,
@@ -62,6 +68,8 @@ ajv.addSchema([
   claimHistoryRequestSchema,
   quickProtocolFactsRequestSchema,
   dailyTechBriefRequestSchema,
+  predictionMarketResearchRequestSchema,
+  resolutionEvidenceCompilerRequestSchema,
 ]);
 
 function compiled(file: string): ValidateFunction {
@@ -87,6 +95,8 @@ export const quickProtocolFactsValidator = compiled('quick_protocol_facts.schema
 export const dailyTechBriefValidator = compiled('daily_tech_brief.schema.json');
 export const dailyGreenlightListValidator = compiled('daily_greenlight_list.schema.json');
 export const scamAlertFeedValidator = compiled('scam_alert_feed.schema.json');
+export const predictionMarketResearchValidator = compiled('prediction_market_research.schema.json');
+export const resolutionEvidenceCompilerValidator = compiled('resolution_evidence_compiler.schema.json');
 
 // Full-envelope validator (validates wrapper + payload-XOR-error + if/then payload binding).
 export const envelopeValidator = compiled('envelope.schema.json');
@@ -103,6 +113,8 @@ export const offeringValidators: Record<string, ValidateFunction> = {
   daily_tech_brief: dailyTechBriefValidator,
   daily_greenlight_list: dailyGreenlightListValidator,
   scam_alert_feed: scamAlertFeedValidator,
+  prediction_market_research: predictionMarketResearchValidator,
+  resolution_evidence_compiler: resolutionEvidenceCompilerValidator,
 };
 
 // ── M3 (Q7): request-body validators for the 7 paid offerings ──
@@ -117,6 +129,12 @@ export const claimExtractionRequestValidator = compiledRequest('claim_extraction
 export const claimHistoryRequestValidator = compiledRequest('claim_history.schema.json');
 export const quickProtocolFactsRequestValidator = compiledRequest('quick_protocol_facts.schema.json');
 export const dailyTechBriefRequestValidator = compiledRequest('daily_tech_brief.schema.json');
+export const predictionMarketResearchRequestValidator = compiledRequest(
+  'prediction_market_research.schema.json',
+);
+export const resolutionEvidenceCompilerRequestValidator = compiledRequest(
+  'resolution_evidence_compiler.schema.json',
+);
 
 /** Per-paid-offering request-body validator lookup (8 entries; the 2 free GETs have no body — FDQ-10). */
 export const offeringRequestValidators: Record<PaidOfferingSlug, ValidateFunction> = {
@@ -128,4 +146,6 @@ export const offeringRequestValidators: Record<PaidOfferingSlug, ValidateFunctio
   claim_history: claimHistoryRequestValidator,
   quick_protocol_facts: quickProtocolFactsRequestValidator,
   daily_tech_brief: dailyTechBriefRequestValidator,
+  prediction_market_research: predictionMarketResearchRequestValidator,
+  resolution_evidence_compiler: resolutionEvidenceCompilerRequestValidator,
 };

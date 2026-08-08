@@ -9,3 +9,5 @@ export type { MarketplaceClient } from './marketplaceClient.js';
 export { MECH_MARKETPLACE_ABI, MECH_FACTORY_ABI, REQUEST_STATUS } from './marketplaceAbi.js';
 export { createLogger, silentLogger } from './logger.js';
 export type { AdapterLogger } from './logger.js';
+export { MECH_OFFERING_SLUGS, mechPriceUsdFor } from './prices.js';
+export type { MechOfferingSlug } from './prices.js';

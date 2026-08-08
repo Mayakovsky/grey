@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { MechAdapter } from '../src/mechAdapter.js';
 import { silentLogger } from '../src/logger.js';
 import { fakeMarketplaceClient, FAKE_PAY_TO, FAKE_POOL } from './_fakes.js';
+import { MECH_OFFERING_SLUGS, mechPriceUsdFor } from '../src/prices.js';
 import type { MechAdapterConfig } from '../src/config.js';
 
 const CONFIG: MechAdapterConfig = {
@@ -72,6 +73,23 @@ describe('MechAdapter — ChannelIngress contract', () => {
       logger: silentLogger(),
     });
     await expect(adapter.registerAsMech('NATIVE', 1n)).rejects.toThrow(/ServiceRegistry/);
+  });
+
+  it('e3-b2: registers all three mech offerings at their 0.65× resolved prices', () => {
+    const adapter = new MechAdapter({
+      config: CONFIG,
+      marketplaceClient: fakeMarketplaceClient(),
+      logger: silentLogger(),
+    });
+    for (const slug of MECH_OFFERING_SLUGS) {
+      adapter.registerOffering({ slug, priceUsd: mechPriceUsdFor(slug) });
+    }
+    const registered = adapter.listOfferings();
+    expect(registered.map((o) => o.slug).sort()).toEqual([...MECH_OFFERING_SLUGS].sort());
+    const byPrice = Object.fromEntries(registered.map((o) => [o.slug, o.priceUsd]));
+    expect(byPrice.prediction_market_research).toBeCloseTo(0.065, 10);
+    expect(byPrice.resolution_evidence_compiler).toBeCloseTo(0.13, 10);
+    expect(byPrice.daily_tech_brief).toBeCloseTo(5.2, 10);
   });
 
   it('start() calls the injected client, not a real network (proves the seam works)', async () => {
