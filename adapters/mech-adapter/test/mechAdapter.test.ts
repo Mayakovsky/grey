@@ -1,7 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MechAdapter } from '../src/mechAdapter.js';
 import { silentLogger } from '../src/logger.js';
-import { fakeMarketplaceClient, FAKE_PAY_TO, FAKE_POOL } from './_fakes.js';
+import {
+  fakeMarketplaceClient,
+  fakeServiceRegistryClient,
+  FAKE_MECH,
+  FAKE_MULTISIG,
+  FAKE_PAY_TO,
+  FAKE_POOL,
+} from './_fakes.js';
 import { MECH_OFFERING_SLUGS, mechPriceUsdFor } from '../src/prices.js';
 import type { MechAdapterConfig } from '../src/config.js';
 
@@ -66,13 +73,64 @@ describe('MechAdapter — ChannelIngress contract', () => {
     await expect(adapter.stop()).resolves.toBeUndefined();
   });
 
-  it('registerAsMech is an unimplemented, explicitly-throwing stub (Olas ServiceRegistry gap)', async () => {
+  it('registerAsMech throws without an injected serviceRegistryClient (BION-DIRECTIVE-28 guard)', async () => {
     const adapter = new MechAdapter({
       config: CONFIG,
       marketplaceClient: fakeMarketplaceClient(),
       logger: silentLogger(),
     });
-    await expect(adapter.registerAsMech('NATIVE', 1n)).rejects.toThrow(/ServiceRegistry/);
+    await expect(
+      adapter.registerAsMech('NATIVE', {
+        agentId: 1,
+        bondWei: 1n,
+        configHash: `0x${'00'.repeat(32)}`,
+        mechPayload: `0x${'00'.repeat(32)}`,
+      }),
+    ).rejects.toThrow(/serviceRegistryClient/);
+  });
+
+  it('registerAsMech runs the full simulate-only lifecycle when observeOnly (default)', async () => {
+    const registryClient = fakeServiceRegistryClient();
+    const marketplaceClient = fakeMarketplaceClient();
+    const adapter = new MechAdapter({
+      config: CONFIG,
+      marketplaceClient,
+      serviceRegistryClient: registryClient,
+      logger: silentLogger(),
+    });
+    const result = await adapter.registerAsMech('NATIVE', {
+      agentId: 1,
+      bondWei: 1n,
+      configHash: `0x${'00'.repeat(32)}`,
+      mechPayload: `0x${'00'.repeat(32)}`,
+    });
+    expect(result).toEqual({
+      serviceId: 1n,
+      multisig: FAKE_MULTISIG,
+      mech: FAKE_MECH,
+      simulatedOnly: true,
+    });
+  });
+
+  it('registerAsMech never calls execute* paths while observeOnly is true', async () => {
+    const executeCreate = vi.fn(async () => ({ serviceId: 1n, txHash: `0x${'ab'.repeat(32)}` as const }));
+    const executeCreateMech = vi.fn(async () => FAKE_MECH);
+    const registryClient = fakeServiceRegistryClient({ executeCreate });
+    const marketplaceClient = fakeMarketplaceClient({ executeCreateMech });
+    const adapter = new MechAdapter({
+      config: CONFIG,
+      marketplaceClient,
+      serviceRegistryClient: registryClient,
+      logger: silentLogger(),
+    });
+    await adapter.registerAsMech('NATIVE', {
+      agentId: 1,
+      bondWei: 1n,
+      configHash: `0x${'00'.repeat(32)}`,
+      mechPayload: `0x${'00'.repeat(32)}`,
+    });
+    expect(executeCreate).not.toHaveBeenCalled();
+    expect(executeCreateMech).not.toHaveBeenCalled();
   });
 
   it('e3-b2: registers all three mech offerings at their 0.65× resolved prices', () => {

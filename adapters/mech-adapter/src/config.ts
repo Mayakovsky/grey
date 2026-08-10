@@ -42,6 +42,29 @@ export const MARKETPLACE_ADDRESSES = {
 
 export type MechPaymentType = keyof typeof MARKETPLACE_ADDRESSES.factories;
 
+/** Base mainnet Olas ServiceRegistry deployment (BION-DIRECTIVE-28) — the prerequisite lifecycle
+ *  a service must complete before MechFactory*.createMech() will accept its serviceId (see
+ *  MARKETPLACE_ADDRESSES's factories doc comment). Source: two independently-generated files in
+ *  valory-xyz/autonolas-registries (scripts/deployment/l2/globals_base_mainnet.json and
+ *  docs/configuration.json, both raw-fetched, values agree), cross-checked via direct eth_getCode
+ *  RPC calls confirming real deployed bytecode at each address (2026-08-08). serviceManagerProxy
+ *  is the address callers use; serviceManagerImplementation is reference only, never called
+ *  directly (same proxy pattern as MARKETPLACE_ADDRESSES). gnosisSafeMultisig is the multisig
+ *  implementation address `deploy()` expects. Real Base Sepolia testnet addresses also exist for
+ *  this contract set (serviceRegistry 0x31D3202d8744B16A120117A053459DDFAE93c855, serviceManager
+ *  0x5BA58970c2Ae16Cf6218783018100aF2dCcFc915) — unlike the Marketplace contracts (e3-b1), which
+ *  have none — not wired here since this directive's fork-test posture matches e3-b1's for
+ *  consistency, but worth knowing for a future live testnet dry run. */
+export const SERVICE_REGISTRY_ADDRESSES = {
+  chainId: 8453,
+  serviceRegistryL2: '0x3C1fF68f5aa342D296d4DEe4Bb1cACCA912D95fE' as Address,
+  serviceRegistryTokenUtility: '0x34C895f302D0b5cf52ec0Edd3945321EB0f83dd5' as Address,
+  serviceManagerImplementation: '0x32B5A40B43C4eDb123c9cFa6ea97432380a38dDF' as Address,
+  serviceManagerProxy: '0x1262136cac6a06A782DC94eb3a3dF0b4d09FF6A6' as Address,
+  operatorWhitelist: '0x3d77596beb0f130a4415df3D2D8232B3d3D31e44' as Address,
+  gnosisSafeMultisig: '0x22bE6fDcd3e29851B29b512F714C328A00A96B83' as Address,
+} as const;
+
 /** Ceremony complete (2026-08-08, Forces-run per EXPANSION-E3-B1-MECH-KEY-CEREMONY-RUNBOOK-
  *  FORCES.md) — address only, no key or passphrase ever passed through this codebase. Recorded
  *  here for reference/traceability (same posture as KITE_POOL_WALLET_ADDRESS in grey-sweeper's

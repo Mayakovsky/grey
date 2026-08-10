@@ -24,7 +24,8 @@ export const MECH_MARKETPLACE_ABI = parseAbi([
 
 // MechFactoryFixedPriceNative — also verified raw (abis/0.8.28/MechFactoryFixedPriceNative.json).
 // `createMech` requires a pre-existing Olas `serviceId` from the ServiceRegistry contract — see
-// mechAdapter.ts's registerAsMech doc comment for why this adapter does not call it yet.
+// mechAdapter.ts's registerAsMech doc comment and marketplaceClient.ts (BION-DIRECTIVE-28) for
+// how that lifecycle gets satisfied before this is called.
 export const MECH_FACTORY_ABI = parseAbi([
   'function createMech(address serviceRegistry, uint256 serviceId, bytes payload) returns (address)',
   'event CreateMechFixedPriceNative(address mech, uint256 serviceId, uint256 maxDeliveryRate)',
