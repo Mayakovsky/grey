@@ -3,11 +3,13 @@ import { MechAdapter } from '../src/mechAdapter.js';
 import { silentLogger } from '../src/logger.js';
 import {
   fakeMarketplaceClient,
+  fakeServiceInfo,
   fakeServiceRegistryClient,
   FAKE_MECH,
   FAKE_MULTISIG,
   FAKE_PAY_TO,
   FAKE_POOL,
+  FAKE_TX_HASH,
 } from './_fakes.js';
 import { MECH_OFFERING_SLUGS, mechPriceUsdFor } from '../src/prices.js';
 import type { MechAdapterConfig } from '../src/config.js';
@@ -161,5 +163,50 @@ describe('MechAdapter — ChannelIngress contract', () => {
     await adapter.start();
     expect(numMechs).toHaveBeenCalledOnce();
     expect(checkMech).toHaveBeenCalledWith(FAKE_PAY_TO);
+  });
+
+  describe('waitForServiceVisible (BION-DIRECTIVE-32)', () => {
+    const EXECUTE_CONFIG: MechAdapterConfig = { ...CONFIG, observeOnly: false };
+    const REAL_PARAMS = {
+      agentId: 1,
+      bondWei: 1n,
+      configHash: `0x${'00'.repeat(32)}` as const,
+      mechPayload: `0x${'00'.repeat(32)}` as const,
+    };
+
+    it('retries getService until the just-created service becomes visible, then proceeds', async () => {
+      const getService = vi
+        .fn()
+        .mockResolvedValueOnce(fakeServiceInfo({ state: 0 })) // NonExistent — not visible yet
+        .mockResolvedValueOnce(fakeServiceInfo({ state: 0 })) // still not visible
+        .mockResolvedValue(fakeServiceInfo({ state: 1 })); // now visible (PreRegistration)
+      const registryClient = fakeServiceRegistryClient({ getService });
+      const adapter = new MechAdapter({
+        config: EXECUTE_CONFIG,
+        marketplaceClient: fakeMarketplaceClient(),
+        serviceRegistryClient: registryClient,
+        serviceVisibilityPoll: { maxAttempts: 5, delayMs: 1 },
+        logger: silentLogger(),
+      });
+      const result = await adapter.registerAsMech('NATIVE', REAL_PARAMS);
+      expect(result.simulatedOnly).toBe(false);
+      expect(getService).toHaveBeenCalledTimes(3);
+    });
+
+    it('throws after exhausting attempts, and never calls the real activateRegistration', async () => {
+      const getService = vi.fn().mockResolvedValue(fakeServiceInfo({ state: 0 })); // never visible
+      const executeActivateRegistration = vi.fn(async () => ({ success: true, txHash: FAKE_TX_HASH }));
+      const registryClient = fakeServiceRegistryClient({ getService, executeActivateRegistration });
+      const adapter = new MechAdapter({
+        config: EXECUTE_CONFIG,
+        marketplaceClient: fakeMarketplaceClient(),
+        serviceRegistryClient: registryClient,
+        serviceVisibilityPoll: { maxAttempts: 3, delayMs: 1 },
+        logger: silentLogger(),
+      });
+      await expect(adapter.registerAsMech('NATIVE', REAL_PARAMS)).rejects.toThrow(/still not visible/);
+      expect(getService).toHaveBeenCalledTimes(3);
+      expect(executeActivateRegistration).not.toHaveBeenCalled();
+    });
   });
 });

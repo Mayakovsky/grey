@@ -34,12 +34,39 @@
 // sentinel constant instead, confirmed live against both serviceManagerProxy and
 // serviceManagerImplementation on Base mainnet. See config.ts's ETH_TOKEN_ADDRESS doc comment.
 //
+// ── activateRegistration's real NOT_MINTED incident (BION-DIRECTIVE-32) ─────────────────────
+// The first real live attempt: create() genuinely succeeded (real service 635, real Transfer
+// event, real ownerOf/getService reads all correct), then the immediately-following
+// activateRegistration reverted `NOT_MINTED`. The create() receipt's real logs also showed an
+// unanticipated side effect — a second contract, `0x8004a169...` ("8004: Identity Registry" —
+// ServiceManager.sol's real `identityRegistryBridger`, an ERC-8004-pattern bridge Grey's earlier
+// research never surfaced as live on this deployment) minting a separate identity NFT and
+// linking it to a different address. That was the leading suspect. **It was a red herring** —
+// traced the real `ServiceManager.sol` source: `identityRegistryBridger` is only called from
+// `create()` and the multisig-update path, never from `activateRegistration`'s own call chain
+// (`ServiceManager.activateRegistration` → `ServiceRegistryTokenUtility
+// .activateRegistrationTokenDeposit` → `ServiceRegistryL2.activateRegistration`). Confirmed live,
+// not just from source: isolated and directly re-called every real sub-step in that actual chain
+// against Base mainnet — `ownerOf(635)`, `activateRegistrationTokenDeposit(635)`, and
+// `ServiceRegistryL2.activateRegistration` all succeeded cleanly in isolation, and the exact
+// original top-level call (`ServiceManager.activateRegistration(635)` as the real
+// `BASE_MECH_PAY_TO` account) also succeeded when re-run later, repeatedly, with no code change.
+//
+// Real conclusion: a transient RPC read-after-write consistency gap, not a missing protocol
+// step, not an adapter bug, not an account-state gap. `executeCreate`'s
+// `waitForTransactionReceipt` only guarantees create()'s tx is mined — it does NOT guarantee
+// every backend behind a public, load-balanced RPC endpoint (`mainnet.base.org`) has caught up
+// to that block yet before the very next call lands. Fixed with `waitForServiceVisible` below —
+// a bounded poll of a real read (`getService`), not a retry on the mutating call itself — inserted
+// between `executeCreate` and the subsequent real `activateRegistration`/`registerAgents` calls.
+//
 // Safety: every write path in registerAsMech runs through config.observeOnly, same seam e3-b1
 // already shipped (defaults true — this codebase's standing "no real tx without an explicit,
 // reviewed override" posture). observeOnly=true simulates the full lifecycle (viem
 // simulateContract — predicts results, submits nothing) and returns without ever calling
 // walletClient.writeContract. Flipping it to false is a deployment-time decision, not something
 // this class defaults to or can be talked into via any argument to registerAsMech itself.
+import { setTimeout as delay } from 'node:timers/promises';
 import type { ChannelIngress, ChannelIdentity, OfferingRegistration } from '@grey/core';
 import type { Address } from 'viem';
 import {
@@ -51,6 +78,7 @@ import {
   type MechPaymentType,
 } from './config.js';
 import { createMarketplaceClient, type MarketplaceClient } from './marketplaceClient.js';
+import { SERVICE_STATE } from './serviceRegistryAbi.js';
 import type { ServiceRegistryClient } from './serviceRegistryClient.js';
 import { createLogger, type AdapterLogger } from './logger.js';
 
@@ -99,7 +127,13 @@ export interface MechAdapterOptions {
    *  pattern this repo already uses for that). */
   serviceRegistryClient?: ServiceRegistryClient;
   logger?: AdapterLogger;
+  /** `waitForServiceVisible`'s poll knobs (BION-DIRECTIVE-32) — overridable so tests can exercise
+   *  the wait/timeout logic without real delays. Defaults match the real-world lag this was
+   *  built to absorb; production callers should not normally need to override this. */
+  serviceVisibilityPoll?: { maxAttempts: number; delayMs: number };
 }
+
+const DEFAULT_SERVICE_VISIBILITY_POLL = { maxAttempts: 5, delayMs: 1500 };
 
 export class MechAdapter implements ChannelIngress {
   private readonly config: MechAdapterConfig;
@@ -107,6 +141,7 @@ export class MechAdapter implements ChannelIngress {
   private readonly registryClient?: ServiceRegistryClient;
   private readonly log: AdapterLogger;
   private readonly offerings: OfferingRegistration[] = [];
+  private readonly serviceVisibilityPoll: { maxAttempts: number; delayMs: number };
   private started = false;
 
   constructor(opts: MechAdapterOptions) {
@@ -114,6 +149,7 @@ export class MechAdapter implements ChannelIngress {
     this.client = opts.marketplaceClient ?? createMarketplaceClient(opts.config.rpcUrl);
     this.registryClient = opts.serviceRegistryClient;
     this.log = opts.logger ?? createLogger({ component: 'mech-adapter' });
+    this.serviceVisibilityPoll = opts.serviceVisibilityPoll ?? DEFAULT_SERVICE_VISIBILITY_POLL;
   }
 
   async start(): Promise<void> {
@@ -194,6 +230,13 @@ export class MechAdapter implements ChannelIngress {
           serviceId: serviceId.toString(),
           txHash: res.txHash,
         });
+        // BION-DIRECTIVE-32: wait for the just-created service to actually be READ-visible before
+        // proceeding — see this file's header for the full incident. waitForTransactionReceipt
+        // (inside executeCreate) only guarantees the tx is mined; it does NOT guarantee every
+        // backend behind a public, load-balanced RPC endpoint has caught up to that block yet.
+        // This polls a real READ (getService), not the mutating call itself — a bounded wait for
+        // read-after-write consistency, not a blind retry-and-hope on the real transaction.
+        await this.waitForServiceVisible(registry, serviceId);
       }
 
       if (simulatedOnly) {
@@ -224,6 +267,36 @@ export class MechAdapter implements ChannelIngress {
     });
 
     return { serviceId, multisig, mech, simulatedOnly };
+  }
+
+  /** BION-DIRECTIVE-32 — polls a real `getService` read (never the mutating call) until the
+   *  just-created service is visible (`state !== NonExistent`), or throws after
+   *  `serviceVisibilityPoll.maxAttempts`. This is deliberately NOT a retry on
+   *  `executeActivateRegistration` itself — that would be "retry-and-hope" over a real,
+   *  fund-moving call. Polling a read to confirm the RPC backend has actually caught up before
+   *  making that call once is a bounded wait for a known, real eventual-consistency gap, not a
+   *  blind retry. See file header for the full incident this fixes. */
+  private async waitForServiceVisible(registry: ServiceRegistryClient, serviceId: bigint): Promise<void> {
+    const { maxAttempts, delayMs } = this.serviceVisibilityPoll;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const service = await registry.getService(serviceId);
+      if (service.state !== SERVICE_STATE.NonExistent) {
+        return;
+      }
+      this.log.info('MechAdapter.registerAsMech: service not yet read-visible, waiting for RPC catch-up', {
+        serviceId: serviceId.toString(),
+        attempt,
+      });
+      if (attempt < maxAttempts) {
+        await delay(delayMs);
+      }
+    }
+    throw new Error(
+      `MechAdapter.registerAsMech: service ${serviceId} still not visible via getService after ` +
+        `${maxAttempts} attempts (~${(maxAttempts * delayMs) / 1000}s) — this is longer than the ` +
+        'observed real-world lag (BION-DIRECTIVE-32), so treat this as a genuine problem, not more ' +
+        'transient lag: do not blindly retry activateRegistration against it.',
+    );
   }
 
   /** MechFactory.createMech has no public read-only preview in the ABI this adapter carries
