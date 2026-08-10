@@ -4,10 +4,24 @@
 // (`createMarketplaceClient(rpcUrl)`, no account) stays read-only-safe; a real deployment wanting
 // registerAsMech to work injects a client built with an account instead (same injection pattern
 // serviceRegistryClient.ts already uses).
+//
+// FIXED (BION-DIRECTIVE-33): simulateCreateMech/executeCreateMech used to call
+// `MechFactory.createMech(serviceRegistry, serviceId, payload)` directly — real, live testing
+// against Base mainnet revealed this ALWAYS reverts `MarketplaceOnly(sender, marketplace)`
+// (confirmed via the ABI-decoded revert, not a guess): the factory only accepts calls from the
+// real Marketplace contract itself, never a wallet directly. Traced the real
+// `MechMarketplace.sol` source: the actual entry point is `MechMarketplace.create(serviceId,
+// mechFactory, payload)`, which requires the caller be the service's real owner or multisig
+// (confirmed true for BASE_MECH_PAY_TO against Grey's own services) and the factory be
+// whitelisted (confirmed live: NATIVE factory IS whitelisted) — then it calls the factory
+// itself, satisfying `MarketplaceOnly` because the call now genuinely comes from the Marketplace.
+// Same wrapper-contract pattern already established elsewhere in this codebase
+// (ServiceManager.create() wraps ServiceRegistryL2.create() the same way) — this call was simply
+// never updated to match it.
 import { createPublicClient, createWalletClient, http, type Address, type Account, type Hash } from 'viem';
 import { base } from 'viem/chains';
-import { MARKETPLACE_ADDRESSES, SERVICE_REGISTRY_ADDRESSES } from './config.js';
-import { MECH_FACTORY_ABI, MECH_MARKETPLACE_ABI } from './marketplaceAbi.js';
+import { MARKETPLACE_ADDRESSES } from './config.js';
+import { MECH_MARKETPLACE_ABI } from './marketplaceAbi.js';
 
 export interface MarketplaceClient {
   numMechs(): Promise<bigint>;
@@ -63,10 +77,10 @@ export function createMarketplaceClient(rpcUrl: string, account?: Account): Mark
     async simulateCreateMech(factory: Address, serviceId: bigint, payload: `0x${string}`) {
       const acct = requireAccount();
       const { result } = await client.simulateContract({
-        address: factory,
-        abi: MECH_FACTORY_ABI,
-        functionName: 'createMech',
-        args: [SERVICE_REGISTRY_ADDRESSES.serviceRegistryL2, serviceId, payload],
+        address,
+        abi: MECH_MARKETPLACE_ABI,
+        functionName: 'create',
+        args: [serviceId, factory, payload],
         account: acct,
       });
       return result;
@@ -74,10 +88,10 @@ export function createMarketplaceClient(rpcUrl: string, account?: Account): Mark
     async executeCreateMech(factory: Address, serviceId: bigint, payload: `0x${string}`) {
       requireAccount();
       const { request, result } = await client.simulateContract({
-        address: factory,
-        abi: MECH_FACTORY_ABI,
-        functionName: 'createMech',
-        args: [SERVICE_REGISTRY_ADDRESSES.serviceRegistryL2, serviceId, payload],
+        address,
+        abi: MECH_MARKETPLACE_ABI,
+        functionName: 'create',
+        args: [serviceId, factory, payload],
         account,
       });
       const txHash: Hash = await walletClient!.writeContract(request);

@@ -9,6 +9,33 @@
 // run doesn't catch that class of error, only `tsc --noEmit` does, so this matters for real.
 import { parseAbi } from 'viem';
 
+/** Real custom errors (BION-DIRECTIVE-33 Task 3) — copied verbatim from the real source, not
+ *  guessed: `IErrorsMarketplace.sol` and `IErrorsMech.sol` (valory-xyz/autonolas-marketplace),
+ *  the full declared sets, not just what this project happened to hit so far. Resolves a D-30
+ *  loose end as a side effect: `0xe56895c0` (an undecoded createMech revert seen while proving
+ *  D-30's real content) is `MarketplaceOnly(address,address)` — the Mech contract rejecting a
+ *  caller that isn't the real Marketplace, not a mystery. */
+const MARKETPLACE_ERRORS = [
+  'error OwnerOnly(address sender, address owner)',
+  'error ZeroAddress()',
+  'error ZeroValue()',
+  'error AlreadyInitialized()',
+  'error WrongArrayLength(uint256 numValues1, uint256 numValues2)',
+  'error InsufficientBalance(uint256 current, uint256 required)',
+  'error NoDepositAllowed(uint256 amount)',
+  'error Overflow(uint256 provided, uint256 max)',
+  'error ReentrancyGuard()',
+  'error UnauthorizedAccount(address account)',
+  'error WrongServiceState(uint256 state, uint256 serviceId)',
+  'error OutOfBounds(uint256 provided, uint256 min, uint256 max)',
+  'error AlreadyRequested(bytes32 requestId)',
+  'error WrongPaymentType(bytes32 paymentType)',
+  'error TransferFailed(address token, address from, address to, uint256 amount)',
+  'error IncorrectSignatureLength(bytes signature, uint256 provided, uint256 expected)',
+  'error SignatureNotValidated(address requester, bytes32 msgHash, bytes signature)',
+  'error MarketplaceOnly(address sender, address marketplace)',
+] as const;
+
 export const MECH_MARKETPLACE_ABI = parseAbi([
   'function numMechs() view returns (uint256)',
   'function checkMech(address mech) view returns (address)',
@@ -17,18 +44,29 @@ export const MECH_MARKETPLACE_ABI = parseAbi([
   'function mapRequestIdInfos(bytes32) view returns (address,address,address,uint256,uint256,bytes32)',
   'function mapMechDeliveryCounts(address) view returns (uint256)',
   'function deliverMarketplace(bytes32[] requestIds, uint256[] deliveryRates) returns (bool[])',
+  'function mapMechFactories(address) view returns (bool)',
+  /** BION-DIRECTIVE-33 — the real entry point for registering a service as a mech. NOT
+   *  `MechFactory.createMech()` directly (see marketplaceClient.ts's file header for why that
+   *  always reverts `MarketplaceOnly`) — this wraps that same call, requiring the caller be the
+   *  real service owner or multisig (confirmed true for BASE_MECH_PAY_TO) and `mechFactory` be
+   *  whitelisted (confirmed live: `mapMechFactories[NATIVE factory]` is `true`), then calls the
+   *  factory itself so the factory's own `MarketplaceOnly` check passes for real. Verbatim from
+   *  the real source, `valory-xyz/autonolas-marketplace`'s `MechMarketplace.sol`. */
+  'function create(uint256 serviceId, address mechFactory, bytes memory payload) returns (address mech)',
   'event CreateMech(address mech, uint256 serviceId, address mechFactory)',
   'event MarketplaceRequest(address priorityMech, address requester, uint256 numRequests, bytes32[] requestIds, bytes[] requestDatas)',
   'event MarketplaceDelivery(address deliveryMech, address[] requesters, uint256 numDeliveries, bytes32[] requestIds, bool[] deliveredRequests)',
+  ...MARKETPLACE_ERRORS,
 ]);
 
 // MechFactoryFixedPriceNative — also verified raw (abis/0.8.28/MechFactoryFixedPriceNative.json).
-// `createMech` requires a pre-existing Olas `serviceId` from the ServiceRegistry contract — see
-// mechAdapter.ts's registerAsMech doc comment and marketplaceClient.ts (BION-DIRECTIVE-28) for
-// how that lifecycle gets satisfied before this is called.
+// Kept for reference/documentation only — NOT called directly by this adapter (BION-DIRECTIVE-33;
+// see MECH_MARKETPLACE_ABI's `create` doc comment and marketplaceClient.ts's file header). Real
+// callers go through MechMarketplace.create(), which invokes this internally.
 export const MECH_FACTORY_ABI = parseAbi([
   'function createMech(address serviceRegistry, uint256 serviceId, bytes payload) returns (address)',
   'event CreateMechFixedPriceNative(address mech, uint256 serviceId, uint256 maxDeliveryRate)',
+  ...MARKETPLACE_ERRORS,
 ]);
 
 /** Request lifecycle status, per getRequestStatus's uint8 return. Values inferred from the
