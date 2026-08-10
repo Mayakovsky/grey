@@ -21,8 +21,18 @@
 // payload) from e3-b1's existing marketplaceClient/marketplaceAbi.
 //
 // Real bond precedent (4 live Base services read directly via getService, 2026-08-08): most use
-// 1 wei securityDeposit — the protocol requires nonzero, nothing more. Grey's actual bond amount
-// for a real registration is a Task 3 funding decision, not chosen by this adapter.
+// 1 wei securityDeposit — the protocol requires nonzero, nothing more. CORRECTED (BION-DIRECTIVE-
+// 29): this is very likely a token-bonded-service observation, not a native-ETH one — `create()`
+// wraps ERC20 bonding through ServiceRegistryTokenUtility with a documented `BOND_WRAPPER = 1 wei`
+// placeholder passed to the base registry, which plausibly explains the "1 wei" pattern regardless
+// of the service's real bond size. Not reconciled against which of the 4 sampled services were
+// actually token- vs ETH-bonded — a real ETH-bond precedent is still unconfirmed. Grey's actual
+// bond amount for a real registration is a Task 3 funding decision, not chosen by this adapter.
+//
+// `token` is `ETH_TOKEN_ADDRESS` (config.ts), NOT address(0) (BION-DIRECTIVE-29) — the real
+// deployed contract reverts `ZeroAddress()` on a zero token; native ETH has its own dedicated
+// sentinel constant instead, confirmed live against both serviceManagerProxy and
+// serviceManagerImplementation on Base mainnet. See config.ts's ETH_TOKEN_ADDRESS doc comment.
 //
 // Safety: every write path in registerAsMech runs through config.observeOnly, same seam e3-b1
 // already shipped (defaults true — this codebase's standing "no real tx without an explicit,
@@ -33,6 +43,7 @@
 import type { ChannelIngress, ChannelIdentity, OfferingRegistration } from '@grey/core';
 import type { Address } from 'viem';
 import {
+  ETH_TOKEN_ADDRESS,
   GREY_DID,
   MARKETPLACE_ADDRESSES,
   SERVICE_REGISTRY_ADDRESSES,
@@ -162,7 +173,7 @@ export class MechAdapter implements ChannelIngress {
     } else {
       const createArgs = {
         serviceOwner: this.config.payToAddress,
-        token: '0x0000000000000000000000000000000000000000' as Address,
+        token: ETH_TOKEN_ADDRESS,
         configHash: params.configHash,
         agentIds: [params.agentId],
         agentParams,

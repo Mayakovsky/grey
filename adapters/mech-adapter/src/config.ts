@@ -65,6 +65,18 @@ export const SERVICE_REGISTRY_ADDRESSES = {
   gnosisSafeMultisig: '0x22bE6fDcd3e29851B29b512F714C328A00A96B83' as Address,
 } as const;
 
+/** ServiceManager's native-ETH bonding sentinel (BION-DIRECTIVE-29 — fixes the `token = address(0)`
+ *  bug D-28 shipped). `create()`'s `token` param does NOT accept the zero address — it explicitly
+ *  reverts with `ZeroAddress()` (confirmed live against real Base mainnet, D-28 Task 3/D-29 Task 1:
+ *  `ZeroAddress()`'s selector `0xd92e233d` matched the real revert exactly). Native ETH instead has
+ *  its own dedicated constant on the contract, `ETH_TOKEN_ADDRESS`, which routes bonding through
+ *  `msg.value` directly rather than the ERC20/`ServiceRegistryTokenUtility` path any other nonzero
+ *  address would take. Source: valory-xyz/autonolas-registries's ServiceManager.sol (raw-fetched,
+ *  2026-08-10) — cross-checked by calling `VERSION()` (returns "1.2.0", matching the source) and
+ *  `ETH_TOKEN_ADDRESS()` directly against both `serviceManagerProxy` and `serviceManagerImplementation`
+ *  on live Base mainnet; both return this exact value (2026-08-10), not assumed from source alone. */
+export const ETH_TOKEN_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as Address;
+
 /** Ceremony complete (2026-08-08, Forces-run per EXPANSION-E3-B1-MECH-KEY-CEREMONY-RUNBOOK-
  *  FORCES.md) — address only, no key or passphrase ever passed through this codebase. Recorded
  *  here for reference/traceability (same posture as KITE_POOL_WALLET_ADDRESS in grey-sweeper's

@@ -35,8 +35,9 @@ export interface ServiceInfo {
 
 export interface CreateParams {
   serviceOwner: Address;
-  /** ERC20 bonding token, or the zero address for native-ETH bonding (Grey's posture — see
-   *  serviceRegistryAbi.ts's file header; real recent Base services all bond native). */
+  /** ERC20 bonding token, or `ETH_TOKEN_ADDRESS` (config.ts) for native-ETH bonding — Grey's
+   *  posture. NOT the zero address (BION-DIRECTIVE-29 — the real contract reverts `ZeroAddress()`
+   *  on a zero token; see config.ts's `ETH_TOKEN_ADDRESS` doc comment). */
   token: Address;
   configHash: `0x${string}`;
   agentIds: number[];

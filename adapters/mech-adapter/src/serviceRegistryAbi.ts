@@ -9,10 +9,12 @@
 //   - abis/0.8.23/ServiceRegistryL2.json — getService, for reading existing-service state before
 //     deciding whether create() is even needed.
 //
-// `create`'s `token` param: address(0) selects native-ETH bonding (per ServiceRegistryTokenUtility
-// only being consulted for a non-zero token address — confirmed by its absence from every real
-// recent Base service's bonding path, see mechAdapter.ts's registerAsMech doc comment). Grey's
-// posture uses address(0) — no ERC20 bonding token wired here.
+// `create`'s `token` param: CORRECTED (BION-DIRECTIVE-29) — address(0) is NOT the native-ETH
+// selector. The real contract explicitly reverts `ZeroAddress()` on a zero token (confirmed live
+// against Base mainnet); native ETH has its own dedicated sentinel instead, `ETH_TOKEN_ADDRESS`
+// (config.ts) — any other nonzero address routes through the ERC20/ServiceRegistryTokenUtility
+// bonding path. Grey's posture passes `ETH_TOKEN_ADDRESS`, not address(0). See config.ts's own
+// doc comment on ETH_TOKEN_ADDRESS for the full citation and live cross-check.
 import { parseAbi } from 'viem';
 
 export const SERVICE_MANAGER_ABI = parseAbi([
