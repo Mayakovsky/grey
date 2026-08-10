@@ -10,11 +10,17 @@ passphrase typed locally, is yours.
 ## What this does
 
 `adapters/mech-adapter/scripts/register-live.ts` runs Grey's real Olas ServiceRegistry
-registration on Base mainnet — the 4-step lifecycle (`create` → `activateRegistration` →
-`registerAgents` → `deploy`) plus `MechFactory.createMech`, using `BASE_MECH_PAY_TO`'s real
-keystore, real funds, real `configHash`/`mechPayload` (from BION-DIRECTIVE-30). It asks for your
-passphrase interactively, re-checks live chain state one more time, prints everything it's about
-to do, and only proceeds past that point if you type `REGISTER` literally.
+registration on Base mainnet, using `BASE_MECH_PAY_TO`'s real keystore, real funds, real
+`configHash`/`mechPayload` (from BION-DIRECTIVE-30). It asks for your passphrase interactively,
+re-checks live chain state one more time, prints everything it's about to do, and only proceeds
+past that point if you type `REGISTER` literally.
+
+**Updated (BION-DIRECTIVE-32):** the first real run already succeeded at `create()` — real
+service **635** exists, is correctly configured, and must not be created again. This script now
+resumes service 635 directly (`existingServiceId: 635n`) and runs the remaining real steps —
+`activateRegistration` → `registerAgents` → `deploy` → `MechFactory.createMech`. If you're seeing
+this runbook for the first time and there's no service 635 yet, something is out of sync — check
+with Kov before running.
 
 **Before you run it — the one non-obvious number:** the real total ETH the script will send is
 **0.0002 ETH, not 0.0001 ETH.** `registerAsMech`'s own implementation sends the confirmed bond
@@ -49,11 +55,13 @@ capturing this window.
 
 **3. The script will:**
 - Confirm the keystore's address matches `BASE_MECH_PAY_TO` (aborts if it doesn't — wrong keyfile).
-- Re-check `create()` live against Base mainnet right now (chain state can shift between when
-  this was last checked and when you actually run it). This checks `create()` only, not the
-  full chain — see the script's own `preflightCheckCreate()` doc comment if you want the "why."
-- Print a summary: service owner, agent id, bond per call, **total ETH value (0.0002 ETH)**,
-  `configHash`, `mechPayload`, and a live gas estimate for `create()`.
+- Confirm service 635 is still real and still in the expected `PreRegistration` state, then
+  live-simulate `activateRegistration(635)` against Base mainnet right now (chain state can still
+  shift between when this was last checked and when you actually run it — see the script's own
+  `preflightCheckExistingService()` doc comment for the full "why").
+- Print a summary: service owner, **which service id it's resuming (635)**, agent id, bond per
+  call, **total ETH value (0.0002 ETH)**, `configHash`, `mechPayload`, and a live gas estimate
+  for `activateRegistration`.
 
 **4. Confirm:**
 ```
@@ -81,7 +89,7 @@ summarize or retype it, so nothing gets lost or misquoted in translation.
 - Don't pass the passphrase as a CLI argument or environment variable — the script only accepts
   it via the interactive prompt, by design (so it can never end up logged or persisted anywhere).
 - Don't run this more than once without checking in first if step 5b happens — a revert on
-  `create()` costs only gas (nothing was created), but a revert partway through a later step
-  after `create()` already landed for real leaves a real, partially-registered service sitting
-  on-chain that the next attempt needs to account for (`existingServiceId`), not silently retry
-  from scratch.
+  `activateRegistration` costs only gas (nothing new was created or advanced), but a revert
+  partway through a later step (`registerAgents`/`deploy`/`createMech`) after an earlier one
+  already landed for real leaves service 635 sitting in a new real state that the next attempt
+  needs to account for, not silently retry from scratch.
