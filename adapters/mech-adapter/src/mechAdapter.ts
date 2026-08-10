@@ -60,6 +60,34 @@
 // a bounded poll of a real read (`getService`), not a retry on the mutating call itself — inserted
 // between `executeCreate` and the subsequent real `activateRegistration`/`registerAgents` calls.
 //
+// ── existingServiceId resume was all-or-nothing — FIXED (BION-DIRECTIVE-33) ────────────────
+// The second real live attempt (against real service 635, resumed via `existingServiceId`)
+// found the prior resume logic wrong: it unconditionally skipped straight to `deploy()` whenever
+// `existingServiceId` was set, regardless of the service's real state — correct only if
+// activateRegistration/registerAgents had already happened for real, which for 635 they hadn't
+// (D-32 proved those two calls work in isolation, not that the actual resume path reaches them).
+// Now state-aware: one real `getService` read decides what's actually left
+// (PreRegistration→needs all 4 remaining steps, ActiveRegistration→3, FinishedRegistration→2,
+// Deployed→createMech only, reusing the real existing multisig; NonExistent/TerminatedBonded
+// throw rather than attempt anything). Also added the real custom-error sets from
+// `IErrorsRegistries.sol`/`IErrorsMarketplace.sol`/`IErrorsMech.sol` to the ABIs
+// (serviceRegistryAbi.ts/marketplaceAbi.ts) so a revert prints a real decoded name+args instead
+// of a bare selector — this is what let a THIRD real bug surface and get fixed in the same pass:
+// `simulateCreateMech`/`executeCreateMech` were calling `MechFactory.createMech()` directly,
+// which live-testing (now decodable) showed always reverts `MarketplaceOnly` — the factory only
+// accepts calls from the real Marketplace contract. Fixed in marketplaceClient.ts to go through
+// `MechMarketplace.create()` instead (see that file's header for the full trace).
+//
+// Structural limit, not a bug — worth understanding, not "fixable": simulating the *whole*
+// remaining chain in one `observeOnly:true` pass only works when at most one step remains
+// (e.g. Deployed→createMech). Any state with 2+ remaining steps hits the same
+// simulateContract-calls-don't-chain wall D-31/D-32 already found — e.g. from PreRegistration,
+// simulated `registerAgents` correctly reverts `WrongServiceState(1, serviceId)` because the
+// preceding `activateRegistration` was only simulated, never actually executed, so real state
+// never advanced. Confirmed live (BION-DIRECTIVE-33): every individually-reachable step's real
+// preconditions check out correctly; only genuine, sequential real execution proves the full
+// chain — no amount of additional simulation logic changes that.
+//
 // Safety: every write path in registerAsMech runs through config.observeOnly, same seam e3-b1
 // already shipped (defaults true — this codebase's standing "no real tx without an explicit,
 // reviewed override" posture). observeOnly=true simulates the full lifecycle (viem
@@ -133,6 +161,11 @@ export interface MechAdapterOptions {
   serviceVisibilityPoll?: { maxAttempts: number; delayMs: number };
 }
 
+/** Reverse lookup of SERVICE_STATE, for log/error messages (BION-DIRECTIVE-33). */
+const SERVICE_STATE_NAME: Record<number, string> = Object.fromEntries(
+  Object.entries(SERVICE_STATE).map(([name, value]) => [value, name]),
+);
+
 const DEFAULT_SERVICE_VISIBILITY_POLL = { maxAttempts: 5, delayMs: 1500 };
 
 export class MechAdapter implements ChannelIngress {
@@ -183,10 +216,14 @@ export class MechAdapter implements ChannelIngress {
     return this.offerings;
   }
 
-  /** Runs the full registration lifecycle (create → activateRegistration → registerAgents →
-   *  deploy → MechFactory.createMech), or just the createMech leg if `params.existingServiceId`
-   *  is set. Gated end-to-end by config.observeOnly (see file header) — every step is always
-   *  simulated first (simulateContract); execution only happens when observeOnly is false. */
+  /** Runs whatever's actually still needed of the registration lifecycle (create →
+   *  activateRegistration → registerAgents → deploy → MechFactory.createMech) — state-aware
+   *  (BION-DIRECTIVE-33) since D-32's real live run found the previous all-or-nothing
+   *  `existingServiceId` branch wrong: resuming a real service must run only the steps that
+   *  haven't happened yet, determined from its real current `ServiceState`, not skip straight to
+   *  `deploy()` regardless. Gated end-to-end by config.observeOnly (see file header) — every step
+   *  is always simulated first (simulateContract); execution only happens when observeOnly is
+   *  false. */
   async registerAsMech(paymentType: MechPaymentType, params: ServiceRegistrationParams): Promise<RegisterAsMechResult> {
     if (!this.registryClient) {
       throw new Error(
@@ -203,10 +240,8 @@ export class MechAdapter implements ChannelIngress {
     let serviceId: bigint;
     if (params.existingServiceId !== undefined) {
       serviceId = params.existingServiceId;
-      const service = await registry.getService(serviceId);
-      this.log.info('MechAdapter.registerAsMech: using existing service', {
+      this.log.info('MechAdapter.registerAsMech: resuming existing service', {
         serviceId: serviceId.toString(),
-        state: service.state,
       });
     } else {
       const createArgs = {
@@ -238,21 +273,70 @@ export class MechAdapter implements ChannelIngress {
         // read-after-write consistency, not a blind retry-and-hope on the real transaction.
         await this.waitForServiceVisible(registry, serviceId);
       }
+    }
 
+    // BION-DIRECTIVE-33: state-aware resume. ONE real read decides what's actually left to do —
+    // for a service resumed via existingServiceId AND for one just freshly created (which is
+    // always PreRegistration at this point, so this same logic naturally runs the full remaining
+    // chain for it too — no separate "fresh" branch needed).
+    const service = await registry.getService(serviceId);
+    this.log.info('MechAdapter.registerAsMech: current service state', {
+      serviceId: serviceId.toString(),
+      state: service.state,
+      stateName: SERVICE_STATE_NAME[service.state] ?? 'unknown',
+    });
+
+    const RESUMABLE_STATES: readonly number[] = [
+      SERVICE_STATE.PreRegistration,
+      SERVICE_STATE.ActiveRegistration,
+      SERVICE_STATE.FinishedRegistration,
+      SERVICE_STATE.Deployed,
+    ];
+    if (!RESUMABLE_STATES.includes(service.state)) {
+      throw new Error(
+        `MechAdapter.registerAsMech: service ${serviceId} is in state ${service.state} ` +
+          `(${SERVICE_STATE_NAME[service.state] ?? 'unknown'}), which this code path cannot resume ` +
+          '— NonExistent means nothing to resume, TerminatedBonded means the service is past ' +
+          'recovery via this flow. Not attempting anything; verify manually before proceeding.',
+      );
+    }
+
+    const needsActivateRegistration = service.state === SERVICE_STATE.PreRegistration;
+    const needsRegisterAgents =
+      service.state === SERVICE_STATE.PreRegistration || service.state === SERVICE_STATE.ActiveRegistration;
+    const needsDeploy = service.state !== SERVICE_STATE.Deployed;
+
+    if (needsActivateRegistration) {
       if (simulatedOnly) {
         await registry.simulateActivateRegistration(serviceId, params.bondWei);
-        await registry.simulateRegisterAgents(serviceId, [this.config.payToAddress], [params.agentId], params.bondWei);
       } else {
         await registry.executeActivateRegistration(serviceId, params.bondWei);
+      }
+    }
+    if (needsRegisterAgents) {
+      if (simulatedOnly) {
+        await registry.simulateRegisterAgents(serviceId, [this.config.payToAddress], [params.agentId], params.bondWei);
+      } else {
         await registry.executeRegisterAgents(serviceId, [this.config.payToAddress], [params.agentId], params.bondWei);
       }
     }
 
     const multisigImplementation = SERVICE_REGISTRY_ADDRESSES.gnosisSafeMultisig;
     const deployData = '0x' as const;
-    const multisig = simulatedOnly
-      ? (await registry.simulateDeploy(serviceId, multisigImplementation, deployData)).multisig
-      : (await registry.executeDeploy(serviceId, multisigImplementation, deployData)).multisig;
+    let multisig: Address;
+    if (needsDeploy) {
+      multisig = simulatedOnly
+        ? (await registry.simulateDeploy(serviceId, multisigImplementation, deployData)).multisig
+        : (await registry.executeDeploy(serviceId, multisigImplementation, deployData)).multisig;
+    } else {
+      // Already Deployed — a real multisig exists already, no deploy() call needed or valid
+      // (ServiceRegistryL2.deploy requires state === FinishedRegistration, see D-32's tracing).
+      multisig = service.multisig;
+      this.log.info('MechAdapter.registerAsMech: already deployed, reusing existing multisig', {
+        serviceId: serviceId.toString(),
+        multisig,
+      });
+    }
 
     const factory = MARKETPLACE_ADDRESSES.factories[paymentType];
     const mech = simulatedOnly

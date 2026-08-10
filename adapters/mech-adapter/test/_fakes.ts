@@ -30,7 +30,7 @@ export function fakeServiceInfo(overrides: Partial<ServiceInfo> = {}): ServiceIn
     threshold: 1,
     maxNumAgentInstances: 1,
     numAgentInstances: 1,
-    state: 0,
+    state: 1, // PreRegistration — a realistic default; a fresh/typical service isn't NonExistent
     agentIds: [],
     ...overrides,
   };

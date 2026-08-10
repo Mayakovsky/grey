@@ -190,7 +190,9 @@ describe('MechAdapter — ChannelIngress contract', () => {
       });
       const result = await adapter.registerAsMech('NATIVE', REAL_PARAMS);
       expect(result.simulatedOnly).toBe(false);
-      expect(getService).toHaveBeenCalledTimes(3);
+      // 3 calls inside waitForServiceVisible's poll (2 NonExistent + 1 that finally sees
+      // PreRegistration) + 1 more real read (BION-DIRECTIVE-33) to decide what's still needed.
+      expect(getService).toHaveBeenCalledTimes(4);
     });
 
     it('throws after exhausting attempts, and never calls the real activateRegistration', async () => {
@@ -207,6 +209,116 @@ describe('MechAdapter — ChannelIngress contract', () => {
       await expect(adapter.registerAsMech('NATIVE', REAL_PARAMS)).rejects.toThrow(/still not visible/);
       expect(getService).toHaveBeenCalledTimes(3);
       expect(executeActivateRegistration).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('state-aware resume (BION-DIRECTIVE-33)', () => {
+    const RESUME_PARAMS = {
+      agentId: 1,
+      bondWei: 1n,
+      configHash: `0x${'00'.repeat(32)}` as const,
+      mechPayload: `0x${'00'.repeat(32)}` as const,
+      existingServiceId: 99n,
+    };
+    const DEPLOYED_MULTISIG = '0x5555555555555555555555555555555555555555' as const;
+
+    function spiedRegistryClient(state: number, serviceOverrides: Partial<ReturnType<typeof fakeServiceInfo>> = {}) {
+      const getService = vi.fn(async () => fakeServiceInfo({ state, ...serviceOverrides }));
+      const simulateActivateRegistration = vi.fn(async () => ({ success: true }));
+      const simulateRegisterAgents = vi.fn(async () => ({ success: true }));
+      const simulateDeploy = vi.fn(async () => ({ multisig: FAKE_MULTISIG }));
+      const registryClient = fakeServiceRegistryClient({
+        getService,
+        simulateActivateRegistration,
+        simulateRegisterAgents,
+        simulateDeploy,
+      });
+      return { registryClient, getService, simulateActivateRegistration, simulateRegisterAgents, simulateDeploy };
+    }
+
+    it('PreRegistration (1): runs activateRegistration + registerAgents + deploy + createMech', async () => {
+      const spies = spiedRegistryClient(1);
+      const simulateCreateMech = vi.fn(async () => FAKE_MECH);
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient({ simulateCreateMech }),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      const result = await adapter.registerAsMech('NATIVE', RESUME_PARAMS);
+      expect(spies.simulateActivateRegistration).toHaveBeenCalledOnce();
+      expect(spies.simulateRegisterAgents).toHaveBeenCalledOnce();
+      expect(spies.simulateDeploy).toHaveBeenCalledOnce();
+      expect(simulateCreateMech).toHaveBeenCalledOnce();
+      expect(result.multisig).toBe(FAKE_MULTISIG);
+    });
+
+    it('ActiveRegistration (2): skips activateRegistration, runs registerAgents + deploy + createMech', async () => {
+      const spies = spiedRegistryClient(2);
+      const simulateCreateMech = vi.fn(async () => FAKE_MECH);
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient({ simulateCreateMech }),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      await adapter.registerAsMech('NATIVE', RESUME_PARAMS);
+      expect(spies.simulateActivateRegistration).not.toHaveBeenCalled();
+      expect(spies.simulateRegisterAgents).toHaveBeenCalledOnce();
+      expect(spies.simulateDeploy).toHaveBeenCalledOnce();
+      expect(simulateCreateMech).toHaveBeenCalledOnce();
+    });
+
+    it('FinishedRegistration (3): skips activateRegistration + registerAgents, runs deploy + createMech', async () => {
+      const spies = spiedRegistryClient(3);
+      const simulateCreateMech = vi.fn(async () => FAKE_MECH);
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient({ simulateCreateMech }),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      await adapter.registerAsMech('NATIVE', RESUME_PARAMS);
+      expect(spies.simulateActivateRegistration).not.toHaveBeenCalled();
+      expect(spies.simulateRegisterAgents).not.toHaveBeenCalled();
+      expect(spies.simulateDeploy).toHaveBeenCalledOnce();
+      expect(simulateCreateMech).toHaveBeenCalledOnce();
+    });
+
+    it('Deployed (4): skips activateRegistration/registerAgents/deploy, runs createMech only, reuses the real existing multisig', async () => {
+      const spies = spiedRegistryClient(4, { multisig: DEPLOYED_MULTISIG });
+      const simulateCreateMech = vi.fn(async () => FAKE_MECH);
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient({ simulateCreateMech }),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      const result = await adapter.registerAsMech('NATIVE', RESUME_PARAMS);
+      expect(spies.simulateActivateRegistration).not.toHaveBeenCalled();
+      expect(spies.simulateRegisterAgents).not.toHaveBeenCalled();
+      expect(spies.simulateDeploy).not.toHaveBeenCalled();
+      expect(simulateCreateMech).toHaveBeenCalledOnce();
+      // Proves the multisig came from the real getService read, not from a (never-called) deploy —
+      // spiedRegistryClient's simulateDeploy would return FAKE_MULTISIG, a different value.
+      expect(result.multisig).toBe(DEPLOYED_MULTISIG);
+    });
+
+    it.each([
+      [0, 'NonExistent'],
+      [5, 'TerminatedBonded'],
+    ])('state %i (%s) throws a clear, named error rather than attempting anything', async (state) => {
+      const spies = spiedRegistryClient(state);
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient(),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      await expect(adapter.registerAsMech('NATIVE', RESUME_PARAMS)).rejects.toThrow(/cannot resume/);
+      expect(spies.simulateActivateRegistration).not.toHaveBeenCalled();
+      expect(spies.simulateRegisterAgents).not.toHaveBeenCalled();
+      expect(spies.simulateDeploy).not.toHaveBeenCalled();
     });
   });
 });
