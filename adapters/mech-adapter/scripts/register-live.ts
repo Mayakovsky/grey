@@ -19,6 +19,14 @@
 // this script will actually send is 2x the headline bond figure, not 1x — printed explicitly in
 // the final summary below so Forces sees the real number before confirming, not just the
 // per-call bond amount.
+//
+// UPDATED (BION-DIRECTIVE-32): the first real run's create() genuinely succeeded — real service
+// 635 already exists, real, correctly configured (confirmed live, see D-32's status file). Its
+// activateRegistration reverted NOT_MINTED at the time, traced to a transient RPC read-after-write
+// consistency gap, not a real problem with service 635 itself — fixed in mechAdapter.ts
+// (waitForServiceVisible) for any FUTURE fresh create(), and independently re-proved live that
+// activateRegistration now succeeds in simulation against 635 specifically. This script now
+// targets `existingServiceId: 635n` — do NOT let it create a second service.
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { createInterface } from 'node:readline';
@@ -32,14 +40,13 @@ import { zero } from '@grey/ceremony/dist/memory/index.js';
 import {
   BASE_MECH_PAY_TO_ADDRESS,
   BASE_MECH_POOL_WALLET_ADDRESS,
-  ETH_TOKEN_ADDRESS,
   GREY_MECH_CONFIG_HASH,
   GREY_MECH_PAYLOAD_HASH,
   SERVICE_REGISTRY_ADDRESSES,
   type MechAdapterConfig,
   type MechPaymentType,
 } from '../src/config.js';
-import { SERVICE_MANAGER_ABI } from '../src/serviceRegistryAbi.js';
+import { SERVICE_MANAGER_ABI, SERVICE_REGISTRY_L2_ABI, SERVICE_STATE } from '../src/serviceRegistryAbi.js';
 import { createMarketplaceClient } from '../src/marketplaceClient.js';
 import { createServiceRegistryClient } from '../src/serviceRegistryClient.js';
 import { MechAdapter, type ServiceRegistrationParams } from '../src/mechAdapter.js';
@@ -48,11 +55,12 @@ import { createLogger } from '../src/logger.js';
 const DEFAULT_KEYFILE = 'C:\\Users\\kidco\\.grey\\keys\\BASE_MECH_PAY_TO.json';
 const RPC_URL = process.env.BASE_RPC_URL?.trim() || 'https://mainnet.base.org';
 
-// Real params for Grey's actual registration — see BION-DIRECTIVE-31 and config.ts's own doc
+// Real params for Grey's actual registration — see BION-DIRECTIVE-31/32 and config.ts's own doc
 // comments on GREY_MECH_CONFIG_HASH/GREY_MECH_PAYLOAD_HASH for how each was derived.
-const AGENT_ID = 424242; // caller-chosen; no on-chain existence check on Base (mechAdapter.ts file header)
+const AGENT_ID = 424242; // matches service 635's real, already-registered agentIds — do not change
 const BOND_WEI = 100_000_000_000_000n; // 0.0001 ETH, confirmed by Forces (D-31)
 const PAYMENT_TYPE: MechPaymentType = 'NATIVE';
+const EXISTING_SERVICE_ID = 635n; // real, already-created service (BION-DIRECTIVE-32) — resume, don't recreate
 
 function parseArgs(argv: string[]): { keyfile: string } {
   const idx = argv.indexOf('--keyfile');
@@ -69,38 +77,48 @@ async function askLine(prompt: string): Promise<string> {
   }
 }
 
-/** Step 3's real pre-flight check. IMPORTANT — this simulates `create()` ONLY, not the full
- *  5-step chain. Discovered while proving this script (BION-DIRECTIVE-31 Task 2): each
- *  `simulateContract` call is an independent `eth_call` against CURRENT real chain state.
- *  `simulateCreate` returns a *predicted* serviceId, but never actually creates anything — so a
- *  same-run `simulateActivateRegistration(predictedServiceId, ...)` reverts `NOT_MINTED` every
- *  time against real state, because that serviceId genuinely doesn't exist yet. This is NOT a
- *  chain-state-drift bug and no amount of retrying fixes it — `MechAdapter.registerAsMech`'s own
- *  `observeOnly:true` path for a from-scratch registration can only ever "succeed" against fake
- *  test clients (which don't enforce real sequential state) or once `create()` has actually
- *  executed for real. Calling `adapter.registerAsMech(..., {observeOnly:true})` here would abort
- *  this script on every single run, always, before ever reaching the confirmation prompt — so
- *  this function checks the one step that genuinely IS re-verifiable ahead of time (`create()`
- *  is state-independent; D-29/D-30 already proved it simulates cleanly against real state) and
- *  is honest that steps 2–5 are only provable by executing for real. Flagged in this project's
- *  own follow-up notes as worth a future look at `mechAdapter.ts` itself — out of scope here. */
-async function preflightCheckCreate(
+/** Step 3's real pre-flight check (BION-DIRECTIVE-32 revision). Targets the real, already-created
+ *  `EXISTING_SERVICE_ID` — NOT a fresh `create()` (D-31 already proved a from-scratch
+ *  `create()`-then-`activateRegistration` simulate can't chain against real state; D-32 separately
+ *  proved `activateRegistration` DOES simulate cleanly against a real, already-existing service).
+ *  Two real, read-only checks: confirm the service is still genuinely there and in the expected
+ *  state, then live-simulate `activateRegistration` against it one more time, right now — chain
+ *  state can still shift between "last checked" and "actually running this," even for an
+ *  already-real service (that's the whole reason D-32 exists in the first place). */
+async function preflightCheckExistingService(
   owner: Address,
-): Promise<{ predictedServiceId: bigint; gas: bigint; gasPriceWei: bigint }> {
+): Promise<{ state: number; gas: bigint; gasPriceWei: bigint }> {
   const publicClient = createPublicClient({ chain: base, transport: http(RPC_URL) });
-  const createArgs = {
+
+  const service = await publicClient.readContract({
+    address: SERVICE_REGISTRY_ADDRESSES.serviceRegistryL2,
+    abi: SERVICE_REGISTRY_L2_ABI,
+    functionName: 'getService',
+    args: [EXISTING_SERVICE_ID],
+  });
+  if (service.state !== SERVICE_STATE.PreRegistration) {
+    throw new Error(
+      `Service ${EXISTING_SERVICE_ID} is in state ${service.state}, not PreRegistration ` +
+        `(${SERVICE_STATE.PreRegistration}) — activateRegistration expects PreRegistration. Someone ` +
+        'may have already advanced this service since D-32 last checked. Stop and verify manually ' +
+        'before proceeding — do not assume this is safe to retry.',
+    );
+  }
+
+  const activateArgs = {
     address: SERVICE_REGISTRY_ADDRESSES.serviceManagerProxy,
     abi: SERVICE_MANAGER_ABI,
-    functionName: 'create',
-    args: [owner, ETH_TOKEN_ADDRESS, GREY_MECH_CONFIG_HASH, [AGENT_ID], [{ slots: 1, bond: BOND_WEI }], 1],
+    functionName: 'activateRegistration',
+    args: [EXISTING_SERVICE_ID],
+    value: BOND_WEI,
     account: owner,
   } as const;
-  const [{ result: predictedServiceId }, gas, gasPriceWei] = await Promise.all([
-    publicClient.simulateContract(createArgs),
-    publicClient.estimateContractGas(createArgs),
+  const [, gas, gasPriceWei] = await Promise.all([
+    publicClient.simulateContract(activateArgs),
+    publicClient.estimateContractGas(activateArgs),
     publicClient.getGasPrice(),
   ]);
-  return { predictedServiceId, gas, gasPriceWei };
+  return { state: service.state, gas, gasPriceWei };
 }
 
 async function main(): Promise<void> {
@@ -141,27 +159,26 @@ async function main(): Promise<void> {
       bondWei: BOND_WEI,
       configHash: GREY_MECH_CONFIG_HASH,
       mechPayload: GREY_MECH_PAYLOAD_HASH,
+      existingServiceId: EXISTING_SERVICE_ID, // resume real service 635 — do NOT create a new one
     };
 
     console.log('\n--- Step 3: live pre-flight check (chain state may have shifted since the last check) ---');
-    console.log(
-      '(create() only — the other 4 steps cannot be meaningfully simulated ahead of a real ' +
-        'create() landing; see preflightCheckCreate()\'s doc comment for why.)',
-    );
-    let predictedServiceId: bigint, createGas: bigint, gasPriceWei: bigint;
+    console.log(`(resuming existing service ${EXISTING_SERVICE_ID} — not creating a new one; see BION-DIRECTIVE-32)`);
+    let gas: bigint, gasPriceWei: bigint;
     try {
-      ({ predictedServiceId, gas: createGas, gasPriceWei } = await preflightCheckCreate(account.address));
+      ({ gas, gasPriceWei } = await preflightCheckExistingService(account.address));
     } catch (err) {
       console.log('Pre-flight check FAILED — aborting before any confirmation prompt.');
       throw err;
     }
-    console.log(`Pre-flight check succeeded — create() predicts serviceId ${predictedServiceId.toString()}.`);
+    console.log(`Pre-flight check succeeded — activateRegistration(${EXISTING_SERVICE_ID}) simulates cleanly right now.`);
 
-    const createGasCostWei = createGas * gasPriceWei;
+    const activateGasCostWei = gas * gasPriceWei;
     const totalValueWei = BOND_WEI * 2n; // activateRegistration + registerAgents each require bondWei
 
     console.log('\n=== FINAL SUMMARY — READ CAREFULLY BEFORE CONFIRMING ===');
     console.log(`Service owner (this wallet):   ${account.address}`);
+    console.log(`Resuming service id:           ${EXISTING_SERVICE_ID} (real, already created — not a new service)`);
     console.log(`Agent id:                      ${AGENT_ID}`);
     console.log(`Bond per call:                 ${BOND_WEI} wei (${formatEther(BOND_WEI)} ETH)`);
     console.log(`Total ETH value to be sent:    ${totalValueWei} wei (${formatEther(totalValueWei)} ETH)`);
@@ -169,12 +186,13 @@ async function main(): Promise<void> {
     console.log(`configHash:                    ${GREY_MECH_CONFIG_HASH}`);
     console.log(`mechPayload:                   ${GREY_MECH_PAYLOAD_HASH}`);
     console.log(
-      `create() live gas estimate:    ${createGas} gas @ ${formatEther(gasPriceWei)} ETH/gas ≈ ${formatEther(createGasCostWei)} ETH`,
+      `activateRegistration live gas estimate: ${gas} gas @ ${formatEther(gasPriceWei)} ETH/gas ≈ ${formatEther(activateGasCostWei)} ETH`,
     );
     console.log(
-      '  (the other 4 steps cannot be gas-estimated until create() actually lands — Base gas is ' +
-        'consistently cheap per D-29/D-30 live measurements, expect low cents total across all 5, ' +
-        'but this script does not claim a precise combined figure for what it cannot yet measure)',
+      '  (registerAgents/deploy/createMech cannot be gas-estimated until activateRegistration ' +
+        'actually lands — Base gas is consistently cheap per D-29/D-30/D-32 live measurements, ' +
+        'expect low cents total, but this script does not claim a precise combined figure for what ' +
+        'it cannot yet measure)',
     );
     console.log('\nThis will submit REAL transactions on Base mainnet with REAL funds. This cannot be undone.');
 
