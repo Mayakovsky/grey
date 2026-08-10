@@ -26,5 +26,8 @@ export interface OfferingPricing {
 
 /** A channel this canonical price is realised on. Grows with each expansion (E2 Kite, E3 Olas, ...).
  *  E2-A adds 'kite' as a pricing constant only — no wallet, RPC, or live surface implied by its
- *  presence here (see MARKET-EXPANSION-PROJECT.md §3 E2-A). */
-export type Channel = 'x402' | 'acp' | 'kite';
+ *  presence here (see MARKET-EXPANSION-PROJECT.md §3 E2-A). E3-B2 adds 'mech' — the Olas Mech
+ *  Marketplace (Base first, Gnosis later per MEP §3 E3's OD-8 split); both chains share the
+ *  0.65× multiplier (MEP §2.3/§2.5), so ONE 'mech' channel covers both rather than 'mech-base' +
+ *  'mech-gnosis' — revisit only if Base/Gnosis pricing is ever forced to diverge. */
+export type Channel = 'x402' | 'acp' | 'kite' | 'mech';

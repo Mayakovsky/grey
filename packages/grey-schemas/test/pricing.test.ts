@@ -22,6 +22,8 @@ const ALL_SLUGS: OfferingSlug[] = [
   'daily_tech_brief',
   'daily_greenlight_list',
   'scam_alert_feed',
+  'prediction_market_research',
+  'resolution_evidence_compiler',
 ];
 
 const LIVE_ALLOWED: OfferingSlug[] = [
@@ -40,12 +42,14 @@ const CACHE_ONLY: OfferingSlug[] = [
   'daily_tech_brief',
   'daily_greenlight_list',
   'scam_alert_feed',
+  'prediction_market_research',
+  'resolution_evidence_compiler',
 ];
 
 const UNPRICED: OfferingSlug[] = ['daily_greenlight_list', 'scam_alert_feed'];
 
 describe('pricing — computeClass + canonical table (E1-A, Invariant #30/#31)', () => {
-  it('classifies all 10 offerings, matching cacheOrLive reachability', () => {
+  it('classifies all 12 offerings, matching cacheOrLive reachability', () => {
     expect(Object.keys(PRICING_TABLE).sort()).toEqual([...ALL_SLUGS].sort());
     for (const slug of LIVE_ALLOWED) expect(computeClassFor(slug)).toBe('LIVE_ALLOWED');
     for (const slug of CACHE_ONLY) expect(computeClassFor(slug)).toBe('CACHE_ONLY');
@@ -82,11 +86,12 @@ describe('pricing — computeClass + canonical table (E1-A, Invariant #30/#31)',
     }
   });
 
-  it('merge-prep ruling: the 2 unpriced offerings are enabled:false (not-yet-offered, not a pricing gap) — 7 priced + 2 disabled = 9', () => {
+  it('merge-prep ruling: the 2 unpriced offerings are enabled:false (not-yet-offered, not a pricing gap) — 10 priced + 2 disabled = 12', () => {
     const disabled = ALL_SLUGS.filter((slug) => !isEnabled(slug));
     expect(disabled.sort()).toEqual(['daily_greenlight_list', 'scam_alert_feed']);
     const enabled = ALL_SLUGS.filter((slug) => isEnabled(slug));
-    expect(enabled).toHaveLength(8); // 7 priced + the trust rung (priced, gated by its own runtime flag)
+    // 7 priced + the trust rung (priced, gated by its own runtime flag) + the 2 e3-b2 offerings.
+    expect(enabled).toHaveLength(10);
     expect(isEnabled('legitimacy_scan_trust_rung')).toBe(true); // static table says "real offering"; route reachability is a separate runtime flag
   });
 

@@ -54,6 +54,15 @@ export interface ClaimExtractionRequest {
   whitepaperUrl: string;
 }
 
+export interface PredictionMarketResearchRequest {
+  marketQuery: string;
+}
+
+export interface ResolutionEvidenceCompilerRequest {
+  marketQuery: string;
+  resolutionCriteria?: string;
+}
+
 // ── M3.5 (FDQ-1): ComputeOfferingSlug + RequestFor<O> (additive; mirrors ResponseFor<O>) ──
 //
 // The 4 offerings whose cache-miss runs live-compute in M3.5 (the cache-or-live tier). Subset of
@@ -85,4 +94,8 @@ export type RequestFor<O extends PaidOfferingSlug> = O extends 'legitimacy_scan'
             ? QuickProtocolFactsRequest
             : O extends 'daily_tech_brief'
               ? DailyTechBriefRequest
-              : never;
+              : O extends 'prediction_market_research'
+                ? PredictionMarketResearchRequest
+                : O extends 'resolution_evidence_compiler'
+                  ? ResolutionEvidenceCompilerRequest
+                  : never;

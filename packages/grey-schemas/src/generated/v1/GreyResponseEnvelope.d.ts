@@ -26,7 +26,9 @@ export type GreyResponseEnvelope = {
     | "quick_protocol_facts"
     | "daily_tech_brief"
     | "daily_greenlight_list"
-    | "scam_alert_feed";
+    | "scam_alert_feed"
+    | "prediction_market_research"
+    | "resolution_evidence_compiler";
   /**
    * Correlation id (UUID).
    */

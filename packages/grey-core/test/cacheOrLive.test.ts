@@ -181,7 +181,18 @@ describe('cacheOrLive — subject derivation', () => {
 });
 
 describe('cacheOrLive — Invariant #30 (CACHE_ONLY never triggers live compute)', () => {
-  const CACHE_ONLY_SLUGS = ['claim_history', 'quick_protocol_facts', 'daily_tech_brief', 'daily_greenlight_list', 'scam_alert_feed'] as const;
+  // e3-b2 (Olas Mech Marketplace, Base): prediction_market_research + resolution_evidence_compiler
+  // added — both CACHE_ONLY, both must be structurally unreachable here same as every other
+  // cache-only slug (G3 acceptance criterion for e3-b2).
+  const CACHE_ONLY_SLUGS = [
+    'claim_history',
+    'quick_protocol_facts',
+    'daily_tech_brief',
+    'daily_greenlight_list',
+    'scam_alert_feed',
+    'prediction_market_research',
+    'resolution_evidence_compiler',
+  ] as const;
 
   for (const slug of CACHE_ONLY_SLUGS) {
     it(`${slug} is structurally unreachable from cacheOrLive() — compile-time AND runtime rejection`, async () => {

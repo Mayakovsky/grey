@@ -19,6 +19,8 @@ import quickProtocolFactsResponse from '../responses/v1/quick_protocol_facts.sch
 import dailyTechBriefResponse from '../responses/v1/daily_tech_brief.schema.json';
 import dailyGreenlightListResponse from '../responses/v1/daily_greenlight_list.schema.json';
 import scamAlertFeedResponse from '../responses/v1/scam_alert_feed.schema.json';
+import predictionMarketResearchResponse from '../responses/v1/prediction_market_research.schema.json';
+import resolutionEvidenceCompilerResponse from '../responses/v1/resolution_evidence_compiler.schema.json';
 
 import legitimacyScanRequest from '../requests/v1/legitimacy_scan.schema.json';
 import legitimacyScanTrustRungRequest from '../requests/v1/legitimacy_scan_trust_rung.schema.json';
@@ -28,6 +30,8 @@ import claimExtractionRequest from '../requests/v1/claim_extraction.schema.json'
 import claimHistoryRequest from '../requests/v1/claim_history.schema.json';
 import quickProtocolFactsRequest from '../requests/v1/quick_protocol_facts.schema.json';
 import dailyTechBriefRequest from '../requests/v1/daily_tech_brief.schema.json';
+import predictionMarketResearchRequest from '../requests/v1/prediction_market_research.schema.json';
+import resolutionEvidenceCompilerRequest from '../requests/v1/resolution_evidence_compiler.schema.json';
 
 const OUTPUT_SCHEMAS: Record<OfferingSlug, object> = {
   legitimacy_scan: legitimacyScanResponse,
@@ -40,6 +44,8 @@ const OUTPUT_SCHEMAS: Record<OfferingSlug, object> = {
   daily_tech_brief: dailyTechBriefResponse,
   daily_greenlight_list: dailyGreenlightListResponse,
   scam_alert_feed: scamAlertFeedResponse,
+  prediction_market_research: predictionMarketResearchResponse,
+  resolution_evidence_compiler: resolutionEvidenceCompilerResponse,
 };
 
 const INPUT_SCHEMAS: Record<PaidOfferingSlug, object> = {
@@ -51,6 +57,8 @@ const INPUT_SCHEMAS: Record<PaidOfferingSlug, object> = {
   claim_history: claimHistoryRequest,
   quick_protocol_facts: quickProtocolFactsRequest,
   daily_tech_brief: dailyTechBriefRequest,
+  prediction_market_research: predictionMarketResearchRequest,
+  resolution_evidence_compiler: resolutionEvidenceCompilerRequest,
 };
 
 const FREE_SLUGS = new Set<OfferingSlug>(['daily_greenlight_list', 'scam_alert_feed']);

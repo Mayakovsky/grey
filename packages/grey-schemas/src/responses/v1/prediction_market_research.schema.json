@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whitepapergrey.com/v1/prediction_market_research.schema.json",
+  "title": "PredictionMarketResearchResponse",
+  "description": "Response payload for the prediction_market_research offering (e3-b2). CACHE_ONLY (Invariant #30) — no cache-population mechanism for prediction-market content exists yet, so this always returns NOT_YET_ANALYSED on this phase; a live pipeline for this content domain is explicitly out of scope for e3-b2, same shape as legitimacy_scan_trust_rung shipping built-but-empty.",
+  "type": "object",
+  "properties": {
+    "market": { "type": "object" },
+    "status": {
+      "type": "string",
+      "enum": ["NOT_YET_ANALYSED", "ANALYSED"]
+    },
+    "analysis": { "type": ["object", "null"] },
+    "lastAnalysed": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of the last analysis, or null if never analysed."
+    },
+    "note": { "type": ["string", "null"] }
+  },
+  "required": ["market", "status", "analysis", "lastAnalysed"]
+}

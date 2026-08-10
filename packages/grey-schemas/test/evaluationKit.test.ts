@@ -7,9 +7,9 @@ import {
 } from '../src/evaluationKit';
 
 describe('EvaluationKit — Bazaar extension projection (E1-B, Invariant #33)', () => {
-  it('projects all 10 offerings with the spec field list', () => {
+  it('projects all 12 offerings with the spec field list', () => {
     const kits = buildAllEvaluationKits();
-    expect(kits).toHaveLength(10);
+    expect(kits).toHaveLength(12);
     for (const k of kits) {
       expect(typeof k.description).toBe('string');
       expect(k.outputSchema).toBeTruthy();
@@ -18,11 +18,11 @@ describe('EvaluationKit — Bazaar extension projection (E1-B, Invariant #33)', 
     }
   });
 
-  it('discoverable tracks PRICING_TABLE.enabled — 8 enabled, 2 not-yet-offered (merge-prep ruling)', () => {
+  it('discoverable tracks PRICING_TABLE.enabled — 10 enabled, 2 not-yet-offered (merge-prep ruling)', () => {
     const kits = buildAllEvaluationKits();
     const notYetOffered = kits.filter((k) => !k.discoverable).map((k) => k.slug);
     expect(notYetOffered.sort()).toEqual(['daily_greenlight_list', 'scam_alert_feed']);
-    expect(kits.filter((k) => k.discoverable)).toHaveLength(8);
+    expect(kits.filter((k) => k.discoverable)).toHaveLength(10);
   });
 
   it('the 7 paid offerings carry an inputSchema; the 2 free resources do not', () => {

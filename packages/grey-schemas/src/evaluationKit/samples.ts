@@ -151,4 +151,27 @@ export const EVALUATION_SAMPLES: Record<OfferingSlug, SampleExchange> = {
       ],
     },
   },
+  prediction_market_research: {
+    request: { marketQuery: 'Will BTC close above $150k by 2026-12-31? (Polymarket)' },
+    response: {
+      market: { query: 'Will BTC close above $150k by 2026-12-31? (Polymarket)' },
+      status: 'NOT_YET_ANALYSED',
+      analysis: null,
+      lastAnalysed: null,
+      note: 'e3-b2: no cache-population pipeline for prediction-market content yet — always returns NOT_YET_ANALYSED this phase.',
+    },
+  },
+  resolution_evidence_compiler: {
+    request: {
+      marketQuery: 'Will BTC close above $150k by 2026-12-31? (Polymarket)',
+      resolutionCriteria: 'Resolves YES if Coinbase BTC-USD close >= $150,000 on 2026-12-31 UTC.',
+    },
+    response: {
+      market: { query: 'Will BTC close above $150k by 2026-12-31? (Polymarket)' },
+      status: 'NOT_YET_ANALYSED',
+      evidence: [],
+      compiledAt: null,
+      note: 'e3-b2: no evidence-compilation pipeline yet — always returns NOT_YET_ANALYSED this phase.',
+    },
+  },
 };

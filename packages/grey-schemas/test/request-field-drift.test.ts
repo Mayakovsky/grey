@@ -24,6 +24,8 @@ import type {
   ClaimHistoryRequest,
   QuickProtocolFactsRequest,
   ClaimExtractionRequest,
+  PredictionMarketResearchRequest,
+  ResolutionEvidenceCompilerRequest,
 } from '../src/requests/types';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -68,6 +70,14 @@ const claimExtractionKeys = ['whitepaperUrl'] as const satisfies readonly (keyof
 type _CkCe = Exclude<keyof ClaimExtractionRequest, (typeof claimExtractionKeys)[number]> extends never ? true : never;
 const _ckCe: _CkCe = true;
 
+const predictionMarketResearchKeys = ['marketQuery'] as const satisfies readonly (keyof PredictionMarketResearchRequest)[];
+type _CkPmr = Exclude<keyof PredictionMarketResearchRequest, (typeof predictionMarketResearchKeys)[number]> extends never ? true : never;
+const _ckPmr: _CkPmr = true;
+
+const resolutionEvidenceCompilerKeys = ['marketQuery', 'resolutionCriteria'] as const satisfies readonly (keyof ResolutionEvidenceCompilerRequest)[];
+type _CkRec = Exclude<keyof ResolutionEvidenceCompilerRequest, (typeof resolutionEvidenceCompilerKeys)[number]> extends never ? true : never;
+const _ckRec: _CkRec = true;
+
 const mirrors: Record<PaidOfferingSlug, readonly string[]> = {
   legitimacy_scan: legitimacyScanKeys,
   legitimacy_scan_trust_rung: legitimacyScanTrustRungKeys,
@@ -77,14 +87,16 @@ const mirrors: Record<PaidOfferingSlug, readonly string[]> = {
   claim_history: claimHistoryKeys,
   quick_protocol_facts: quickProtocolFactsKeys,
   claim_extraction: claimExtractionKeys,
+  prediction_market_research: predictionMarketResearchKeys,
+  resolution_evidence_compiler: resolutionEvidenceCompilerKeys,
 };
 
 const paidSlugs = Object.keys(mirrors) as PaidOfferingSlug[];
 
 describe('request-field-drift (Pattern 4b): schema properties ≡ keyof Interface', () => {
   it('compile-time mirror guards hold', () => {
-    expect([_ckLegit, _ckTrustRung, _ckVw, _ckVft, _ckDtb, _ckCh, _ckQpf, _ckCe]).toEqual([
-      true, true, true, true, true, true, true, true,
+    expect([_ckLegit, _ckTrustRung, _ckVw, _ckVft, _ckDtb, _ckCh, _ckQpf, _ckCe, _ckPmr, _ckRec]).toEqual([
+      true, true, true, true, true, true, true, true, true, true,
     ]);
   });
 

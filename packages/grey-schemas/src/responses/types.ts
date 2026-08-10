@@ -16,10 +16,15 @@ import type { QuickProtocolFactsResponse } from '../generated/v1/QuickProtocolFa
 import type { DailyTechBriefResponse } from '../generated/v1/DailyTechBriefResponse';
 import type { DailyGreenlightListResponse } from '../generated/v1/DailyGreenlightListResponse';
 import type { ScamAlertFeedResponse } from '../generated/v1/ScamAlertFeedResponse';
+import type { PredictionMarketResearchResponse } from '../generated/v1/PredictionMarketResearchResponse';
+import type { ResolutionEvidenceCompilerResponse } from '../generated/v1/ResolutionEvidenceCompilerResponse';
 
-/** All 10 ratified offering slugs (canonical, matches the `offering` discriminator + validators
+/** All 12 ratified offering slugs (canonical, matches the `offering` discriminator + validators
  *  map). `legitimacy_scan_trust_rung` (E1-C) is BUILT BUT BLOCKED — see @grey/x402-middleware's
- *  trustRung.ts for the hard default-off disable flag; this type existing does not mean live. */
+ *  trustRung.ts for the hard default-off disable flag; this type existing does not mean live.
+ *  `prediction_market_research`/`resolution_evidence_compiler` (e3-b2) are CACHE_ONLY and ship
+ *  built-but-functionally-empty this phase — no cache-population pipeline exists for this
+ *  content domain yet (see packages/grey-core/src/handlers/ for both). */
 export type OfferingSlug =
   | 'legitimacy_scan'
   | 'legitimacy_scan_trust_rung'
@@ -30,7 +35,9 @@ export type OfferingSlug =
   | 'quick_protocol_facts'
   | 'daily_tech_brief'
   | 'daily_greenlight_list'
-  | 'scam_alert_feed';
+  | 'scam_alert_feed'
+  | 'prediction_market_research'
+  | 'resolution_evidence_compiler';
 
 /** The 8 paid offerings (request-body-bearing). Excludes the 2 free GET resources (FDQ-10). */
 export type PaidOfferingSlug = Exclude<OfferingSlug, 'daily_greenlight_list' | 'scam_alert_feed'>;
@@ -56,4 +63,8 @@ export type ResponseFor<O extends OfferingSlug> = O extends 'legitimacy_scan'
                 ? DailyGreenlightListResponse
                 : O extends 'scam_alert_feed'
                   ? ScamAlertFeedResponse
-                  : never;
+                  : O extends 'prediction_market_research'
+                    ? PredictionMarketResearchResponse
+                    : O extends 'resolution_evidence_compiler'
+                      ? ResolutionEvidenceCompilerResponse
+                      : never;

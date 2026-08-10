@@ -42,6 +42,9 @@ const GROUPS: CodegenGroup[] = [
       'daily_tech_brief.schema.json': 'DailyTechBriefResponse',
       'daily_greenlight_list.schema.json': 'DailyGreenlightListResponse',
       'scam_alert_feed.schema.json': 'ScamAlertFeedResponse',
+      // e3-b2 (Olas Mech Marketplace, Base) — new, CACHE_ONLY, built-but-empty this phase.
+      'prediction_market_research.schema.json': 'PredictionMarketResearchResponse',
+      'resolution_evidence_compiler.schema.json': 'ResolutionEvidenceCompilerResponse',
       'envelope.schema.json': 'GreyResponseEnvelope',
       '_shared.schema.json': '_shared',
     },
@@ -61,6 +64,9 @@ const GROUPS: CodegenGroup[] = [
       'claim_history.schema.json': 'ClaimHistoryRequest',
       'quick_protocol_facts.schema.json': 'QuickProtocolFactsRequest',
       'daily_tech_brief.schema.json': 'DailyTechBriefRequest',
+      // e3-b2.
+      'prediction_market_research.schema.json': 'PredictionMarketResearchRequest',
+      'resolution_evidence_compiler.schema.json': 'ResolutionEvidenceCompilerRequest',
     },
   },
 ];
