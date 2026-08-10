@@ -61,11 +61,13 @@ export interface ServiceRegistrationParams {
   /** Bond per agent instance, wei. No protocol minimum beyond nonzero — see file header's real
    *  precedent note. This adapter does not choose a "real" funding figure; the caller must. */
   bondWei: bigint;
-  /** IPFS hash (bytes32) of this service's config metadata. Content-authoring is out of scope
-   *  here — pass whatever the caller has; a placeholder is acceptable for a simulate-only run. */
+  /** IPFS hash (bytes32) of this service's config metadata. Real content now exists — pass
+   *  `GREY_MECH_CONFIG_HASH` (config.ts, BION-DIRECTIVE-30) for Grey's actual service. Still a
+   *  caller-supplied param, not defaulted here, so tests/other callers can pass their own. */
   configHash: `0x${string}`;
-  /** Payload passed to MechFactory*.createMech (also IPFS-hash-shaped, off-chain-metadata scope
-   *  — see listing.ts's own note on the undocumented mech metadata wire format). */
+  /** Payload passed to MechFactory*.createMech. The wire format was genuinely undocumented as of
+   *  e3-b3/D-26 (listing.ts's note); BION-DIRECTIVE-30 recovered it for real from a live registered
+   *  mech's actual document — pass `GREY_MECH_PAYLOAD_HASH` (config.ts) for Grey's actual service. */
   mechPayload: `0x${string}`;
   /** Only meaningful if a service already exists for this operator (skips create/activate/
    *  register and goes straight to createMech against the existing serviceId). Omit to run the

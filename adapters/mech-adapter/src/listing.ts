@@ -9,13 +9,17 @@
 // EvaluationKit-shaped listing data — branding, schemas, sample, mech-resolved price. It does NOT
 // publish anything on-chain. Research during e3-b1/b3 found the Mech Marketplace's off-chain
 // metadata format (referenced on-chain via ComplementaryServiceMetadata's hash, hosted on IPFS)
-// has no publicly documented JSON schema — unlike Bazaar's well-documented `extensions.bazaar`
-// shape, there's no confirmed field-by-field spec to target here. Rather than fabricate one,
-// this stops at the EvaluationKit render; wrapping it into whatever the real metadata document
-// shape turns out to be — and the actual IPFS publish + on-chain hash registration — is Forces-
+// had no publicly documented JSON schema — unlike Bazaar's well-documented `extensions.bazaar`
+// shape, there was no confirmed field-by-field spec to target here at the time. RESOLVED
+// (BION-DIRECTIVE-30): the real schema was recovered from a live registered mech's actual
+// IPFS-hosted document (Gnosis Marketplace subgraph -> gateway.autonolas.tech, verified
+// byte-for-byte against its on-chain hash) — see config.ts's `GREY_MECH_PAYLOAD_HASH` doc comment
+// for the full derivation, and `adapters/mech-adapter/metadata/mech-payload.json` for Grey's real
+// authored content. This file's EvaluationKit render still isn't wired into that document (the
+// two serve different purposes — this is per-offering listing data, the payload is the mech's
+// whole tool catalog) — the actual IPFS publish + on-chain hash registration remains Forces-
 // executed, same pattern as e1-e's "metadata packaging is kov's, on-chain registration is
-// Forces'." Confirming the real metadata shape (e.g. against an existing mech's published
-// document) is follow-up work, not resolved in this pass.
+// Forces'."
 import { buildEvaluationArtifact } from '@grey/schemas/evaluationKit';
 import type { EvaluationKitEntry } from '@grey/schemas/evaluationKit';
 import { MECH_OFFERING_SLUGS, mechPriceUsdFor, type MechOfferingSlug } from './prices.js';
