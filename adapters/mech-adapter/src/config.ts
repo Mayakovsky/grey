@@ -77,6 +77,60 @@ export const SERVICE_REGISTRY_ADDRESSES = {
  *  on live Base mainnet; both return this exact value (2026-08-10), not assumed from source alone. */
 export const ETH_TOKEN_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as Address;
 
+/** Real, authored Olas service-config metadata (BION-DIRECTIVE-30) — the document `configHash`
+ *  references, once actually pinned to IPFS. Content lives at
+ *  `adapters/mech-adapter/metadata/service-config.json` (committed, human-reviewable, NOT this
+ *  hex string alone). Schema (`name`/`description`/`code_uri`/`image`/`attributes`, that field
+ *  order, compact `JSON.stringify` — no extra whitespace) and the hash derivation (IPFS
+ *  CIDv0 of the JSON bytes → CIDv1 → base16 → strip the fixed `f01701220` prefix → `0x`-prefix
+ *  the remaining 32-byte digest) both reverse-engineered from valory-xyz/open-autonomy's own
+ *  `autonomy/chain/metadata.py` (`serialize_metadata`/`publish_metadata`, raw-fetched 2026-08-10)
+ *  — not guessed. Verified end-to-end, not just against the source: fetched a real, currently-
+ *  registered mech's actual IPFS-hosted document (via `gateway.autonolas.tech`, real content,
+ *  confirmed byte-identical against its own on-chain hash using `ipfs-only-hash`), then ran this
+ *  exact same CID-derivation pipeline over those real bytes and got the EXACT real on-chain
+ *  bytes32 value back (`0x157d3b10...` for Gnosis service/mech 1722) — the pipeline is proven
+ *  correct against live chain state, not just plausible from reading source.
+ *
+ *  `code_uri` points at a real `ipfs-only-hash` of this repo's actual, merged
+ *  `adapters/mech-adapter/src/mechAdapter.ts` (commit `69a0b62`) — a pragmatic stand-in for a
+ *  real AEA/Olas package bundle, which Grey doesn't have (this isn't an AEA-framework-packaged
+ *  agent). `image` is `"tbd"` — no NFT artwork exists for this service; matches the literal
+ *  convention the real, official `valory/mech` service's own metadata uses for the same gap
+ *  (confirmed directly in its fetched document), not a guess.
+ *
+ *  NOT yet pinned to IPFS — no pinning mechanism exists anywhere in this repo, and adding one
+ *  (e.g. Pinata/web3.storage) needs a new third-party account, which is Forces' action, not
+ *  Kov's (same standing rule as every other account/identity boundary in this project). This
+ *  hash is exactly what pinning `service-config.json` verbatim WOULD produce — computed, not
+ *  published. Publishing it is a separate, later step, same Kov-packages/Forces-publishes split
+ *  e3-b3's `listing.ts` already established. */
+export const GREY_MECH_CONFIG_HASH = '0x0b0369d289b53796ca168627ad9661cca8f9574e92f39318c8e2bae301c2a743' as const;
+
+/** Real, authored Mech tool-catalog metadata (BION-DIRECTIVE-30) — the `payload` argument
+ *  `MechFactory.createMech(serviceRegistry, serviceId, payload)` expects. This schema was
+ *  genuinely UNDOCUMENTED before this — e3-b3/D-26 found no public spec and stopped rather than
+ *  fabricate one. Recovered for real this pass: queried the real Gnosis Marketplace subgraph
+ *  (`api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis`, GraphQL `metadata_collection`)
+ *  for real registered mechs' on-chain `metadata` hash, then fetched the actual document behind
+ *  one via `gateway.autonolas.tech` (public gateways ipfs.io/dweb.link/w3s.link/nftstorage.link
+ *  all timed out or 403'd — this one worked) — confirmed byte-identical to the on-chain hash via
+ *  `ipfs-only-hash`, and cross-checked against a second, independent real mech's document (same
+ *  shape). Real schema: `name`/`description`/`inputFormat`/`outputFormat`/`image`/`tools`
+ *  (array of tool-name strings)/`toolMetadata` (keyed by tool name → `name`/`description`/
+ *  `input: {type, description}`/`output: {type, description, schema}` — `input.type` is always
+ *  `"text"` in every real example found, even for tools with structurally complex real inputs;
+ *  `output.schema` carries a real JSON Schema object).
+ *
+ *  Content lives at `adapters/mech-adapter/metadata/mech-payload.json` (committed,
+ *  human-reviewable). `tools` are Grey's two real e3-b2 mech offerings
+ *  (`prediction_market_research`, `resolution_evidence_compiler`); each `output.schema` is
+ *  Grey's own real, already-shipped response JSON Schema
+ *  (`packages/grey-schemas/src/responses/v1/*.schema.json`), not reinvented. Same hash-derivation
+ *  pipeline and not-yet-pinned status as `GREY_MECH_CONFIG_HASH` above — see that constant's
+ *  doc comment for the full derivation/verification method, which applies identically here. */
+export const GREY_MECH_PAYLOAD_HASH = '0xfbf56850bd8bf51ed39884aab4a7cf20737139ff53ca233579d6e7cc9f5eff66' as const;
+
 /** Ceremony complete (2026-08-08, Forces-run per EXPANSION-E3-B1-MECH-KEY-CEREMONY-RUNBOOK-
  *  FORCES.md) — address only, no key or passphrase ever passed through this codebase. Recorded
  *  here for reference/traceability (same posture as KITE_POOL_WALLET_ADDRESS in grey-sweeper's
