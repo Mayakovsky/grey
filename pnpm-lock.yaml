@@ -81,6 +81,9 @@ importers:
 
   adapters/mech-adapter:
     dependencies:
+      '@grey/ceremony':
+        specifier: workspace:*
+        version: link:../../packages/grey-ceremony
       '@grey/core':
         specifier: workspace:*
         version: link:../../packages/grey-core
