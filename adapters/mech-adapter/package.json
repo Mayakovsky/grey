@@ -11,7 +11,7 @@
     "lint": "eslint . --no-error-on-unmatched-pattern",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
-    "test:fork": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json NODE_OPTIONS=--loader=ts-node/esm hardhat test test/fork/marketplaceRead.forkcheck.ts"
+    "test:fork": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json NODE_OPTIONS=--loader=ts-node/esm hardhat test test/fork/marketplaceRead.forkcheck.ts test/fork/serviceRegistryWrite.forkcheck.ts"
   },
   "dependencies": {
     "@grey/core": "workspace:*",
