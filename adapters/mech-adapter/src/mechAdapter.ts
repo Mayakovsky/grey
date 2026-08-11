@@ -94,9 +94,21 @@
 // simulateContract — predicts results, submits nothing) and returns without ever calling
 // walletClient.writeContract. Flipping it to false is a deployment-time decision, not something
 // this class defaults to or can be talked into via any argument to registerAsMech itself.
+//
+// ── Signed delivery capability — BUILT, not turned on (BION-DIRECTIVE-38) ───────────────────────
+// Since deploy() ran for real, BASE_MECH_AGENT_INSTANCE is the sole signer (threshold=1) of the
+// service's real Safe multisig. Every delivered mech response requires a call to
+// `deliverToMarketplace`, gated `onlyOperator` — which reads the multisig live from the
+// ServiceRegistry and requires msg.sender literally BE it, not the agent-instance EOA. This
+// directive builds that capability (deliverSigned, below — a real Safe execTransaction wrapping
+// deliverToMarketplace, signed via the isolated agentInstanceSigner.ts loader) and fork-proves it
+// against real Base mainnet state (test/safeDeliveryClient.anvil.test.ts, GREY_MECH_ANVIL=1). It
+// does NOT wire this to any automatic trigger — there is no task-intake → deliver flow anywhere in
+// this adapter yet, and no live mainnet call happens as a result of this directive. See
+// safeDeliveryClient.ts's file header for the full Safe-signature trace and citations.
 import { setTimeout as delay } from 'node:timers/promises';
 import type { ChannelIngress, ChannelIdentity, OfferingRegistration } from '@grey/core';
-import type { Address } from 'viem';
+import type { Address, Hash, Hex } from 'viem';
 import {
   ETH_TOKEN_ADDRESS,
   GREY_DID,
@@ -106,6 +118,7 @@ import {
   type MechPaymentType,
 } from './config.js';
 import { createMarketplaceClient, type MarketplaceClient } from './marketplaceClient.js';
+import type { SafeDeliveryClient, SignedSafeDelivery } from './safeDeliveryClient.js';
 import { SERVICE_STATE } from './serviceRegistryAbi.js';
 import type { ServiceRegistryClient } from './serviceRegistryClient.js';
 import { createLogger, type AdapterLogger } from './logger.js';
@@ -171,11 +184,25 @@ export interface MechAdapterOptions {
    *  signer, out of this package's scope (see grey-sweeper/src/wallet.ts for the established
    *  pattern this repo already uses for that). */
   serviceRegistryClient?: ServiceRegistryClient;
+  /** BION-DIRECTIVE-38 — required for deliverSigned to be callable. Same posture as
+   *  serviceRegistryClient: no default, this package never constructs a signing Account itself.
+   *  See agentInstanceSigner.ts for the isolated key-loading pattern a real deployment uses. */
+  safeDeliveryClient?: SafeDeliveryClient;
   logger?: AdapterLogger;
   /** `waitForServiceVisible`'s poll knobs (BION-DIRECTIVE-32) — overridable so tests can exercise
    *  the wait/timeout logic without real delays. Defaults match the real-world lag this was
    *  built to absorb; production callers should not normally need to override this. */
   serviceVisibilityPoll?: { maxAttempts: number; delayMs: number };
+}
+
+/** BION-DIRECTIVE-38 — result of `deliverSigned`. */
+export interface DeliverSignedResult extends SignedSafeDelivery {
+  success: boolean;
+  /** True when this ran through simulateContract only (config.observeOnly) — see
+   *  RegisterAsMechResult's field of the same name for the identical posture. */
+  simulatedOnly: boolean;
+  /** Set only when simulatedOnly is false — the real submitted transaction's hash. */
+  txHash?: Hash;
 }
 
 /** Reverse lookup of SERVICE_STATE, for log/error messages (BION-DIRECTIVE-33). */
@@ -189,6 +216,7 @@ export class MechAdapter implements ChannelIngress {
   private readonly config: MechAdapterConfig;
   private readonly client: MarketplaceClient;
   private readonly registryClient?: ServiceRegistryClient;
+  private readonly deliveryClient?: SafeDeliveryClient;
   private readonly log: AdapterLogger;
   private readonly offerings: OfferingRegistration[] = [];
   private readonly serviceVisibilityPoll: { maxAttempts: number; delayMs: number };
@@ -198,6 +226,7 @@ export class MechAdapter implements ChannelIngress {
     this.config = opts.config;
     this.client = opts.marketplaceClient ?? createMarketplaceClient(opts.config.rpcUrl);
     this.registryClient = opts.serviceRegistryClient;
+    this.deliveryClient = opts.safeDeliveryClient;
     this.log = opts.logger ?? createLogger({ component: 'mech-adapter' });
     this.serviceVisibilityPoll = opts.serviceVisibilityPoll ?? DEFAULT_SERVICE_VISIBILITY_POLL;
   }
@@ -348,6 +377,37 @@ export class MechAdapter implements ChannelIngress {
     return { serviceId, step: 'createMech', stateBefore, simulatedOnly, multisig: service.multisig, mech };
   }
 
+  /** BION-DIRECTIVE-38 — builds a real, signed Safe execTransaction wrapping deliverToMarketplace
+   *  and, if config.observeOnly is false, submits it. Building + signing is itself safe regardless
+   *  of observeOnly (pure construction plus read-only RPC calls — nothing is submitted); only the
+   *  final submission is gated, same seam every other write path in this class already uses. NOT
+   *  wired to any automatic trigger — see this file's header ("Signed delivery capability") for
+   *  why: callers invoke this directly, exactly like every other explicit step method here. */
+  async deliverSigned(mech: Address, requestIds: readonly Hash[], datas: readonly Hex[]): Promise<DeliverSignedResult> {
+    const client = this.requireDeliveryClient('deliverSigned');
+    const simulatedOnly = this.config.observeOnly;
+    const signed = await client.buildSignedDelivery(mech, requestIds, datas);
+
+    if (simulatedOnly) {
+      const sim = await client.simulateDelivery(signed);
+      this.log.info('MechAdapter.deliverSigned: simulated (observeOnly)', {
+        mech,
+        nonce: signed.nonce.toString(),
+        success: sim.success,
+      });
+      return { ...signed, simulatedOnly, success: sim.success };
+    }
+
+    const res = await client.executeDelivery(signed);
+    this.log.info('MechAdapter.deliverSigned: executed', {
+      mech,
+      nonce: signed.nonce.toString(),
+      txHash: res.txHash,
+      success: res.success,
+    });
+    return { ...signed, simulatedOnly, success: res.success, txHash: res.txHash };
+  }
+
   private requireRegistryClient(caller: string): ServiceRegistryClient {
     if (!this.registryClient) {
       throw new Error(
@@ -357,6 +417,17 @@ export class MechAdapter implements ChannelIngress {
       );
     }
     return this.registryClient;
+  }
+
+  private requireDeliveryClient(caller: string): SafeDeliveryClient {
+    if (!this.deliveryClient) {
+      throw new Error(
+        `MechAdapter.${caller}: no safeDeliveryClient configured — see MechAdapterOptions doc ` +
+          'comment. This adapter never constructs a signing client itself (no private key loaded ' +
+          'in this package) — see agentInstanceSigner.ts.',
+      );
+    }
+    return this.deliveryClient;
   }
 
   private static readonly RESUMABLE_STATES: readonly number[] = [

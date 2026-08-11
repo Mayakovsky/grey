@@ -3,8 +3,10 @@ import { MechAdapter } from '../src/mechAdapter.js';
 import { silentLogger } from '../src/logger.js';
 import {
   fakeMarketplaceClient,
+  fakeSafeDeliveryClient,
   fakeServiceInfo,
   fakeServiceRegistryClient,
+  fakeSignedDelivery,
   FAKE_AGENT_INSTANCE,
   FAKE_MECH,
   FAKE_MULTISIG,
@@ -487,6 +489,67 @@ describe('MechAdapter — ChannelIngress contract', () => {
       });
       await adapter.registerAsMechStep('NATIVE', STEP_PARAMS);
       expect(simulateRegisterAgents).toHaveBeenCalledWith(99n, [FAKE_AGENT_INSTANCE], [1], 1n);
+    });
+  });
+
+  describe('deliverSigned (BION-DIRECTIVE-38)', () => {
+    const REQUEST_IDS = [`0x${'11'.repeat(32)}` as const];
+    const DATAS = ['0xdeadbeef' as const];
+
+    it('throws a clear, named error when no safeDeliveryClient is configured', async () => {
+      const adapter = new MechAdapter({ config: CONFIG, marketplaceClient: fakeMarketplaceClient(), logger: silentLogger() });
+      await expect(adapter.deliverSigned(FAKE_MECH, REQUEST_IDS, DATAS)).rejects.toThrow(/safeDeliveryClient/);
+    });
+
+    it('observeOnly=true: builds + simulates, never calls executeDelivery', async () => {
+      const buildSignedDelivery = vi.fn(async () => fakeSignedDelivery());
+      const simulateDelivery = vi.fn(async () => ({ success: true }));
+      const executeDelivery = vi.fn(async () => ({ success: true, txHash: FAKE_TX_HASH }));
+      const adapter = new MechAdapter({
+        config: CONFIG, // observeOnly: true
+        marketplaceClient: fakeMarketplaceClient(),
+        safeDeliveryClient: fakeSafeDeliveryClient({ buildSignedDelivery, simulateDelivery, executeDelivery }),
+        logger: silentLogger(),
+      });
+      const result = await adapter.deliverSigned(FAKE_MECH, REQUEST_IDS, DATAS);
+      expect(buildSignedDelivery).toHaveBeenCalledWith(FAKE_MECH, REQUEST_IDS, DATAS);
+      expect(simulateDelivery).toHaveBeenCalledTimes(1);
+      expect(executeDelivery).not.toHaveBeenCalled();
+      expect(result.simulatedOnly).toBe(true);
+      expect(result.success).toBe(true);
+      expect(result.txHash).toBeUndefined();
+    });
+
+    it('observeOnly=false: builds + executes, never calls simulateDelivery', async () => {
+      const buildSignedDelivery = vi.fn(async () => fakeSignedDelivery());
+      const simulateDelivery = vi.fn(async () => ({ success: true }));
+      const executeDelivery = vi.fn(async () => ({ success: true, txHash: FAKE_TX_HASH }));
+      const adapter = new MechAdapter({
+        config: { ...CONFIG, observeOnly: false },
+        marketplaceClient: fakeMarketplaceClient(),
+        safeDeliveryClient: fakeSafeDeliveryClient({ buildSignedDelivery, simulateDelivery, executeDelivery }),
+        logger: silentLogger(),
+      });
+      const result = await adapter.deliverSigned(FAKE_MECH, REQUEST_IDS, DATAS);
+      expect(buildSignedDelivery).toHaveBeenCalledWith(FAKE_MECH, REQUEST_IDS, DATAS);
+      expect(executeDelivery).toHaveBeenCalledTimes(1);
+      expect(simulateDelivery).not.toHaveBeenCalled();
+      expect(result.simulatedOnly).toBe(false);
+      expect(result.success).toBe(true);
+      expect(result.txHash).toBe(FAKE_TX_HASH);
+    });
+
+    it('surfaces a real execution failure (success:false) without throwing', async () => {
+      const adapter = new MechAdapter({
+        config: { ...CONFIG, observeOnly: false },
+        marketplaceClient: fakeMarketplaceClient(),
+        safeDeliveryClient: fakeSafeDeliveryClient({
+          executeDelivery: async () => ({ success: false, txHash: FAKE_TX_HASH }),
+        }),
+        logger: silentLogger(),
+      });
+      const result = await adapter.deliverSigned(FAKE_MECH, REQUEST_IDS, DATAS);
+      expect(result.success).toBe(false);
     });
   });
 });
