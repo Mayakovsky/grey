@@ -212,6 +212,29 @@ describe('MechAdapter — ChannelIngress contract', () => {
     });
   });
 
+  function spiedRegistryClient(state: number, serviceOverrides: Partial<ReturnType<typeof fakeServiceInfo>> = {}) {
+    const getService = vi.fn(async () => fakeServiceInfo({ state, ...serviceOverrides }));
+    const simulateCreate = vi.fn(async () => ({ serviceId: 42n }));
+    const simulateActivateRegistration = vi.fn(async () => ({ success: true }));
+    const simulateRegisterAgents = vi.fn(async () => ({ success: true }));
+    const simulateDeploy = vi.fn(async () => ({ multisig: FAKE_MULTISIG }));
+    const registryClient = fakeServiceRegistryClient({
+      getService,
+      simulateCreate,
+      simulateActivateRegistration,
+      simulateRegisterAgents,
+      simulateDeploy,
+    });
+    return {
+      registryClient,
+      getService,
+      simulateCreate,
+      simulateActivateRegistration,
+      simulateRegisterAgents,
+      simulateDeploy,
+    };
+  }
+
   describe('state-aware resume (BION-DIRECTIVE-33)', () => {
     const RESUME_PARAMS = {
       agentId: 1,
@@ -221,20 +244,6 @@ describe('MechAdapter — ChannelIngress contract', () => {
       existingServiceId: 99n,
     };
     const DEPLOYED_MULTISIG = '0x5555555555555555555555555555555555555555' as const;
-
-    function spiedRegistryClient(state: number, serviceOverrides: Partial<ReturnType<typeof fakeServiceInfo>> = {}) {
-      const getService = vi.fn(async () => fakeServiceInfo({ state, ...serviceOverrides }));
-      const simulateActivateRegistration = vi.fn(async () => ({ success: true }));
-      const simulateRegisterAgents = vi.fn(async () => ({ success: true }));
-      const simulateDeploy = vi.fn(async () => ({ multisig: FAKE_MULTISIG }));
-      const registryClient = fakeServiceRegistryClient({
-        getService,
-        simulateActivateRegistration,
-        simulateRegisterAgents,
-        simulateDeploy,
-      });
-      return { registryClient, getService, simulateActivateRegistration, simulateRegisterAgents, simulateDeploy };
-    }
 
     it('PreRegistration (1): runs activateRegistration + registerAgents + deploy + createMech', async () => {
       const spies = spiedRegistryClient(1);
@@ -316,6 +325,124 @@ describe('MechAdapter — ChannelIngress contract', () => {
         logger: silentLogger(),
       });
       await expect(adapter.registerAsMech('NATIVE', RESUME_PARAMS)).rejects.toThrow(/cannot resume/);
+      expect(spies.simulateActivateRegistration).not.toHaveBeenCalled();
+      expect(spies.simulateRegisterAgents).not.toHaveBeenCalled();
+      expect(spies.simulateDeploy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('registerAsMechStep — single-step execution (BION-DIRECTIVE-34)', () => {
+    const STEP_PARAMS = {
+      agentId: 1,
+      bondWei: 1n,
+      configHash: `0x${'00'.repeat(32)}` as const,
+      mechPayload: `0x${'00'.repeat(32)}` as const,
+    };
+    const DEPLOYED_MULTISIG = '0x6666666666666666666666666666666666666666' as const;
+
+    it('no existingServiceId: runs create() only, returns step "create"', async () => {
+      const spies = spiedRegistryClient(1); // getService irrelevant here — create() never reads it first
+      const simulateCreateMech = vi.fn(async () => FAKE_MECH);
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient({ simulateCreateMech }),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      const result = await adapter.registerAsMechStep('NATIVE', STEP_PARAMS);
+      expect(spies.simulateCreate).toHaveBeenCalledOnce();
+      expect(spies.simulateActivateRegistration).not.toHaveBeenCalled();
+      expect(simulateCreateMech).not.toHaveBeenCalled();
+      expect(result.step).toBe('create');
+      expect(result.serviceId).toBe(42n);
+      expect(result.stateBefore).toBe(0);
+    });
+
+    it('PreRegistration (1): runs activateRegistration only, stops there', async () => {
+      const spies = spiedRegistryClient(1);
+      const simulateCreateMech = vi.fn(async () => FAKE_MECH);
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient({ simulateCreateMech }),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      const result = await adapter.registerAsMechStep('NATIVE', { ...STEP_PARAMS, existingServiceId: 99n });
+      expect(spies.simulateActivateRegistration).toHaveBeenCalledOnce();
+      expect(spies.simulateRegisterAgents).not.toHaveBeenCalled();
+      expect(spies.simulateDeploy).not.toHaveBeenCalled();
+      expect(simulateCreateMech).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ step: 'activateRegistration', serviceId: 99n, stateBefore: 1 });
+    });
+
+    it('ActiveRegistration (2): runs registerAgents only, stops there', async () => {
+      const spies = spiedRegistryClient(2);
+      const simulateCreateMech = vi.fn(async () => FAKE_MECH);
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient({ simulateCreateMech }),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      const result = await adapter.registerAsMechStep('NATIVE', { ...STEP_PARAMS, existingServiceId: 99n });
+      expect(spies.simulateActivateRegistration).not.toHaveBeenCalled();
+      expect(spies.simulateRegisterAgents).toHaveBeenCalledOnce();
+      expect(spies.simulateDeploy).not.toHaveBeenCalled();
+      expect(simulateCreateMech).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ step: 'registerAgents', serviceId: 99n, stateBefore: 2 });
+    });
+
+    it('FinishedRegistration (3): runs deploy only, stops there, returns the real multisig', async () => {
+      const spies = spiedRegistryClient(3);
+      const simulateCreateMech = vi.fn(async () => FAKE_MECH);
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient({ simulateCreateMech }),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      const result = await adapter.registerAsMechStep('NATIVE', { ...STEP_PARAMS, existingServiceId: 99n });
+      expect(spies.simulateRegisterAgents).not.toHaveBeenCalled();
+      expect(spies.simulateDeploy).toHaveBeenCalledOnce();
+      expect(simulateCreateMech).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ step: 'deploy', serviceId: 99n, stateBefore: 3, multisig: FAKE_MULTISIG });
+    });
+
+    it('Deployed (4): runs createMech only, reuses the real existing multisig', async () => {
+      const spies = spiedRegistryClient(4, { multisig: DEPLOYED_MULTISIG });
+      const simulateCreateMech = vi.fn(async () => FAKE_MECH);
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient({ simulateCreateMech }),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      const result = await adapter.registerAsMechStep('NATIVE', { ...STEP_PARAMS, existingServiceId: 99n });
+      expect(spies.simulateDeploy).not.toHaveBeenCalled();
+      expect(simulateCreateMech).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({
+        step: 'createMech',
+        serviceId: 99n,
+        stateBefore: 4,
+        multisig: DEPLOYED_MULTISIG,
+        mech: FAKE_MECH,
+      });
+    });
+
+    it.each([
+      [0, 'NonExistent'],
+      [5, 'TerminatedBonded'],
+    ])('state %i (%s) throws a clear, named error rather than attempting anything', async (state) => {
+      const spies = spiedRegistryClient(state);
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient(),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      await expect(
+        adapter.registerAsMechStep('NATIVE', { ...STEP_PARAMS, existingServiceId: 99n }),
+      ).rejects.toThrow(/cannot resume/);
       expect(spies.simulateActivateRegistration).not.toHaveBeenCalled();
       expect(spies.simulateRegisterAgents).not.toHaveBeenCalled();
       expect(spies.simulateDeploy).not.toHaveBeenCalled();
