@@ -13,25 +13,23 @@
 // it MUST match grey-ceremony's own KDF/AEAD exactly to decrypt a real ceremony-generated
 // keystore at all.
 //
-// Real funds note: registerAsMech's own implementation sends `bondWei` TWICE — once each to
-// activateRegistration and registerAgents (real Olas ServiceRegistry semantics: the service-level
-// security deposit and the per-instance operator bond are separate payable calls). The total ETH
-// this script will actually send is 2x the headline bond figure, not 1x — printed explicitly in
-// the final summary below so Forces sees the real number before confirming, not just the
-// per-call bond amount.
-//
 // UPDATED (BION-DIRECTIVE-32): the first real run's create() genuinely succeeded — real service
-// 635 already exists, real, correctly configured (confirmed live, see D-32's status file). Its
-// activateRegistration reverted NOT_MINTED at the time, traced to a transient RPC read-after-write
-// consistency gap, not a real problem with service 635 itself — fixed in mechAdapter.ts
-// (waitForServiceVisible) for any FUTURE fresh create(), and independently re-proved live that
-// activateRegistration now succeeds in simulation against 635 specifically. This script now
-// targets `existingServiceId: 635n` — do NOT let it create a second service.
+// 635 already exists, real, correctly configured. This script targets `existingServiceId: 635n` —
+// do NOT let it create a second service.
+//
+// UPDATED (BION-DIRECTIVE-34): this script now runs exactly ONE real step per invocation, not the
+// whole remaining chain. It calls `MechAdapter.registerAsMechStep` — the exact same production
+// method — TWICE: once with `observeOnly: true` as the pre-flight check (so the pre-flight is
+// never a hand-built approximation of the real call; D-33's own lesson was "proving a function
+// works isn't proving the caller reaches it," so this script no longer has its own separate
+// pre-flight logic to drift out of sync with the real path), and once for real after
+// confirmation. Whatever step is next for the service's real current state is what runs — could
+// be `activateRegistration`, `registerAgents`, `deploy`, or `createMech`. Run this script again
+// after each real step lands to execute the next one.
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { createInterface } from 'node:readline';
-import { createPublicClient, formatEther, http, toHex, type Address } from 'viem';
-import { base } from 'viem/chains';
+import { formatEther, toHex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { parseKeystore } from '@grey/ceremony/dist/crypto/index.js';
 import { unlockKeystore } from '@grey/ceremony/dist/commands/address.js';
@@ -42,14 +40,12 @@ import {
   BASE_MECH_POOL_WALLET_ADDRESS,
   GREY_MECH_CONFIG_HASH,
   GREY_MECH_PAYLOAD_HASH,
-  SERVICE_REGISTRY_ADDRESSES,
   type MechAdapterConfig,
   type MechPaymentType,
 } from '../src/config.js';
-import { SERVICE_MANAGER_ABI, SERVICE_REGISTRY_L2_ABI, SERVICE_STATE } from '../src/serviceRegistryAbi.js';
 import { createMarketplaceClient } from '../src/marketplaceClient.js';
 import { createServiceRegistryClient } from '../src/serviceRegistryClient.js';
-import { MechAdapter, type ServiceRegistrationParams } from '../src/mechAdapter.js';
+import { MechAdapter, type ServiceRegistrationParams, type SingleStepResult } from '../src/mechAdapter.js';
 import { createLogger } from '../src/logger.js';
 
 const DEFAULT_KEYFILE = 'C:\\Users\\kidco\\.grey\\keys\\BASE_MECH_PAY_TO.json';
@@ -61,6 +57,12 @@ const AGENT_ID = 424242; // matches service 635's real, already-registered agent
 const BOND_WEI = 100_000_000_000_000n; // 0.0001 ETH, confirmed by Forces (D-31)
 const PAYMENT_TYPE: MechPaymentType = 'NATIVE';
 const EXISTING_SERVICE_ID = 635n; // real, already-created service (BION-DIRECTIVE-32) — resume, don't recreate
+
+// Steps that require sending BOND_WEI as msg.value (real Olas ServiceRegistry semantics —
+// activateRegistration's service-level deposit and registerAgents' per-instance operator bond
+// are separate payable calls, each requiring the full bond again). deploy/createMech/create send
+// no value.
+const VALUE_BEARING_STEPS: ReadonlySet<SingleStepResult['step']> = new Set(['activateRegistration', 'registerAgents']);
 
 function parseArgs(argv: string[]): { keyfile: string } {
   const idx = argv.indexOf('--keyfile');
@@ -75,50 +77,6 @@ async function askLine(prompt: string): Promise<string> {
   } finally {
     rl.close();
   }
-}
-
-/** Step 3's real pre-flight check (BION-DIRECTIVE-32 revision). Targets the real, already-created
- *  `EXISTING_SERVICE_ID` — NOT a fresh `create()` (D-31 already proved a from-scratch
- *  `create()`-then-`activateRegistration` simulate can't chain against real state; D-32 separately
- *  proved `activateRegistration` DOES simulate cleanly against a real, already-existing service).
- *  Two real, read-only checks: confirm the service is still genuinely there and in the expected
- *  state, then live-simulate `activateRegistration` against it one more time, right now — chain
- *  state can still shift between "last checked" and "actually running this," even for an
- *  already-real service (that's the whole reason D-32 exists in the first place). */
-async function preflightCheckExistingService(
-  owner: Address,
-): Promise<{ state: number; gas: bigint; gasPriceWei: bigint }> {
-  const publicClient = createPublicClient({ chain: base, transport: http(RPC_URL) });
-
-  const service = await publicClient.readContract({
-    address: SERVICE_REGISTRY_ADDRESSES.serviceRegistryL2,
-    abi: SERVICE_REGISTRY_L2_ABI,
-    functionName: 'getService',
-    args: [EXISTING_SERVICE_ID],
-  });
-  if (service.state !== SERVICE_STATE.PreRegistration) {
-    throw new Error(
-      `Service ${EXISTING_SERVICE_ID} is in state ${service.state}, not PreRegistration ` +
-        `(${SERVICE_STATE.PreRegistration}) — activateRegistration expects PreRegistration. Someone ` +
-        'may have already advanced this service since D-32 last checked. Stop and verify manually ' +
-        'before proceeding — do not assume this is safe to retry.',
-    );
-  }
-
-  const activateArgs = {
-    address: SERVICE_REGISTRY_ADDRESSES.serviceManagerProxy,
-    abi: SERVICE_MANAGER_ABI,
-    functionName: 'activateRegistration',
-    args: [EXISTING_SERVICE_ID],
-    value: BOND_WEI,
-    account: owner,
-  } as const;
-  const [, gas, gasPriceWei] = await Promise.all([
-    publicClient.simulateContract(activateArgs),
-    publicClient.estimateContractGas(activateArgs),
-    publicClient.getGasPrice(),
-  ]);
-  return { state: service.state, gas, gasPriceWei };
 }
 
 async function main(): Promise<void> {
@@ -141,8 +99,8 @@ async function main(): Promise<void> {
       payToAddress: unlocked.address,
       poolWalletAddress: BASE_MECH_POOL_WALLET_ADDRESS,
       rpcUrl: RPC_URL,
-      databaseUrl: 'unused-by-this-script', // registerAsMech never reads this field
-      observeOnly: true, // pre-flight re-simulate first; flipped to false only after confirmation
+      databaseUrl: 'unused-by-this-script', // registerAsMechStep never reads this field
+      observeOnly: true, // pre-flight step-simulate first; flipped to false only after confirmation
     };
 
     const serviceRegistryClient = createServiceRegistryClient(RPC_URL, account);
@@ -162,39 +120,44 @@ async function main(): Promise<void> {
       existingServiceId: EXISTING_SERVICE_ID, // resume real service 635 — do NOT create a new one
     };
 
-    console.log('\n--- Step 3: live pre-flight check (chain state may have shifted since the last check) ---');
-    console.log(`(resuming existing service ${EXISTING_SERVICE_ID} — not creating a new one; see BION-DIRECTIVE-32)`);
-    let gas: bigint, gasPriceWei: bigint;
+    console.log('\n--- Step 3: live pre-flight check — which real step is next, and does it simulate cleanly right now ---');
+    let preflight: SingleStepResult;
     try {
-      ({ gas, gasPriceWei } = await preflightCheckExistingService(account.address));
+      preflight = await adapter.registerAsMechStep(PAYMENT_TYPE, params);
     } catch (err) {
       console.log('Pre-flight check FAILED — aborting before any confirmation prompt.');
       throw err;
     }
-    console.log(`Pre-flight check succeeded — activateRegistration(${EXISTING_SERVICE_ID}) simulates cleanly right now.`);
+    console.log(
+      `Pre-flight check succeeded — real current state is ${preflight.stateBefore}; the next real ` +
+        `step is "${preflight.step}", and it simulates cleanly right now.`,
+    );
 
-    const activateGasCostWei = gas * gasPriceWei;
-    const totalValueWei = BOND_WEI * 2n; // activateRegistration + registerAgents each require bondWei
+    const valueWei = VALUE_BEARING_STEPS.has(preflight.step) ? BOND_WEI : 0n;
 
     console.log('\n=== FINAL SUMMARY — READ CAREFULLY BEFORE CONFIRMING ===');
-    console.log(`Service owner (this wallet):   ${account.address}`);
-    console.log(`Resuming service id:           ${EXISTING_SERVICE_ID} (real, already created — not a new service)`);
-    console.log(`Agent id:                      ${AGENT_ID}`);
-    console.log(`Bond per call:                 ${BOND_WEI} wei (${formatEther(BOND_WEI)} ETH)`);
-    console.log(`Total ETH value to be sent:    ${totalValueWei} wei (${formatEther(totalValueWei)} ETH)`);
-    console.log('  (bondWei is sent TWICE — activateRegistration AND registerAgents each require it separately)');
-    console.log(`configHash:                    ${GREY_MECH_CONFIG_HASH}`);
-    console.log(`mechPayload:                   ${GREY_MECH_PAYLOAD_HASH}`);
+    console.log(`Service owner (this wallet):     ${account.address}`);
+    console.log(`Service id:                      ${EXISTING_SERVICE_ID}`);
+    console.log(`Real state before this run:      ${preflight.stateBefore}`);
+    console.log(`>>> Step this run will execute:  ${preflight.step} <<<`);
+    console.log(`Agent id:                        ${AGENT_ID}`);
+    console.log(`ETH value this step will send:   ${valueWei} wei (${formatEther(valueWei)} ETH)`);
+    if (valueWei > 0n) {
+      console.log('  (the confirmed bond amount, sent once for this one step only — not a running total across other steps)');
+    } else {
+      console.log('  (this step does not send any ETH value)');
+    }
+    console.log(`configHash:                       ${GREY_MECH_CONFIG_HASH}`);
+    console.log(`mechPayload:                      ${GREY_MECH_PAYLOAD_HASH}`);
     console.log(
-      `activateRegistration live gas estimate: ${gas} gas @ ${formatEther(gasPriceWei)} ETH/gas ≈ ${formatEther(activateGasCostWei)} ETH`,
+      'Gas: Base gas is consistently cheap (sub-cent to a few cents per D-29/D-30/D-32 live ' +
+        'measurements) — this script does not compute a fresh gas estimate for this specific step.',
     );
     console.log(
-      '  (registerAgents/deploy/createMech cannot be gas-estimated until activateRegistration ' +
-        'actually lands — Base gas is consistently cheap per D-29/D-30/D-32 live measurements, ' +
-        'expect low cents total, but this script does not claim a precise combined figure for what ' +
-        'it cannot yet measure)',
+      `\nThis will submit ONE real transaction on Base mainnet (step: ${preflight.step}) with real ` +
+        'funds. This cannot be undone. Any remaining steps need a SEPARATE run of this script after ' +
+        'this one lands.',
     );
-    console.log('\nThis will submit REAL transactions on Base mainnet with REAL funds. This cannot be undone.');
 
     const typed = await askLine('\nType REGISTER (all caps) to proceed, anything else to abort: ');
     if (typed !== 'REGISTER') {
@@ -202,14 +165,16 @@ async function main(): Promise<void> {
       return;
     }
 
-    console.log('\n--- Executing for real (observeOnly = false) ---');
+    console.log(`\n--- Executing "${preflight.step}" for real (observeOnly = false) ---`);
     config.observeOnly = false;
     try {
-      const result = await adapter.registerAsMech(PAYMENT_TYPE, params);
+      const result = await adapter.registerAsMechStep(PAYMENT_TYPE, params);
       console.log('\n=== SUCCESS ===');
+      console.log(`step run:  ${result.step}`);
       console.log(`serviceId: ${result.serviceId.toString()}`);
-      console.log(`multisig:  ${result.multisig}`);
-      console.log(`mech:      ${result.mech}`);
+      if (result.multisig) console.log(`multisig:  ${result.multisig}`);
+      if (result.mech) console.log(`mech:      ${result.mech}`);
+      console.log('\nIf any steps remain, run this script again to execute the next one.');
     } catch (err) {
       console.log('\n=== REVERTED / FAILED ===');
       console.log(err instanceof Error ? err.message : String(err));
