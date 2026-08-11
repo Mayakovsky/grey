@@ -8,6 +8,9 @@ export const FAKE_PAY_TO = '0x1111111111111111111111111111111111111111' as Addre
 export const FAKE_POOL = '0x2222222222222222222222222222222222222222' as Address;
 export const FAKE_MULTISIG = '0x3333333333333333333333333333333333333333' as Address;
 export const FAKE_MECH = '0x4444444444444444444444444444444444444444' as Address;
+/** BION-DIRECTIVE-35 — deliberately a different address from FAKE_PAY_TO, matching the real
+ *  protocol requirement (operator != agent instance). */
+export const FAKE_AGENT_INSTANCE = '0x7777777777777777777777777777777777777777' as Address;
 export const FAKE_CONFIG_HASH = `0x${'00'.repeat(32)}` as const;
 export const FAKE_TX_HASH = `0x${'ab'.repeat(32)}` as const;
 

@@ -36,6 +36,7 @@ import { unlockKeystore } from '@grey/ceremony/dist/commands/address.js';
 import { promptPassphrase } from '@grey/ceremony/dist/prompt/index.js';
 import { zero } from '@grey/ceremony/dist/memory/index.js';
 import {
+  BASE_MECH_AGENT_INSTANCE_ADDRESS,
   BASE_MECH_PAY_TO_ADDRESS,
   BASE_MECH_POOL_WALLET_ADDRESS,
   GREY_MECH_CONFIG_HASH,
@@ -101,6 +102,9 @@ async function main(): Promise<void> {
       rpcUrl: RPC_URL,
       databaseUrl: 'unused-by-this-script', // registerAsMechStep never reads this field
       observeOnly: true, // pre-flight step-simulate first; flipped to false only after confirmation
+      // BION-DIRECTIVE-35 — MUST be different from payToAddress (real ServiceRegistryL2 rule,
+      // reverts WrongOperator otherwise). See config.ts's BASE_MECH_AGENT_INSTANCE_ADDRESS.
+      agentInstanceAddress: BASE_MECH_AGENT_INSTANCE_ADDRESS,
     };
 
     const serviceRegistryClient = createServiceRegistryClient(RPC_URL, account);
@@ -141,6 +145,9 @@ async function main(): Promise<void> {
     console.log(`Real state before this run:      ${preflight.stateBefore}`);
     console.log(`>>> Step this run will execute:  ${preflight.step} <<<`);
     console.log(`Agent id:                        ${AGENT_ID}`);
+    if (preflight.step === 'registerAgents') {
+      console.log(`Agent instance address:          ${BASE_MECH_AGENT_INSTANCE_ADDRESS} (BION-DIRECTIVE-35 — distinct from the service owner, required by the protocol)`);
+    }
     console.log(`ETH value this step will send:   ${valueWei} wei (${formatEther(valueWei)} ETH)`);
     if (valueWei > 0n) {
       console.log('  (the confirmed bond amount, sent once for this one step only — not a running total across other steps)');

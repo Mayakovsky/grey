@@ -424,6 +424,12 @@ export class MechAdapter implements ChannelIngress {
     }
   }
 
+  /** BION-DIRECTIVE-35 — the agent instance MUST be a different address from the operator
+   *  (`this.config.payToAddress`, implicit via `msg.sender`); `ServiceRegistryL2.sol` reverts
+   *  `WrongOperator` when they're equal (confirmed live, both directions — see
+   *  `BASE_MECH_AGENT_INSTANCE_ADDRESS`'s doc comment in config.ts). Requires
+   *  `config.agentInstanceAddress` to be set — throws a clear, named error rather than silently
+   *  falling back to `payToAddress`, which is exactly the wrong value here. */
   private async runRegisterAgentsStep(
     registry: ServiceRegistryClient,
     serviceId: bigint,
@@ -431,10 +437,18 @@ export class MechAdapter implements ChannelIngress {
     bondWei: bigint,
     simulatedOnly: boolean,
   ): Promise<void> {
+    const agentInstance = this.config.agentInstanceAddress;
+    if (!agentInstance) {
+      throw new Error(
+        'MechAdapter: registerAgents requires config.agentInstanceAddress (BION-DIRECTIVE-35) — ' +
+          'must be a real address different from payToAddress (ServiceRegistryL2 reverts ' +
+          'WrongOperator otherwise). See config.ts\'s BASE_MECH_AGENT_INSTANCE_ADDRESS.',
+      );
+    }
     if (simulatedOnly) {
-      await registry.simulateRegisterAgents(serviceId, [this.config.payToAddress], [agentId], bondWei);
+      await registry.simulateRegisterAgents(serviceId, [agentInstance], [agentId], bondWei);
     } else {
-      await registry.executeRegisterAgents(serviceId, [this.config.payToAddress], [agentId], bondWei);
+      await registry.executeRegisterAgents(serviceId, [agentInstance], [agentId], bondWei);
     }
   }
 

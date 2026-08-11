@@ -5,6 +5,7 @@ import {
   fakeMarketplaceClient,
   fakeServiceInfo,
   fakeServiceRegistryClient,
+  FAKE_AGENT_INSTANCE,
   FAKE_MECH,
   FAKE_MULTISIG,
   FAKE_PAY_TO,
@@ -20,6 +21,7 @@ const CONFIG: MechAdapterConfig = {
   rpcUrl: 'https://example.invalid',
   databaseUrl: 'postgres://fake',
   observeOnly: true,
+  agentInstanceAddress: FAKE_AGENT_INSTANCE,
 };
 
 describe('MechAdapter — ChannelIngress contract', () => {
@@ -446,6 +448,45 @@ describe('MechAdapter — ChannelIngress contract', () => {
       expect(spies.simulateActivateRegistration).not.toHaveBeenCalled();
       expect(spies.simulateRegisterAgents).not.toHaveBeenCalled();
       expect(spies.simulateDeploy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('registerAgents uses a distinct agent instance (BION-DIRECTIVE-35)', () => {
+    const STEP_PARAMS = {
+      agentId: 1,
+      bondWei: 1n,
+      configHash: `0x${'00'.repeat(32)}` as const,
+      mechPayload: `0x${'00'.repeat(32)}` as const,
+      existingServiceId: 99n,
+    };
+
+    it('throws a clear, named error when config.agentInstanceAddress is missing', async () => {
+      const spies = spiedRegistryClient(2); // ActiveRegistration -> next step is registerAgents
+      const NO_AGENT_INSTANCE_CONFIG: MechAdapterConfig = { ...CONFIG, agentInstanceAddress: undefined };
+      const adapter = new MechAdapter({
+        config: NO_AGENT_INSTANCE_CONFIG,
+        marketplaceClient: fakeMarketplaceClient(),
+        serviceRegistryClient: spies.registryClient,
+        logger: silentLogger(),
+      });
+      await expect(adapter.registerAsMechStep('NATIVE', STEP_PARAMS)).rejects.toThrow(/agentInstanceAddress/);
+      expect(spies.simulateRegisterAgents).not.toHaveBeenCalled();
+    });
+
+    it('passes the configured agentInstanceAddress, not payToAddress, as the agent instance', async () => {
+      const simulateRegisterAgents = vi.fn(async () => ({ success: true }));
+      const registryClient = fakeServiceRegistryClient({
+        getService: async () => fakeServiceInfo({ state: 2 }), // ActiveRegistration
+        simulateRegisterAgents,
+      });
+      const adapter = new MechAdapter({
+        config: CONFIG, // CONFIG.agentInstanceAddress = FAKE_AGENT_INSTANCE, != FAKE_PAY_TO
+        marketplaceClient: fakeMarketplaceClient(),
+        serviceRegistryClient: registryClient,
+        logger: silentLogger(),
+      });
+      await adapter.registerAsMechStep('NATIVE', STEP_PARAMS);
+      expect(simulateRegisterAgents).toHaveBeenCalledWith(99n, [FAKE_AGENT_INSTANCE], [1], 1n);
     });
   });
 });

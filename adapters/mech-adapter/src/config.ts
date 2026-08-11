@@ -143,6 +143,21 @@ export const GREY_MECH_PAYLOAD_HASH = '0xfbf56850bd8bf51ed39884aab4a7cf20737139f
 export const BASE_MECH_PAY_TO_ADDRESS = '0x36c4a16ED1DD12056150E36dFe2271733366BAC5' as const;
 export const BASE_MECH_POOL_WALLET_ADDRESS = '0xB98A06D0D92A429dFeb95438BaE9e624A6401727' as const;
 
+/** Ceremony complete (2026-08-10, Forces-run per
+ *  EXPANSION-E3-B1-AGENT-INSTANCE-KEY-CEREMONY-RUNBOOK-FORCES.md) — address only, same posture
+ *  as the two constants above. BION-DIRECTIVE-35: `registerAgents` requires the agent instance
+ *  address to be DIFFERENT from the operator (`payToAddress`) — `ServiceRegistryL2.sol` reverts
+ *  `WrongOperator` when they're equal (confirmed live, both directions: `BASE_MECH_PAY_TO` as the
+ *  agent instance reverts; a different address simulates cleanly). This is not a one-time
+ *  registration detail — once `deploy()` runs, this address becomes the sole signer
+ *  (`threshold=1`) of the service's real Safe multisig, and needs to sign a real transaction for
+ *  every mech response delivered thereafter (traced via `OlasMech.sol`'s `deliverToMarketplace`,
+ *  gated `onlyOperator` where operator means "is the multisig"). Deliberately NOT a reuse of
+ *  `GREY_DID_OWNER` — Forces weighed and rejected sharing blast radius between a routinely-signing
+ *  operational key and Grey's core identity anchor. Automated-signing wiring for this key is a
+ *  separate, later decision — not resolved here. */
+export const BASE_MECH_AGENT_INSTANCE_ADDRESS = '0x4391C092cF342C6a8eeCe352712fC0C8df14450d' as const;
+
 export interface MechAdapterConfig {
   /** Tier A hot wallet — receives mech task payments. Ceremony-generated, address only. */
   payToAddress: Address;
@@ -158,6 +173,12 @@ export interface MechAdapterConfig {
    *  adapter has no confirmed mainnet registration yet (Olas ServiceRegistry prerequisite
    *  unresolved — see mechAdapter.ts), so shipping with writes enabled by default would be wrong. */
   observeOnly: boolean;
+  /** BION-DIRECTIVE-35 — the address `registerAgents` registers as the service's sole agent
+   *  instance. Optional here so config construction sites that never call `registerAgents` (most
+   *  tests, `start()`-only usage) don't need to supply it; `registerAsMechStep`/`registerAsMech`
+   *  throw a clear error if `registerAgents` actually needs to run and this is missing. MUST be
+   *  different from `payToAddress` — see `BASE_MECH_AGENT_INSTANCE_ADDRESS`'s doc comment for why. */
+  agentInstanceAddress?: Address;
 }
 
 type Env = Record<string, string | undefined>;
