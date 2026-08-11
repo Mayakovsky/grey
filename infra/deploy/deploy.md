@@ -1,8 +1,11 @@
 # Deployment — grey-core + grey-sweeper (Movement 5)
 
 grey-core and grey-sweeper deploy as two **independent** systemd units on the VPS, alongside
-(never coupled to) ElizaOS Grey's pm2 process. **No CI auto-deploy.** Testnet config this phase
-(`X402_NETWORK=eip155:84532`); the mainnet flip + the sweeper enable are Phase E.
+(never coupled to) ElizaOS Grey's pm2 process. **No CI auto-deploy.** Mainnet is live (Base,
+`chainId=8453`); the sweeper's Phase E enable already happened (2026-07-15, commit `5749089`,
+PR #18 — see "Sweeper" below). This section was stale until BION-DIRECTIVE-40 (2026-08-11) caught
+it describing a pre-Phase-E state weeks after Phase E actually completed — corrected here so the
+next reader isn't misled the way that investigation initially was.
 
 ## Layout
 - Repo checkout: `/opt/grey/grey` (this monorepo, at the reviewed merge SHA)
@@ -22,7 +25,9 @@ pnpm run build                            # emits every package's dist/ (incl. g
 sudo cp infra/systemd/grey-core.service infra/systemd/grey-sweeper.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
-# Restart the running service(s). grey-core ONLY until Phase E enables the sweeper:
+# Restart the running service(s) that actually changed — grey-sweeper holds live Tier-A signing
+# capability, so don't restart it reflexively as part of a routine grey-core deploy; only restart
+# it when a change actually touches sweeper code/config (see "Sweeper", below, for the care that needs):
 sudo systemctl restart grey-core
 ```
 
@@ -37,10 +42,31 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'content-type: application/j
 journalctl -u grey-core -n 50 --no-pager
 ```
 
-## Sweeper — DISABLED until Phase E
-grey-sweeper installs but stays **disabled + stopped**. Do NOT `systemctl enable`/`start` it before
-the Phase E cutover — it holds Tier-A signing capability and moves real USDC. Enable is Phase E's
-final act (mainnet, after the live paid-request smoke).
+## Sweeper — LIVE since 2026-07-15 (Phase E complete)
+
+grey-sweeper is `enabled` + `active` on the VPS, holds real Tier-A signing capability, and moves
+real USDC (Base mainnet, `chainId=8453`, `GREY_REFUEL_ENABLED=true`). Enabled deliberately as
+Phase E's final act, commit `5749089` (PR #18, "grey-sweeper §4 first-tick remediation"),
+`2026-07-15 00:48:46 UTC` — 2 seconds before its first successful tick. **This section previously
+said "DISABLED until Phase E" long after Phase E had already happened** — caught and corrected by
+`BION-DIRECTIVE-40` (2026-08-11), which independently re-verified the live state against real
+on-chain transfers and `sweep_log`/`refuel_log` history before concluding this was a documentation
+lag, not an unauthorized or accidental enable. Full investigation:
+`bion/_internal/BION-DIRECTIVE-40-STATUS.md`.
+
+**Because it's already live, treat any change to it with real care, not routine-deploy care:**
+- A `git pull`/`pnpm install`/`pnpm build` touches its code on disk same as any package, but do
+  **not** `sudo systemctl restart grey-sweeper` as a reflex alongside a `grey-core` restart — it's
+  a separate decision each time, same posture D-39 already used for `grey-acp-adapter`'s signer.
+- `sweep_log`/`refuel_log` (`grey_two` schema) are its audit trail — check them, don't just trust
+  the service came back up, if you ever do need to restart it.
+- Known historical gap, already reconciled (not a fund-safety issue, funds fully accounted for):
+  a live-format RPC API key sat unredacted in 16 `sweep_log.error_msg` rows from a 2026-07-18
+  Alchemy outage, until the `redactError` sink-layer fix landed later that same day (commits
+  `d54fd25`/`5b1fae9`, FDQ-56 — a separate fix from the earlier `5749089` Phase-E-enable commit
+  above, not the same one). Scrubbed per D-40's follow-up (BION-DIRECTIVE-41); key not rotated
+  (low-risk call, no external interaction with the agent yet beyond internal testing — revisit if
+  that changes).
 
 ## Firewall
 Port 3002 stays **firewalled** this phase — verify via on-box `curl` / SSH tunnel only. Public
