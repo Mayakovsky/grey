@@ -18,10 +18,56 @@
 // Same wrapper-contract pattern already established elsewhere in this codebase
 // (ServiceManager.create() wraps ServiceRegistryL2.create() the same way) — this call was simply
 // never updated to match it.
-import { createPublicClient, createWalletClient, http, type Address, type Account, type Hash } from 'viem';
+//
+// FIXED again (2026-08-11, live registration): executeCreateMech used to return the `result`
+// from the pre-submission `simulateContract` call as if it were the real deployed mech address.
+// It isn't guaranteed to be — confirmed live: Grey's own real registration's simulated prediction
+// and its real deployed address genuinely differed. `MechFactory.createMech` deploys the new mech
+// via plain `CREATE` (not `CREATE2`), whose resulting address depends on the *factory's* real
+// deployer nonce at the moment of actual execution — on a busy, shared factory contract, that
+// nonce can shift between the simulate step and the real broadcast moments later, if anyone
+// else's transaction lands on the same factory in between. The simulated prediction is not
+// ground truth for a CREATE-based deployment; only the real receipt is. Fixed by decoding the
+// real `CreateMech` event out of the real transaction receipt instead of trusting the simulation.
+import {
+  createPublicClient,
+  createWalletClient,
+  decodeEventLog,
+  http,
+  type Address,
+  type Account,
+  type Hash,
+  type Log,
+} from 'viem';
 import { base } from 'viem/chains';
 import { MARKETPLACE_ADDRESSES } from './config.js';
 import { MECH_MARKETPLACE_ABI } from './marketplaceAbi.js';
+
+/** Extracted so it's directly unit-testable against real, fixture'd log data (see
+ *  test/marketplaceClient.test.ts) rather than only provable by re-running a live transaction.
+ *  Tries every log in the receipt; only accepts one that actually decodes as `CreateMech` —
+ *  a real tx can contain other logs (e.g. from the factory itself) that must be skipped, not
+ *  mistaken for this one. */
+export function decodeCreateMechAddress(logs: readonly Pick<Log, 'data' | 'topics'>[], txHash: string): Address {
+  for (const log of logs) {
+    try {
+      const decoded = decodeEventLog({
+        abi: MECH_MARKETPLACE_ABI,
+        eventName: 'CreateMech',
+        data: log.data,
+        topics: log.topics,
+      });
+      return decoded.args.mech;
+    } catch {
+      continue;
+    }
+  }
+  throw new Error(
+    `MarketplaceClient.executeCreateMech: real tx ${txHash} succeeded but no CreateMech event ` +
+      'was found in its receipt — cannot determine the real deployed mech address. Do not ' +
+      'trust any previously-logged/simulated address; verify manually against the real receipt.',
+  );
+}
 
 export interface MarketplaceClient {
   numMechs(): Promise<bigint>;
@@ -87,7 +133,7 @@ export function createMarketplaceClient(rpcUrl: string, account?: Account): Mark
     },
     async executeCreateMech(factory: Address, serviceId: bigint, payload: `0x${string}`) {
       requireAccount();
-      const { request, result } = await client.simulateContract({
+      const { request } = await client.simulateContract({
         address,
         abi: MECH_MARKETPLACE_ABI,
         functionName: 'create',
@@ -95,8 +141,11 @@ export function createMarketplaceClient(rpcUrl: string, account?: Account): Mark
         account,
       });
       const txHash: Hash = await walletClient!.writeContract(request);
-      await client.waitForTransactionReceipt({ hash: txHash });
-      return result;
+      const receipt = await client.waitForTransactionReceipt({ hash: txHash });
+      // Ground truth is the real CreateMech event in the real receipt — NOT the simulated
+      // `result` above (see this file's header for why that can diverge for a CREATE-based
+      // deployment).
+      return decodeCreateMechAddress(receipt.logs, txHash);
     },
   };
 }

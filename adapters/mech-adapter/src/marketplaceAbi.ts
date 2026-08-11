@@ -53,7 +53,14 @@ export const MECH_MARKETPLACE_ABI = parseAbi([
    *  factory itself so the factory's own `MarketplaceOnly` check passes for real. Verbatim from
    *  the real source, `valory-xyz/autonolas-marketplace`'s `MechMarketplace.sol`. */
   'function create(uint256 serviceId, address mechFactory, bytes memory payload) returns (address mech)',
-  'event CreateMech(address mech, uint256 serviceId, address mechFactory)',
+  /** All three params are `indexed` — confirmed against a real emitted log (2026-08-11, Grey's
+   *  own real registration, tx `0xf6fedb21...289a9e`): the raw log had exactly 3 topics beyond
+   *  the event-signature topic0 and empty `data`, which only happens when every param is
+   *  indexed. The event-signature hash itself (`keccak256("CreateMech(address,uint256,address)")`)
+   *  matched the real observed topic0 exactly, confirming the name/types were always right — only
+   *  the indexed-ness was wrong before. That mismatch is what let D-33's original (non-indexed)
+   *  declaration silently fail to decode this event at all. */
+  'event CreateMech(address indexed mech, uint256 indexed serviceId, address indexed mechFactory)',
   'event MarketplaceRequest(address priorityMech, address requester, uint256 numRequests, bytes32[] requestIds, bytes[] requestDatas)',
   'event MarketplaceDelivery(address deliveryMech, address[] requesters, uint256 numDeliveries, bytes32[] requestIds, bool[] deliveredRequests)',
   ...MARKETPLACE_ERRORS,
