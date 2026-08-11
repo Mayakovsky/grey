@@ -78,7 +78,7 @@ export const SERVICE_REGISTRY_ADDRESSES = {
 export const ETH_TOKEN_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as Address;
 
 /** Real, authored Olas service-config metadata (BION-DIRECTIVE-30) — the document `configHash`
- *  references, once actually pinned to IPFS. Content lives at
+ *  references. Content lives at
  *  `adapters/mech-adapter/metadata/service-config.json` (committed, human-reviewable, NOT this
  *  hex string alone). Schema (`name`/`description`/`code_uri`/`image`/`attributes`, that field
  *  order, compact `JSON.stringify` — no extra whitespace) and the hash derivation (IPFS
@@ -99,12 +99,12 @@ export const ETH_TOKEN_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as
  *  convention the real, official `valory/mech` service's own metadata uses for the same gap
  *  (confirmed directly in its fetched document), not a guess.
  *
- *  NOT yet pinned to IPFS — no pinning mechanism exists anywhere in this repo, and adding one
- *  (e.g. Pinata/web3.storage) needs a new third-party account, which is Forces' action, not
- *  Kov's (same standing rule as every other account/identity boundary in this project). This
- *  hash is exactly what pinning `service-config.json` verbatim WOULD produce — computed, not
- *  published. Publishing it is a separate, later step, same Kov-packages/Forces-publishes split
- *  e3-b3's `listing.ts` already established. */
+ *  PINNED (BION-DIRECTIVE-38-ADDENDUM, within the last 5 days of 2026-08-11) — Forces set up a
+ *  Filebase account (bucket `grey-olas`) and pinned this file: real CID
+ *  `QmP5eDJqDC2HZYgTjTuU2q5fWxfSo1AZxMGw8bue9vhiHG`. Independently confirmed, not just trusted:
+ *  fetched via a public `dweb.link` gateway (not Filebase's own), byte-for-byte identical to the
+ *  committed `service-config.json`, and Desktop separately decoded the CID's embedded digest
+ *  against this exact hash constant — genuinely on the public IPFS network, not Filebase-local. */
 export const GREY_MECH_CONFIG_HASH = '0x0b0369d289b53796ca168627ad9661cca8f9574e92f39318c8e2bae301c2a743' as const;
 
 /** Real, authored Mech tool-catalog metadata (BION-DIRECTIVE-30) — the `payload` argument
@@ -127,8 +127,14 @@ export const GREY_MECH_CONFIG_HASH = '0x0b0369d289b53796ca168627ad9661cca8f9574e
  *  (`prediction_market_research`, `resolution_evidence_compiler`); each `output.schema` is
  *  Grey's own real, already-shipped response JSON Schema
  *  (`packages/grey-schemas/src/responses/v1/*.schema.json`), not reinvented. Same hash-derivation
- *  pipeline and not-yet-pinned status as `GREY_MECH_CONFIG_HASH` above — see that constant's
- *  doc comment for the full derivation/verification method, which applies identically here. */
+ *  pipeline as `GREY_MECH_CONFIG_HASH` above — see that constant's doc comment for the full
+ *  derivation/verification method, which applies identically here.
+ *
+ *  PINNED (BION-DIRECTIVE-38-ADDENDUM, within the last 5 days of 2026-08-11) — same Filebase
+ *  bucket (`grey-olas`) as `GREY_MECH_CONFIG_HASH`: real CID
+ *  `QmfJC5fjgE4JduiDWeUvGrTndGaUdHbLyX8XoLHqbMue7w`. Independently confirmed the same way: fetched
+ *  via a public `dweb.link` gateway, byte-for-byte identical to the committed
+ *  `mech-payload.json`, CID digest cross-checked against this exact hash constant. */
 export const GREY_MECH_PAYLOAD_HASH = '0xfbf56850bd8bf51ed39884aab4a7cf20737139ff53ca233579d6e7cc9f5eff66' as const;
 
 /** Ceremony complete (2026-08-08, Forces-run per EXPANSION-E3-B1-MECH-KEY-CEREMONY-RUNBOOK-
