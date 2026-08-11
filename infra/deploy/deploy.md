@@ -60,11 +60,23 @@ this section before writing off an unexpected auth failure as a credentials/sign
   the VPS succeeded immediately. This does **not** apply to `grey-core`'s own normal operation —
   it already always calls CDP from the VPS by construction, since that's where it runs. It only
   matters for one-off scripts written to hit CDP's facilitator directly.
-- **SSH access to the VPS is per-machine, not shared.** Forces' local Windows/PowerShell SSH client
-  and Kov's own environment can have entirely different keys configured (or none). Don't assume
-  working SSH from one machine implies it from another — confirm per-machine, and if one path is
-  blocked (e.g. `Permission denied (publickey)`), route the task through whichever
-  machine/actor already has confirmed working access rather than debugging key setup mid-task.
+- **SSH access to the VPS is per-machine, not shared** — this bit D-38 (`Permission denied
+  (publickey)` from Kov's environment, no key configured) and was fixed at the root rather than
+  routed around again (`BION-VPS-SSH-ACCESS-PROCEDURE-FORCES-AND-KOV.md`, 2026-08-11): Kov's
+  environment now has its own durable, dedicated key, connecting as the same `ubuntu` user and
+  broad access Forces already has (same real read/write Kov has always actually used — the fix is
+  durability + audit, not narrowing scope). Key: `~/.ssh/id_ed25519_grey_vps` (ed25519, `-N ""` —
+  deliberately no passphrase, since Kov uses this unattended mid-directive; a real security
+  trade-off, named here rather than picked silently). Fingerprint:
+  `SHA256:+bsrTAFcKrMwelzEn1UEwXFQ9Sv2LK2s75BrT2kKS5s`. Authorized on the VPS 2026-08-11 (appended
+  to `~/.ssh/authorized_keys` on the box, not replacing Forces' own entry — verified exactly one
+  match, 2 total lines). Same off-limits boundary as Forces' own access, unchanged by this: root-
+  owned secret env files (`/etc/grey/*.env`, `600`) and the Untouchables below (reading is fine,
+  changing isn't part of the deploy job). **To revoke:** from a session with existing VPS access,
+  `sudo sed -i '/kov@grey-vps-deploy/d' ~/.ssh/authorized_keys`.
+  Still true regardless: Forces' local client and Kov's environment remain independently
+  configured — a working path on one machine never implies it on another; confirm per-machine
+  before assuming a credentials/signature bug.
 - Port 3002 stays firewalled off-box (see Firewall, above) — same underlying pattern: some things
   are only reachable/authorized from the VPS's own vantage point, not from wherever a human or Kov
   instance happens to be running.
