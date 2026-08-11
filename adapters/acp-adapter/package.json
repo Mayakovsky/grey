@@ -20,10 +20,10 @@
     "@grey/x402-middleware": "workspace:*",
     "@virtuals-protocol/acp-node-v2": "^0.0.4",
     "pg": "^8.22.0",
+    "tsx": "^4.22.4",
     "viem": "^2.53.1"
   },
   "devDependencies": {
-    "@types/pg": "^8.20.0",
-    "tsx": "^4.22.4"
+    "@types/pg": "^8.20.0"
   }
 }
