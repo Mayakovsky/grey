@@ -61,7 +61,14 @@ export const MECH_MARKETPLACE_ABI = parseAbi([
    *  the indexed-ness was wrong before. That mismatch is what let D-33's original (non-indexed)
    *  declaration silently fail to decode this event at all. */
   'event CreateMech(address indexed mech, uint256 indexed serviceId, address indexed mechFactory)',
-  'event MarketplaceRequest(address priorityMech, address requester, uint256 numRequests, bytes32[] requestIds, bytes[] requestDatas)',
+  /** Both address params are `indexed` — confirmed against a real emitted log (2026-08-11, a
+   *  real Base-mainnet request unrelated to Grey, tx `0x201fd7f3...9508e`): the raw log had
+   *  exactly 3 topics (2 beyond topic0) and the remaining ABI-encoded fields fit the `data` blob
+   *  exactly once decoded with both addresses excluded, which only happens when both are indexed
+   *  — the original (non-indexed) declaration failed to decode this event at all (`decodeEventLog`
+   *  threw "Data size ... too small"), the same class of bug D-36 found and fixed for `CreateMech`.
+   *  BION-DIRECTIVE-43. */
+  'event MarketplaceRequest(address indexed priorityMech, address indexed requester, uint256 numRequests, bytes32[] requestIds, bytes[] requestDatas)',
   'event MarketplaceDelivery(address deliveryMech, address[] requesters, uint256 numDeliveries, bytes32[] requestIds, bool[] deliveredRequests)',
   ...MARKETPLACE_ERRORS,
 ]);
@@ -76,13 +83,22 @@ export const MECH_FACTORY_ABI = parseAbi([
   ...MARKETPLACE_ERRORS,
 ]);
 
-/** Request lifecycle status, per getRequestStatus's uint8 return. Values inferred from the
- *  MarketplaceRequest/MarketplaceDelivery event pair and mapRequestIdInfos' shape (requester,
- *  mech, priorityMech, timestamps, paymentType) — NOT independently confirmed against an enum
- *  definition in the ABI (enums compile to bare uint8, the name is erased). Treat as a strong
- *  inference, not a verified fact — flagged in the e3-b1 report. */
+/** Request lifecycle status, per getRequestStatus's uint8 return. CORRECTED (BION-DIRECTIVE-43) —
+ *  the prior values here were an inference flagged as unverified in the e3-b1 report, and turned
+ *  out to be wrong: traced to the real `enum RequestStatus` declaration in
+ *  valory-xyz/ai-registry-mech's MechMarketplace.sol (raw-fetched, cross-checked against the real
+ *  deployed contract's own `VERSION()` returning "1.1.0", matching the fetched source exactly —
+ *  not assumed). The real enum has 4 members, not 3 — `RequestedExpired` was missing entirely,
+ *  and `Delivered`'s real value is 3, not 2. `getRequestStatus`'s own body (also read directly,
+ *  not inferred) confirms exactly when each applies: DoesNotExist when no priorityMech is
+ *  recorded; RequestedPriority while still within the priority mech's response window and
+ *  undelivered; RequestedExpired once that window has passed with no delivery (at which point ANY
+ *  mech, not just the original priorityMech, may deliver it — see mechAdapter.ts's task-intake
+ *  doc comment for why this adapter only watches its own priorityMech requests for now, not this
+ *  fallback case). */
 export const REQUEST_STATUS = {
   DOES_NOT_EXIST: 0,
-  REQUESTED: 1,
-  DELIVERED: 2,
+  REQUESTED_PRIORITY: 1,
+  REQUESTED_EXPIRED: 2,
+  DELIVERED: 3,
 } as const;

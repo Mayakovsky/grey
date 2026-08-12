@@ -552,4 +552,113 @@ describe('MechAdapter — ChannelIngress contract', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe('pollAndRespond (BION-DIRECTIVE-43)', () => {
+    const MARKETPLACE: `0x${string}` = '0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020';
+    const REQUEST_ID = `0x${'11'.repeat(32)}` as const;
+    const REQUEST_DATA = `0x${'22'.repeat(32)}` as const;
+    const REQUESTER = '0x3333333333333333333333333333333333333333' as const;
+
+    function fakePublicClient(logs: unknown[]) {
+      return { getLogs: async () => logs } as never;
+    }
+
+    it('throws a clear, named error when publicClient/handlers/handlerDeps are missing', async () => {
+      const adapter = new MechAdapter({ config: CONFIG, marketplaceClient: fakeMarketplaceClient(), logger: silentLogger() });
+      await expect(adapter.pollAndRespond(FAKE_MECH, MARKETPLACE, 1n, 10n, [])).rejects.toThrow(/publicClient/);
+    });
+
+    it('detects nothing, routes nothing, delivers nothing — no error', async () => {
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient(),
+        publicClient: fakePublicClient([]),
+        handlers: {} as never,
+        handlerDeps: {} as never,
+        logger: silentLogger(),
+      });
+      const result = await adapter.pollAndRespond(FAKE_MECH, MARKETPLACE, 1n, 10n, []);
+      expect(result).toEqual({ routed: [], routingErrors: [] });
+    });
+
+    it('routes a detected request and delivers it via deliverSigned, in one signed call', async () => {
+      const buildSignedDelivery = vi.fn(async () => fakeSignedDelivery());
+      const executeDelivery = vi.fn(async () => ({ success: true, txHash: FAKE_TX_HASH }));
+      const handler = vi.fn(async () => ({ payload: { answer: 'yes' }, subject: {} as never, cacheHit: true }));
+
+      const adapter = new MechAdapter({
+        config: { ...CONFIG, observeOnly: false },
+        marketplaceClient: fakeMarketplaceClient(),
+        safeDeliveryClient: fakeSafeDeliveryClient({ buildSignedDelivery, executeDelivery }),
+        publicClient: fakePublicClient([
+          {
+            args: {
+              priorityMech: FAKE_MECH,
+              requester: REQUESTER,
+              numRequests: 1n,
+              requestIds: [REQUEST_ID],
+              requestDatas: [REQUEST_DATA],
+            },
+            blockNumber: 100n,
+            transactionHash: `0x${'44'.repeat(32)}`,
+          },
+        ]),
+        handlers: { prediction_market_research: handler } as never,
+        handlerDeps: {} as never,
+        logger: silentLogger(),
+      });
+
+      // requestContent fetch isn't injectable through MechAdapter's public surface (production
+      // uses the real gateway) — route via a stubbed global fetch for this unit test instead of
+      // hitting the network. Real network fetching is covered by requestContent.test.ts /
+      // the anvil fork test.
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ prompt: 'q', tool: 'prediction_market_research', nonce: 'n', schema_version: '2.0', request_context: null }))) as typeof fetch;
+      try {
+        const result = await adapter.pollAndRespond(FAKE_MECH, MARKETPLACE, 90n, 110n, ['prediction_market_research'] as never);
+        expect(result.routingErrors).toEqual([]);
+        expect(result.routed).toHaveLength(1);
+        expect(result.routed[0].slug).toBe('prediction_market_research');
+        expect(result.delivery?.success).toBe(true);
+        expect(buildSignedDelivery).toHaveBeenCalledWith(FAKE_MECH, [REQUEST_ID], [result.routed[0].responseHash]);
+        expect(executeDelivery).toHaveBeenCalledTimes(1);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('isolates a routing failure — one bad request does not block the rest, and nothing delivers if all fail', async () => {
+      const buildSignedDelivery = vi.fn();
+      const adapter = new MechAdapter({
+        config: { ...CONFIG, observeOnly: false },
+        marketplaceClient: fakeMarketplaceClient(),
+        safeDeliveryClient: fakeSafeDeliveryClient({ buildSignedDelivery }),
+        publicClient: fakePublicClient([
+          {
+            args: { priorityMech: FAKE_MECH, requester: REQUESTER, numRequests: 1n, requestIds: [REQUEST_ID], requestDatas: [REQUEST_DATA] },
+            blockNumber: 100n,
+            transactionHash: `0x${'44'.repeat(32)}`,
+          },
+        ]),
+        handlers: {} as never, // no registered handlers -> UnknownToolError for any tool
+        handlerDeps: {} as never,
+        logger: silentLogger(),
+      });
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ prompt: 'q', tool: 'not_a_real_tool', nonce: 'n', schema_version: '2.0', request_context: null }))) as typeof fetch;
+      try {
+        const result = await adapter.pollAndRespond(FAKE_MECH, MARKETPLACE, 90n, 110n, ['prediction_market_research'] as never);
+        expect(result.routed).toEqual([]);
+        expect(result.routingErrors).toHaveLength(1);
+        expect(result.routingErrors[0].requestId).toBe(REQUEST_ID);
+        expect(result.delivery).toBeUndefined();
+        expect(buildSignedDelivery).not.toHaveBeenCalled();
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
 });
