@@ -17,47 +17,46 @@ This runbook covers both: getting the unit safely enabled, and — as a clearly 
 decision — flipping `observeOnly` off. Do not treat "the unit is running" and "it is allowed to act
 on real requests" as the same milestone; they are deliberately two different gates.
 
-## Precondition 1 — `BASE_MECH_AGENT_INSTANCE` funded with real ETH
+## Precondition 1 — `BASE_MECH_AGENT_INSTANCE` funded with real ETH — **MET** (BION-DIRECTIVE-45-ADDENDUM, 2026-08-12)
 
-**Current state (confirmed live against Base mainnet at the time BION-DIRECTIVE-45 was written):
-`0x4391C092cF342C6a8eeCe352712fC0C8df14450d` holds 0 ETH.** It is the sole (threshold=1) signer of
-Grey's real mech multisig (`0x5587335a6Fa1Dc7C421f2b87D91C7E9def095872`) and pays gas **directly out
-of its own balance** for every delivery — `safeDeliveryClient.ts`'s `execTransaction` call is built
-with `gasPrice: 0`, `refundReceiver: 0x0` (no Safe-side gas refund mechanism), so this is not a
-detail that resolves itself once the Safe holds funds; the Safe's own balance is irrelevant here.
-This EOA specifically needs ETH.
+**Real, funded, independently confirmed — not just trusted from Forces' report:** re-checked
+directly via `eth_getBalance` against Base mainnet (not cached, not assumed from the addendum's own
+claim) — `0x4391C092cF342C6a8eeCe352712fC0C8df14450d` holds **0.001 ETH**. Matches exactly. It is
+the sole (threshold=1) signer of Grey's real mech multisig
+(`0x5587335a6Fa1Dc7C421f2b87D91C7E9def095872`) and pays gas **directly out of its own balance** for
+every delivery — `safeDeliveryClient.ts`'s `execTransaction` call is built with `gasPrice: 0`,
+`refundReceiver: 0x0` (no Safe-side gas refund mechanism), so the Safe's own balance was never
+relevant here; this EOA specifically needed ETH, and now has it.
 
-**Real gas cost, measured, not estimated from source alone** — same discipline BION-DIRECTIVE-30
-used for `create()`'s gas: ran the actual delivery flow (`taskIntake.anvil.test.ts`'s own real
-request → route → sign → deliver path) against a real Base-mainnet anvil fork pinned at a live
-current block, and read the **real `gasUsed` off the real transaction receipt**, not a
-pre-submission estimate:
+**This is deliberately not the runbook's original 0.1 ETH suggestion.** Forces is operating under
+real scarcity right now; 0.001 ETH is the considered amount, not a partial/interim figure awaiting
+top-up to the suggested number — treat it as the real funding decision, not a placeholder.
 
-- Real `execTransaction` gasUsed (full tx: Safe signature-check + accounting overhead + the inner
-  `deliverToMarketplace` call): **212,210 gas**.
-- Real sampled `effectiveGasPrice` at that block (i.e. Base's real current base fee at measurement
-  time): **~1.002 gwei**.
-- Real cost of that one delivery: **~0.000213 ETH**.
-
-**Funding recommendation:** price in margin for two things a single sample can't capture — gas
-price volatility (Base is a low-fee L2 day-to-day, but has spiked into low double-digit gwei during
-real past congestion events) and wanting more than one delivery's runway before this needs
-attention again.
+**Real headroom math, against the same directly-measured cost this runbook already cites** (212,210
+gas, real sampled `effectiveGasPrice` ~1.002 gwei, ~0.000213 ETH/delivery):
 
 | | value |
 |---|---|
-| Real measured gas, rounded up for margin | 250,000 gas |
-| Conservative gas-price assumption (~10× the sampled 1.0 gwei) | 10 gwei |
-| Cost per delivery at that assumption | 250,000 × 10 gwei = 0.0025 ETH |
-| Deliveries funded at 0.1 ETH | ~40 at the conservative price, ~470 at the real sampled price |
+| Funded | 0.001 ETH |
+| Real cost per delivery (sampled gas price) | ~0.000213 ETH |
+| Deliveries covered at the sampled price | **~4.7** |
+| Deliveries covered if gas price is 2× the sample | **~2.3** |
+| Deliveries covered if gas price is 5× the sample | **~0.9** |
 
-**Recommended initial funding: 0.1 ETH to `0x4391C092cF342C6a8eeCe352712fC0C8df14450d`.** This is a
-real-funds action — Forces' call, same as every wallet-funding decision in this project so far; the
-number above is a reasoned starting point, not a number Kov is authorized to act on. Adjust up or
-down based on expected real request volume, which is genuinely unknown pre-launch.
+**Read this plainly, not just as a number: this is thin margin, not a comfortable buffer.**
+Routing/pinning failures cost nothing (all off-chain, before any transaction is built — see
+`taskIntake.ts`'s `routeRequest`), so a bad request or a Filebase hiccup does not touch this
+balance. The real risk is entirely on the on-chain step: `execTransaction` is built with a nonzero
+`safeTxGas` specifically so a failed *inner* `deliverToMarketplace` call surfaces as
+`success: false` rather than reverting the whole transaction (see `safeDeliveryClient.ts`'s own
+header) — which means **a failed delivery attempt still spends real gas**, it just fails cleanly
+instead of reverting. One bad first attempt, on top of even a modest gas-price uptick, could leave
+only one or two more tries. See the "Forces says go" checklist below and Kov's reply to the
+addendum (`bion/_internal/BION-DIRECTIVE-45-ADDENDUM-STATUS.md`) for the real recommendation on
+whether this is enough for a single go-live proof attempt as-is.
 
-**Do not fund the multisig itself** (`0x5587335a...`) for this purpose — it is irrelevant to gas
-payment under this delivery design; funding it would not enable anything.
+**Do not fund the multisig itself** (`0x5587335a...`) for this purpose — it was, and remains,
+irrelevant to gas payment under this delivery design.
 
 ## Precondition 2 — Filebase credential live and verified
 
@@ -161,7 +160,7 @@ served.
 The four preconditions above are not self-certifying — this line is the actual gate:
 
 ```
-[ ] Precondition 1 confirmed — BASE_MECH_AGENT_INSTANCE funded, amount: ______ ETH, tx: ______
+[x] Precondition 1 confirmed — BASE_MECH_AGENT_INSTANCE funded, amount: 0.001 ETH (~4.7 deliveries at sampled gas price, thin margin — see math above), confirmed via eth_getBalance 2026-08-12
 [ ] Precondition 2 confirmed — Filebase credential live, verified via the smoke-test script above
 [ ] Precondition 3 confirmed — fork-proof gate green on the deployed commit: ______
 [ ] Unit enabled + started, observed clean under observeOnly=true for: ______ (duration)
