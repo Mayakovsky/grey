@@ -58,7 +58,7 @@ whether this is enough for a single go-live proof attempt as-is.
 **Do not fund the multisig itself** (`0x5587335a...`) for this purpose — it was, and remains,
 irrelevant to gas payment under this delivery design.
 
-## Precondition 2 — Filebase credential live and verified
+## Precondition 2 — Filebase credential live and verified — **MET** (BION-DIRECTIVE-48, 2026-08-12)
 
 `MECH_ADAPTER_FILEBASE_ACCESS_KEY_ID` / `MECH_ADAPTER_FILEBASE_SECRET_ACCESS_KEY` /
 `MECH_ADAPTER_FILEBASE_BUCKET` (`.env.example`'s "Mech adapter" block has the full doc comment for
@@ -76,16 +76,23 @@ provisioning; nothing in the code assumes a specific name (`MECH_ADAPTER_FILEBAS
 env-driven).
 
 **Verify it for real before trusting it** — same "don't deliver on faith" discipline
-`responsePinner.ts` itself enforces at runtime, done here once by hand before enabling the unit:
+`responsePinner.ts` itself enforces at runtime, done here once by hand before enabling the unit.
+**Note the `gatewayBaseUrl` line** — `createFilebasePinner` does NOT read
+`MECH_ADAPTER_PIN_VERIFY_GATEWAY_URL` from env itself (only `main.ts`'s own `loadPinVerifyGatewayUrl`
+does that in production); an earlier version of this script omitted it, which would have silently
+tested against the untouched default gateway rather than any configured override — fixed here so a
+future re-run actually exercises what's configured, not a stale assumption:
 
 ```bash
-# From the VPS, after filling in the real credential in /etc/grey/mech-adapter.env:
+# From the VPS, after filling in the real credential (and any MECH_ADAPTER_PIN_VERIFY_GATEWAY_URL
+# override) in /etc/grey/mech-adapter.env:
 cd /opt/grey/grey/adapters/mech-adapter
 set -a && source /etc/grey/mech-adapter.env && set +a
 node --input-type=module -e "
 import { loadFilebaseCredentialsFromEnv } from './dist/filebaseCredentials.js';
 import { createFilebasePinner } from './dist/responsePinner.js';
-const pinner = createFilebasePinner({ credentials: loadFilebaseCredentialsFromEnv() });
+const gatewayBaseUrl = process.env.MECH_ADAPTER_PIN_VERIFY_GATEWAY_URL?.trim() || undefined;
+const pinner = createFilebasePinner({ credentials: loadFilebaseCredentialsFromEnv(), gatewayBaseUrl });
 try {
   const r = await pinner.pinAndVerify(JSON.stringify({ smoke: 'test', ts: Date.now() }));
   console.log('OK — pinned and independently verified:', r);
@@ -100,6 +107,24 @@ A successful run prints a real `cid`/`hashBytes32` and exits 0 — that's real p
 works AND the independent-gateway verification step resolves, not just that Filebase accepted the
 upload. A failure here means do not proceed to enabling the unit; the adapter will fail every real
 delivery the same way once live.
+
+**Real result (BION-DIRECTIVE-48, 2026-08-12), against the live credential and
+`MECH_ADAPTER_PIN_VERIFY_GATEWAY_URL=https://ipfs.io`:**
+
+```
+OK — pinned and independently verified: {
+  cid: 'f01701220662ff02ec0eff9696316e8928cb3ca4166b486411b1052330c9ba0f4b32988c7',
+  hashBytes32: '0x662ff02ec0eff9696316e8928cb3ca4166b486411b1052330c9ba0f4b32988c7',
+  vendorCid: 'QmVDYh4VEsSzD7ajVhKmK8kefoyzzEhqgS23q2G79Vq64e'
+}
+```
+
+Independently re-decoded `vendorCid` (base58btc CIDv0) and confirmed its embedded digest matches
+`hashBytes32` exactly, byte for byte — not just trusting the script's own internal assertion. Both
+BION-DIRECTIVE-47's CAR-import fix and BION-DIRECTIVE-46-ADDENDUM's gateway-override fix are
+confirmed working together, for real, against the live account. This precondition is genuinely
+met — the earlier "BLOCKED" finding from the original flat-upload design (BION-DIRECTIVE-46-
+ADDENDUM) no longer applies to the code actually running on `main`.
 
 ## Precondition 3 — the unit's own fork-proof gate is green, on the actual code being deployed
 
@@ -161,7 +186,7 @@ The four preconditions above are not self-certifying — this line is the actual
 
 ```
 [x] Precondition 1 confirmed — BASE_MECH_AGENT_INSTANCE funded, amount: 0.001 ETH (~4.7 deliveries at sampled gas price, thin margin — see math above), confirmed via eth_getBalance 2026-08-12
-[ ] Precondition 2 confirmed — Filebase credential live, verified via the smoke-test script above
+[x] Precondition 2 confirmed — Filebase credential live, verified via the smoke-test script above (real cid f01701220662ff0...c7, vendorCid digest-matched independently), confirmed 2026-08-12
 [ ] Precondition 3 confirmed — fork-proof gate green on the deployed commit: ______
 [ ] Unit enabled + started, observed clean under observeOnly=true for: ______ (duration)
 [ ] Precondition 4 — Forces says go: flip MECH_ADAPTER_OBSERVE_ONLY=false — signed: ______  date: ______
