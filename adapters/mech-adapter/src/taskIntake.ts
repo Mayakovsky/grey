@@ -25,7 +25,8 @@
 import { parseAbiItem, type Address, type Hash, type Hex, type PublicClient } from 'viem';
 import type { HandlerDeps, HandlerInput, OfferingHandler } from '@grey/core';
 import type { OfferingSlug } from '@grey/schemas/responses';
-import { fetchRequestContent, deriveResponseHash, type RequestContent } from './requestContent.js';
+import { fetchRequestContent, type RequestContent } from './requestContent.js';
+import type { ResponsePinner } from './responsePinner.js';
 
 /** Same real, verified signature as marketplaceAbi.ts's MECH_MARKETPLACE_ABI entry — restated via
  *  `parseAbiItem` (rather than extracted from that array with `.find()`) purely so viem's
@@ -89,16 +90,32 @@ export interface RouteRequestParams {
   registeredTools: readonly OfferingSlug[];
   handlers: Record<OfferingSlug, OfferingHandler>;
   handlerDeps: HandlerDeps;
+  /** BION-DIRECTIVE-45 — pins `responseContent` and confirms it's really resolvable BEFORE this
+   *  function returns a hash callers might deliver on-chain. See responsePinner.ts's file header
+   *  for the full "pin, then verify independently, then trust the hash" design. A thrown
+   *  `ResponsePinVerificationError` (or any Filebase-call failure) propagates out of `routeRequest`
+   *  the same as `UnknownToolError`/a handler error — `pollAndRespond` already isolates any
+   *  `routeRequest` failure per-request into `routingErrors` without aborting the rest of the
+   *  batch, so a pin failure for one request doesn't block delivering everything else. */
+  responsePinner: ResponsePinner;
 }
 
 export interface RouteRequestResult {
   slug: OfferingSlug;
   payload: unknown;
-  /** The exact JSON string the response hash was derived from — callers that go on to actually
-   *  pin content need this exact byte sequence, not a re-serialization of `payload` (which could
-   *  legally differ in whitespace/key order and therefore hash differently). */
+  /** The exact JSON string the response hash was derived from — the same bytes `responsePinner`
+   *  pinned. */
   responseContent: string;
+  /** Verified-resolvable hash — sourced from `responsePinner.pinAndVerify`, not a separate
+   *  `deriveResponseHash` call, so there is no possibility of pinning one set of bytes and
+   *  delivering a hash derived from a different (even if logically-equal) serialization. */
   responseHash: Hex;
+  /** The base16 CIDv1 gateway-path form of `responseHash` — same value `responsePinner` verified
+   *  resolves; useful for logs/observability. */
+  pinnedCid: string;
+  /** Filebase's own self-reported CID for the pinned object — diagnostic only, see
+   *  responsePinner.ts's `PinAndVerifyResult.vendorCid` doc comment. */
+  vendorCid?: string;
 }
 
 export class UnknownToolError extends Error {
@@ -130,9 +147,10 @@ function buildRequirement(content: RequestContent): Record<string, unknown> {
 
 /** Decodes a detected request's real content, routes it to the matching shared offering handler
  *  (`offeringHandlers[tool]` — the exact same handler map x402/ACP call, never re-implemented
- *  here), and derives the response's would-be IPFS hash. Does not pin the response anywhere or
- *  submit any delivery — see requestContent.ts's `deriveResponseHash` doc comment for why pinning
- *  is deliberately a separate, later, real-external-side-effect step this directive doesn't take. */
+ *  here), and — BION-DIRECTIVE-45 — pins the response to Filebase and confirms it's really
+ *  resolvable before returning a hash a caller might deliver on-chain. See responsePinner.ts's
+ *  file header for the full pin/verify design; requestContent.ts's `deriveResponseHash` (called
+ *  internally by the injected pinner, not here directly) for the hash derivation itself. */
 export async function routeRequest(
   request: DetectedRequest,
   params: RouteRequestParams,
@@ -153,7 +171,14 @@ export async function routeRequest(
   const result = await handler(input, params.handlerDeps);
 
   const responseContent = JSON.stringify(result.payload);
-  const responseHash = await deriveResponseHash(responseContent);
+  const pinned = await params.responsePinner.pinAndVerify(responseContent);
 
-  return { slug, payload: result.payload, responseContent, responseHash };
+  return {
+    slug,
+    payload: result.payload,
+    responseContent,
+    responseHash: pinned.hashBytes32,
+    pinnedCid: pinned.cid,
+    vendorCid: pinned.vendorCid,
+  };
 }

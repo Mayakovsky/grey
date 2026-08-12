@@ -8,6 +8,7 @@ import type { HandlerDeps, HandlerResult, OfferingHandler } from '@grey/core';
 import type { OfferingSlug } from '@grey/schemas/responses';
 import { pollForOwnRequests, routeRequest, UnknownToolError, type DetectedRequest } from '../src/taskIntake.js';
 import type { RequestContent } from '../src/requestContent.js';
+import { createStubResponsePinner, ResponsePinVerificationError, type ResponsePinner } from '../src/responsePinner.js';
 
 const MECH: Address = '0x1ECFb7c086bCd483cF49405dadA00c3a6294f6A8';
 const MARKETPLACE: Address = '0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020';
@@ -78,15 +79,19 @@ describe('routeRequest (BION-DIRECTIVE-43)', () => {
     const handler: OfferingHandler = vi.fn(async () => handlerResult);
     const handlers: Record<OfferingSlug, OfferingHandler> = { prediction_market_research: handler } as never;
 
+    const responsePinner = createStubResponsePinner();
     const result = await routeRequest(
       fakeDetected(),
-      { registeredTools: ['prediction_market_research'] as OfferingSlug[], handlers, handlerDeps: fakeHandlerDeps() },
+      { registeredTools: ['prediction_market_research'] as OfferingSlug[], handlers, handlerDeps: fakeHandlerDeps(), responsePinner },
       { fetchImpl: (async () => new Response(JSON.stringify(REAL_CONTENT))) as unknown as typeof fetch },
     );
 
     expect(result.slug).toBe('prediction_market_research');
     expect(result.payload).toEqual(handlerResult.payload);
     expect(result.responseHash).toMatch(/^0x[0-9a-f]{64}$/);
+    // BION-DIRECTIVE-45: the pinned content is exactly the same bytes routeRequest hashed —
+    // not a coincidentally-matching re-serialization.
+    expect(responsePinner.store.get(result.pinnedCid)).toBe(result.responseContent);
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({ offeringId: 'prediction_market_research', buyerAddress: REQUESTER, requirement: { marketQuery: REAL_CONTENT.prompt } }),
       expect.anything(),
@@ -100,7 +105,7 @@ describe('routeRequest (BION-DIRECTIVE-43)', () => {
 
     await routeRequest(
       fakeDetected(),
-      { registeredTools: ['resolution_evidence_compiler'] as OfferingSlug[], handlers, handlerDeps: fakeHandlerDeps() },
+      { registeredTools: ['resolution_evidence_compiler'] as OfferingSlug[], handlers, handlerDeps: fakeHandlerDeps(), responsePinner: createStubResponsePinner() },
       { fetchImpl: (async () => new Response(JSON.stringify(content))) as unknown as typeof fetch },
     );
 
@@ -117,9 +122,30 @@ describe('routeRequest (BION-DIRECTIVE-43)', () => {
     await expect(
       routeRequest(
         fakeDetected(),
-        { registeredTools: ['prediction_market_research'] as OfferingSlug[], handlers, handlerDeps: fakeHandlerDeps() },
+        { registeredTools: ['prediction_market_research'] as OfferingSlug[], handlers, handlerDeps: fakeHandlerDeps(), responsePinner: createStubResponsePinner() },
         { fetchImpl: (async () => new Response(JSON.stringify(content))) as unknown as typeof fetch },
       ),
     ).rejects.toThrow(UnknownToolError);
+  });
+
+  it('BION-DIRECTIVE-45: propagates a pin-verification failure rather than returning an unpinned hash', async () => {
+    const handler: OfferingHandler = vi.fn(async () => ({ payload: { answer: 'yes' }, subject: { kind: 'none' } as never, cacheHit: true }));
+    const handlers: Record<OfferingSlug, OfferingHandler> = { prediction_market_research: handler } as never;
+    const failingPinner: ResponsePinner = {
+      pinAndVerify: vi.fn(async () => {
+        throw new ResponsePinVerificationError('f0170122000', 5, 'simulated: gateway never resolved the pin');
+      }),
+    };
+
+    await expect(
+      routeRequest(
+        fakeDetected(),
+        { registeredTools: ['prediction_market_research'] as OfferingSlug[], handlers, handlerDeps: fakeHandlerDeps(), responsePinner: failingPinner },
+        { fetchImpl: (async () => new Response(JSON.stringify(REAL_CONTENT))) as unknown as typeof fetch },
+      ),
+    ).rejects.toThrow(ResponsePinVerificationError);
+    // The handler still ran (real compute happened) — only the pin step failed, confirming the
+    // failure is attributable to pinning, not a handler regression.
+    expect(handler).toHaveBeenCalled();
   });
 });

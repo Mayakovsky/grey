@@ -7,14 +7,16 @@
 // re-implemented here), sign and deliver the real response, and confirms via the same independent
 // checks D-38 used: numTotalDeliveries() incremented, a real Deliver-shaped log present.
 //
-// The one piece NOT hit against a real external service: IPFS content fetch. requestContent.ts's
-// fetchRequestContent hits a real gateway in production; this test stubs `global.fetch` to serve
-// real-shaped content (built the same way requestContent.test.ts's fixtures were, from real
-// observed examples) for the exact hash this test derives and uses as the real on-chain
-// `requestData` — deliberately not pinning anything to a real IPFS/Filebase service (see
-// requestContent.ts's `deriveResponseHash` doc comment for why that's a separate, later, real-
-// external-side-effect step this directive doesn't take). Everything else — the request, the
-// event, the routing, the signature, the delivery — is real.
+// The pieces NOT hit against a real external service: IPFS content fetch and Filebase pinning.
+// requestContent.ts's fetchRequestContent hits a real gateway in production; this test stubs
+// `global.fetch` to serve real-shaped content (built the same way requestContent.test.ts's
+// fixtures were, from real observed examples) for the exact hash this test derives and uses as the
+// real on-chain `requestData`. BION-DIRECTIVE-45: pinning now runs for real in production
+// (responsePinner.ts) — this test injects `createStubResponsePinner` (an in-memory, no-network
+// fake) rather than a real Filebase account, same "stub/local pinning target" posture the
+// directive itself asks for; responsePinner.ts's own real pin/verify/retry logic is separately
+// covered end-to-end by test/responsePinner.test.ts against a stubbed fetch. Everything else — the
+// request, the event, the routing, the signature, the delivery — is real.
 import { describe, it, expect } from 'vitest';
 import {
   createPublicClient,
@@ -41,6 +43,7 @@ import { OLAS_MECH_ABI } from '../src/mechAbi.js';
 import { SAFE_ABI } from '../src/safeAbi.js';
 import { MARKETPLACE_ADDRESSES, type MechAdapterConfig } from '../src/config.js';
 import { deriveResponseHash } from '../src/requestContent.js';
+import { createStubResponsePinner } from '../src/responsePinner.js';
 import { silentLogger } from '../src/logger.js';
 
 const ENABLED = process.env.GREY_MECH_ANVIL === '1';
@@ -164,6 +167,7 @@ d('mech-adapter — full task-intake loop, Base mainnet fork (BION-DIRECTIVE-43)
           publicClient,
           handlers: { prediction_market_research: offeringHandlers.prediction_market_research } as Record<OfferingSlug, OfferingHandler>,
           handlerDeps: {} as HandlerDeps, // predictionMarketResearch's real implementation touches no deps
+          responsePinner: createStubResponsePinner(),
           logger: silentLogger(),
         });
 

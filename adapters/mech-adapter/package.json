@@ -20,6 +20,7 @@
     "@grey/ceremony": "workspace:*",
     "@grey/core": "workspace:*",
     "@grey/schemas": "workspace:*",
+    "aws4fetch": "^1.0.20",
     "blockstore-core": "^7.0.1",
     "ipfs-unixfs-importer": "^17.0.1",
     "multiformats": "^14.0.5",

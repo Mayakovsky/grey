@@ -137,6 +137,7 @@ import { SERVICE_STATE } from './serviceRegistryAbi.js';
 import type { ServiceRegistryClient } from './serviceRegistryClient.js';
 import { createLogger, type AdapterLogger } from './logger.js';
 import { pollForOwnRequests, routeRequest, UnknownToolError } from './taskIntake.js';
+import type { ResponsePinner } from './responsePinner.js';
 
 export interface ServiceRegistrationParams {
   /** Caller-chosen canonical agent Id — no on-chain existence check on Base (see file header).
@@ -213,6 +214,11 @@ export interface MechAdapterOptions {
   /** BION-DIRECTIVE-43 — deps the shared handlers need (DB repos, clock, logger, config) —
    *  `createHandlerDeps` from `@grey/core` in production, fakes in tests. */
   handlerDeps?: HandlerDeps;
+  /** BION-DIRECTIVE-45 — required for pollAndRespond to be callable (same posture as handlers/
+   *  handlerDeps: no default, this package never provisions a real Filebase credential itself).
+   *  `createFilebasePinner` (responsePinner.ts) in production, `createStubResponsePinner` or a
+   *  fake in tests. */
+  responsePinner?: ResponsePinner;
   logger?: AdapterLogger;
   /** `waitForServiceVisible`'s poll knobs (BION-DIRECTIVE-32) — overridable so tests can exercise
    *  the wait/timeout logic without real delays. Defaults match the real-world lag this was
@@ -236,6 +242,10 @@ export interface TaskIntakeResult {
   slug: OfferingSlug;
   payload: unknown;
   responseHash: Hex;
+  /** BION-DIRECTIVE-45 — the base16 CIDv1 gateway-path form of `responseHash`, already confirmed
+   *  independently resolvable before this result exists at all (see taskIntake.ts's `routeRequest`
+   *  and responsePinner.ts's file header). */
+  pinnedCid: string;
 }
 
 /** BION-DIRECTIVE-43 — result of `pollAndRespond`. `delivery` is undefined when nothing in the
@@ -265,6 +275,7 @@ export class MechAdapter implements ChannelIngress {
   private readonly publicClient?: Pick<PublicClient, 'getLogs'>;
   private readonly handlers?: Record<OfferingSlug, OfferingHandler>;
   private readonly handlerDeps?: HandlerDeps;
+  private readonly responsePinner?: ResponsePinner;
   private readonly log: AdapterLogger;
   private readonly offerings: OfferingRegistration[] = [];
   private readonly serviceVisibilityPoll: { maxAttempts: number; delayMs: number };
@@ -278,6 +289,7 @@ export class MechAdapter implements ChannelIngress {
     this.publicClient = opts.publicClient;
     this.handlers = opts.handlers;
     this.handlerDeps = opts.handlerDeps;
+    this.responsePinner = opts.responsePinner;
     this.log = opts.logger ?? createLogger({ component: 'mech-adapter' });
     this.serviceVisibilityPoll = opts.serviceVisibilityPoll ?? DEFAULT_SERVICE_VISIBILITY_POLL;
   }
@@ -476,6 +488,7 @@ export class MechAdapter implements ChannelIngress {
     const publicClient = this.requirePublicClient('pollAndRespond');
     const handlers = this.requireHandlers('pollAndRespond');
     const handlerDeps = this.requireHandlerDeps('pollAndRespond');
+    const responsePinner = this.requireResponsePinner('pollAndRespond');
 
     const detected = await pollForOwnRequests(publicClient, marketplaceAddress, mech, fromBlock, toBlock);
     this.log.info('MechAdapter.pollAndRespond: requests detected', { count: detected.length });
@@ -484,9 +497,25 @@ export class MechAdapter implements ChannelIngress {
     const routingErrors: Array<{ requestId: Hash; error: string }> = [];
     for (const request of detected) {
       try {
-        const result = await routeRequest(request, { registeredTools, handlers, handlerDeps });
-        routed.push({ requestId: request.requestId, slug: result.slug, payload: result.payload, responseHash: result.responseHash });
+        const result = await routeRequest(request, { registeredTools, handlers, handlerDeps, responsePinner });
+        routed.push({
+          requestId: request.requestId,
+          slug: result.slug,
+          payload: result.payload,
+          responseHash: result.responseHash,
+          pinnedCid: result.pinnedCid,
+        });
+        this.log.info('MechAdapter.pollAndRespond: request routed and pinned', {
+          requestId: request.requestId,
+          slug: result.slug,
+          pinnedCid: result.pinnedCid,
+          vendorCid: result.vendorCid,
+        });
       } catch (err) {
+        // BION-DIRECTIVE-45: this now also covers ResponsePinVerificationError and any Filebase
+        // call failure (see taskIntake.ts's routeRequest) — same per-request isolation as an
+        // UnknownToolError or a handler error, deliberately: one request's pin failing does not
+        // block delivering everything else that routed and pinned cleanly this tick.
         const message = err instanceof UnknownToolError ? err.message : err instanceof Error ? err.message : String(err);
         this.log.warn('MechAdapter.pollAndRespond: request routing failed, skipping', {
           requestId: request.requestId,
@@ -549,6 +578,16 @@ export class MechAdapter implements ChannelIngress {
       throw new Error(`MechAdapter.${caller}: no handlerDeps configured — see MechAdapterOptions doc comment.`);
     }
     return this.handlerDeps;
+  }
+
+  private requireResponsePinner(caller: string): ResponsePinner {
+    if (!this.responsePinner) {
+      throw new Error(
+        `MechAdapter.${caller}: no responsePinner configured — see MechAdapterOptions doc comment. ` +
+          'This adapter never provisions a real Filebase credential itself — see filebaseCredentials.ts.',
+      );
+    }
+    return this.responsePinner;
   }
 
   private static readonly RESUMABLE_STATES: readonly number[] = [

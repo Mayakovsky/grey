@@ -16,6 +16,7 @@ import {
 } from './_fakes.js';
 import { MECH_OFFERING_SLUGS, mechPriceUsdFor } from '../src/prices.js';
 import type { MechAdapterConfig } from '../src/config.js';
+import { createStubResponsePinner } from '../src/responsePinner.js';
 
 const CONFIG: MechAdapterConfig = {
   payToAddress: FAKE_PAY_TO,
@@ -568,6 +569,18 @@ describe('MechAdapter — ChannelIngress contract', () => {
       await expect(adapter.pollAndRespond(FAKE_MECH, MARKETPLACE, 1n, 10n, [])).rejects.toThrow(/publicClient/);
     });
 
+    it('BION-DIRECTIVE-45: throws a clear, named error when responsePinner is missing', async () => {
+      const adapter = new MechAdapter({
+        config: CONFIG,
+        marketplaceClient: fakeMarketplaceClient(),
+        publicClient: fakePublicClient([]),
+        handlers: {} as never,
+        handlerDeps: {} as never,
+        logger: silentLogger(),
+      });
+      await expect(adapter.pollAndRespond(FAKE_MECH, MARKETPLACE, 1n, 10n, [])).rejects.toThrow(/responsePinner/);
+    });
+
     it('detects nothing, routes nothing, delivers nothing — no error', async () => {
       const adapter = new MechAdapter({
         config: CONFIG,
@@ -575,6 +588,7 @@ describe('MechAdapter — ChannelIngress contract', () => {
         publicClient: fakePublicClient([]),
         handlers: {} as never,
         handlerDeps: {} as never,
+        responsePinner: createStubResponsePinner(),
         logger: silentLogger(),
       });
       const result = await adapter.pollAndRespond(FAKE_MECH, MARKETPLACE, 1n, 10n, []);
@@ -605,6 +619,7 @@ describe('MechAdapter — ChannelIngress contract', () => {
         ]),
         handlers: { prediction_market_research: handler } as never,
         handlerDeps: {} as never,
+        responsePinner: createStubResponsePinner(),
         logger: silentLogger(),
       });
 
@@ -643,6 +658,7 @@ describe('MechAdapter — ChannelIngress contract', () => {
         ]),
         handlers: {} as never, // no registered handlers -> UnknownToolError for any tool
         handlerDeps: {} as never,
+        responsePinner: createStubResponsePinner(),
         logger: silentLogger(),
       });
 

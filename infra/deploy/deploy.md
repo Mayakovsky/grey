@@ -68,6 +68,38 @@ lag, not an unauthorized or accidental enable. Full investigation:
   (low-risk call, no external interaction with the agent yet beyond internal testing — revisit if
   that changes).
 
+## Mech adapter — built, installed, DISABLED (BION-DIRECTIVE-45)
+
+`grey-mech-adapter` is the ChannelIngress for Grey's real, live-registered Olas mech
+(`0x1ECFb7c086bCd483cF49405dadA00c3a6294f6A8`, serviceId 635 — see `BION-E3-B1-LIVE-REGISTRATION-
+COMPLETE-REPORT-KOV.md`). It has its own systemd unit (`infra/systemd/grey-mech-adapter.service`,
+`EnvironmentFile=/etc/grey/mech-adapter.env`) because it holds two real, isolated hot credentials —
+`BASE_MECH_AGENT_INSTANCE_PRIVATE_KEY` (the multisig's sole signer) and the new Filebase pinning
+credential (`MECH_ADAPTER_FILEBASE_*`) — same "own unit, independent of grey-core/grey-sweeper/
+grey-acp-adapter" posture every other signing capability in this repo uses.
+
+**Ships installed but `disabled`, not started — same as grey-sweeper and grey-acp-adapter
+originally shipped.** Enabling it is a separate, later, explicit Forces act, gated on real
+preconditions (funding `BASE_MECH_AGENT_INSTANCE` with real ETH, a live Filebase credential, the
+unit's own fork-proof gate green) — see `EXPANSION-E3-B1-MECH-GO-LIVE-RUNBOOK-FORCES.md` for the full
+checklist. Installing the unit/env file does NOT make it live: `MECH_ADAPTER_OBSERVE_ONLY` defaults
+`true` regardless, and the unit isn't running at all until explicitly `enable`d + `start`ed.
+
+```bash
+# On unit-file change only:
+sudo cp infra/systemd/grey-mech-adapter.service /etc/systemd/system/
+sudo systemctl daemon-reload
+# Deliberately no `systemctl enable`/`start` here — that's the go-live runbook's act, not a deploy step.
+```
+
+Required env (`/etc/grey/mech-adapter.env`, root-only `600`, Forces-authored on-box) — see
+`.env.example`'s "Mech adapter" block for the full list and each var's own doc comment:
+`BASE_MECH_PAY_TO`, `BASE_MECH_POOL_WALLET`, `GREY_DATABASE_URL`, `BASE_RPC_URL`,
+`MECH_ADAPTER_OBSERVE_ONLY`, `MECH_ADAPTER_POLL_INTERVAL_MS`,
+`BASE_MECH_AGENT_INSTANCE_PRIVATE_KEY`, `MECH_ADAPTER_FILEBASE_ACCESS_KEY_ID`,
+`MECH_ADAPTER_FILEBASE_SECRET_ACCESS_KEY`, `MECH_ADAPTER_FILEBASE_BUCKET`
+(optionally `MECH_ADAPTER_PIN_VERIFY_GATEWAY_URL`).
+
 ## Firewall
 Port 3002 stays **firewalled** this phase — verify via on-box `curl` / SSH tunnel only. Public
 exposure of the paid API (Caddy reverse proxy in front is a candidate) is a Phase E decision.
