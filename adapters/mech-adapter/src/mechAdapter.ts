@@ -94,9 +94,35 @@
 // simulateContract — predicts results, submits nothing) and returns without ever calling
 // walletClient.writeContract. Flipping it to false is a deployment-time decision, not something
 // this class defaults to or can be talked into via any argument to registerAsMech itself.
+//
+// ── Signed delivery capability — BUILT, not turned on (BION-DIRECTIVE-38) ───────────────────────
+// Since deploy() ran for real, BASE_MECH_AGENT_INSTANCE is the sole signer (threshold=1) of the
+// service's real Safe multisig. Every delivered mech response requires a call to
+// `deliverToMarketplace`, gated `onlyOperator` — which reads the multisig live from the
+// ServiceRegistry and requires msg.sender literally BE it, not the agent-instance EOA. This
+// directive builds that capability (deliverSigned, below — a real Safe execTransaction wrapping
+// deliverToMarketplace, signed via the isolated agentInstanceSigner.ts loader) and fork-proves it
+// against real Base mainnet state (test/safeDeliveryClient.anvil.test.ts, GREY_MECH_ANVIL=1).
+//
+// ── Task intake — BUILT, still not turned on (BION-DIRECTIVE-43) ────────────────────────────────
+// D-38 closed the delivery half; nothing detected a real request, decoded it, or routed it to a
+// real answer. `pollAndRespond` (below) is that missing middle: polls real `MarketplaceRequest`
+// events where Grey's mech is the real `priorityMech` (taskIntake.ts — traced from the real
+// MechMarketplace.sol source, not assumed, why that's the right filter), decodes each request's
+// real IPFS-hash-encoded content (requestContent.ts — traced from a real, already-delivered Base
+// request, not guessed: `requestDatas[i]` is a bytes32 IPFS content hash, same CID-derivation
+// convention as GREY_MECH_CONFIG_HASH/GREY_MECH_PAYLOAD_HASH, resolving to `{prompt, tool, nonce,
+// schema_version, request_context}`), routes by the real `tool` field to the exact same shared
+// `offeringHandlers[slug]` x402/ACP already call (never re-implemented here), and derives what the
+// response's own IPFS hash would be. Still does not pin anything to a real IPFS/Filebase service —
+// that publish step is deliberately deferred the same way GREY_MECH_CONFIG_HASH/PAYLOAD_HASH were
+// (computed here, published later, separately) — see requestContent.ts's `deriveResponseHash` doc
+// comment. Composes with `deliverSigned` above for the final signed submission. Like D-38, this is
+// built and fork-proven only: no automatic trigger, no live mainnet call, `observeOnly` untouched.
 import { setTimeout as delay } from 'node:timers/promises';
-import type { ChannelIngress, ChannelIdentity, OfferingRegistration } from '@grey/core';
-import type { Address } from 'viem';
+import type { ChannelIngress, ChannelIdentity, HandlerDeps, OfferingHandler, OfferingRegistration } from '@grey/core';
+import type { Address, Hash, Hex, PublicClient } from 'viem';
+import type { OfferingSlug } from '@grey/schemas/responses';
 import {
   ETH_TOKEN_ADDRESS,
   GREY_DID,
@@ -106,9 +132,11 @@ import {
   type MechPaymentType,
 } from './config.js';
 import { createMarketplaceClient, type MarketplaceClient } from './marketplaceClient.js';
+import type { SafeDeliveryClient, SignedSafeDelivery } from './safeDeliveryClient.js';
 import { SERVICE_STATE } from './serviceRegistryAbi.js';
 import type { ServiceRegistryClient } from './serviceRegistryClient.js';
 import { createLogger, type AdapterLogger } from './logger.js';
+import { pollForOwnRequests, routeRequest, UnknownToolError } from './taskIntake.js';
 
 export interface ServiceRegistrationParams {
   /** Caller-chosen canonical agent Id — no on-chain existence check on Base (see file header).
@@ -171,11 +199,55 @@ export interface MechAdapterOptions {
    *  signer, out of this package's scope (see grey-sweeper/src/wallet.ts for the established
    *  pattern this repo already uses for that). */
   serviceRegistryClient?: ServiceRegistryClient;
+  /** BION-DIRECTIVE-38 — required for deliverSigned to be callable. Same posture as
+   *  serviceRegistryClient: no default, this package never constructs a signing Account itself.
+   *  See agentInstanceSigner.ts for the isolated key-loading pattern a real deployment uses. */
+  safeDeliveryClient?: SafeDeliveryClient;
+  /** BION-DIRECTIVE-43 — required for pollAndRespond to be callable. A minimal read-only surface
+   *  (not the full injected MarketplaceClient) since polling logs is the only capability needed
+   *  here; a real deployment passes its existing viem PublicClient. */
+  publicClient?: Pick<PublicClient, 'getLogs'>;
+  /** BION-DIRECTIVE-43 — the shared offering handlers (`offeringHandlers` from `@grey/core`;
+   *  fakes in tests) — the exact same map x402/ACP already call, never re-implemented here. */
+  handlers?: Record<OfferingSlug, OfferingHandler>;
+  /** BION-DIRECTIVE-43 — deps the shared handlers need (DB repos, clock, logger, config) —
+   *  `createHandlerDeps` from `@grey/core` in production, fakes in tests. */
+  handlerDeps?: HandlerDeps;
   logger?: AdapterLogger;
   /** `waitForServiceVisible`'s poll knobs (BION-DIRECTIVE-32) — overridable so tests can exercise
    *  the wait/timeout logic without real delays. Defaults match the real-world lag this was
    *  built to absorb; production callers should not normally need to override this. */
   serviceVisibilityPoll?: { maxAttempts: number; delayMs: number };
+}
+
+/** BION-DIRECTIVE-38 — result of `deliverSigned`. */
+export interface DeliverSignedResult extends SignedSafeDelivery {
+  success: boolean;
+  /** True when this ran through simulateContract only (config.observeOnly) — see
+   *  RegisterAsMechResult's field of the same name for the identical posture. */
+  simulatedOnly: boolean;
+  /** Set only when simulatedOnly is false — the real submitted transaction's hash. */
+  txHash?: Hash;
+}
+
+/** BION-DIRECTIVE-43 — one routed request's outcome, before delivery. */
+export interface TaskIntakeResult {
+  requestId: Hash;
+  slug: OfferingSlug;
+  payload: unknown;
+  responseHash: Hex;
+}
+
+/** BION-DIRECTIVE-43 — result of `pollAndRespond`. `delivery` is undefined when nothing in the
+ *  polled range routed successfully (nothing to deliver — not an error). Per-request routing
+ *  failures (an unrecognized tool, a handler error) are isolated to `routingErrors` — one bad
+ *  request does not block delivering everything else that routed cleanly, same "isolate failures"
+ *  posture as this codebase's other multi-item scans (e.g. the git/test watcher's per-repo
+ *  isolation). */
+export interface PollAndRespondResult {
+  routed: TaskIntakeResult[];
+  routingErrors: Array<{ requestId: Hash; error: string }>;
+  delivery?: DeliverSignedResult;
 }
 
 /** Reverse lookup of SERVICE_STATE, for log/error messages (BION-DIRECTIVE-33). */
@@ -189,6 +261,10 @@ export class MechAdapter implements ChannelIngress {
   private readonly config: MechAdapterConfig;
   private readonly client: MarketplaceClient;
   private readonly registryClient?: ServiceRegistryClient;
+  private readonly deliveryClient?: SafeDeliveryClient;
+  private readonly publicClient?: Pick<PublicClient, 'getLogs'>;
+  private readonly handlers?: Record<OfferingSlug, OfferingHandler>;
+  private readonly handlerDeps?: HandlerDeps;
   private readonly log: AdapterLogger;
   private readonly offerings: OfferingRegistration[] = [];
   private readonly serviceVisibilityPoll: { maxAttempts: number; delayMs: number };
@@ -198,6 +274,10 @@ export class MechAdapter implements ChannelIngress {
     this.config = opts.config;
     this.client = opts.marketplaceClient ?? createMarketplaceClient(opts.config.rpcUrl);
     this.registryClient = opts.serviceRegistryClient;
+    this.deliveryClient = opts.safeDeliveryClient;
+    this.publicClient = opts.publicClient;
+    this.handlers = opts.handlers;
+    this.handlerDeps = opts.handlerDeps;
     this.log = opts.logger ?? createLogger({ component: 'mech-adapter' });
     this.serviceVisibilityPoll = opts.serviceVisibilityPoll ?? DEFAULT_SERVICE_VISIBILITY_POLL;
   }
@@ -348,6 +428,86 @@ export class MechAdapter implements ChannelIngress {
     return { serviceId, step: 'createMech', stateBefore, simulatedOnly, multisig: service.multisig, mech };
   }
 
+  /** BION-DIRECTIVE-38 — builds a real, signed Safe execTransaction wrapping deliverToMarketplace
+   *  and, if config.observeOnly is false, submits it. Building + signing is itself safe regardless
+   *  of observeOnly (pure construction plus read-only RPC calls — nothing is submitted); only the
+   *  final submission is gated, same seam every other write path in this class already uses. NOT
+   *  wired to any automatic trigger — see this file's header ("Signed delivery capability") for
+   *  why: callers invoke this directly, exactly like every other explicit step method here. */
+  async deliverSigned(mech: Address, requestIds: readonly Hash[], datas: readonly Hex[]): Promise<DeliverSignedResult> {
+    const client = this.requireDeliveryClient('deliverSigned');
+    const simulatedOnly = this.config.observeOnly;
+    const signed = await client.buildSignedDelivery(mech, requestIds, datas);
+
+    if (simulatedOnly) {
+      const sim = await client.simulateDelivery(signed);
+      this.log.info('MechAdapter.deliverSigned: simulated (observeOnly)', {
+        mech,
+        nonce: signed.nonce.toString(),
+        success: sim.success,
+      });
+      return { ...signed, simulatedOnly, success: sim.success };
+    }
+
+    const res = await client.executeDelivery(signed);
+    this.log.info('MechAdapter.deliverSigned: executed', {
+      mech,
+      nonce: signed.nonce.toString(),
+      txHash: res.txHash,
+      success: res.success,
+    });
+    return { ...signed, simulatedOnly, success: res.success, txHash: res.txHash };
+  }
+
+  /** BION-DIRECTIVE-43 — polls real `MarketplaceRequest` logs where `mech` is the real
+   *  `priorityMech` (taskIntake.ts's `pollForOwnRequests` — see this file's header for why that's
+   *  the right, real-contract-traced filter), routes each to the matching shared offering handler
+   *  (`offeringHandlers[tool]`), and — if anything routed successfully — delivers all of them in
+   *  ONE signed `deliverSigned` call. `fromBlock`/`toBlock` are the caller's cursor to manage
+   *  (this method is a pure range query + respond, it doesn't persist a watermark) — cadence/
+   *  production polling infra is a deployment decision, not this method's job. */
+  async pollAndRespond(
+    mech: Address,
+    marketplaceAddress: Address,
+    fromBlock: bigint,
+    toBlock: bigint,
+    registeredTools: readonly OfferingSlug[],
+  ): Promise<PollAndRespondResult> {
+    const publicClient = this.requirePublicClient('pollAndRespond');
+    const handlers = this.requireHandlers('pollAndRespond');
+    const handlerDeps = this.requireHandlerDeps('pollAndRespond');
+
+    const detected = await pollForOwnRequests(publicClient, marketplaceAddress, mech, fromBlock, toBlock);
+    this.log.info('MechAdapter.pollAndRespond: requests detected', { count: detected.length });
+
+    const routed: TaskIntakeResult[] = [];
+    const routingErrors: Array<{ requestId: Hash; error: string }> = [];
+    for (const request of detected) {
+      try {
+        const result = await routeRequest(request, { registeredTools, handlers, handlerDeps });
+        routed.push({ requestId: request.requestId, slug: result.slug, payload: result.payload, responseHash: result.responseHash });
+      } catch (err) {
+        const message = err instanceof UnknownToolError ? err.message : err instanceof Error ? err.message : String(err);
+        this.log.warn('MechAdapter.pollAndRespond: request routing failed, skipping', {
+          requestId: request.requestId,
+          error: message,
+        });
+        routingErrors.push({ requestId: request.requestId, error: message });
+      }
+    }
+
+    if (routed.length === 0) {
+      return { routed, routingErrors };
+    }
+
+    const delivery = await this.deliverSigned(
+      mech,
+      routed.map((r) => r.requestId),
+      routed.map((r) => r.responseHash),
+    );
+    return { routed, routingErrors, delivery };
+  }
+
   private requireRegistryClient(caller: string): ServiceRegistryClient {
     if (!this.registryClient) {
       throw new Error(
@@ -357,6 +517,38 @@ export class MechAdapter implements ChannelIngress {
       );
     }
     return this.registryClient;
+  }
+
+  private requireDeliveryClient(caller: string): SafeDeliveryClient {
+    if (!this.deliveryClient) {
+      throw new Error(
+        `MechAdapter.${caller}: no safeDeliveryClient configured — see MechAdapterOptions doc ` +
+          'comment. This adapter never constructs a signing client itself (no private key loaded ' +
+          'in this package) — see agentInstanceSigner.ts.',
+      );
+    }
+    return this.deliveryClient;
+  }
+
+  private requirePublicClient(caller: string): Pick<PublicClient, 'getLogs'> {
+    if (!this.publicClient) {
+      throw new Error(`MechAdapter.${caller}: no publicClient configured — see MechAdapterOptions doc comment.`);
+    }
+    return this.publicClient;
+  }
+
+  private requireHandlers(caller: string): Record<OfferingSlug, OfferingHandler> {
+    if (!this.handlers) {
+      throw new Error(`MechAdapter.${caller}: no handlers configured — see MechAdapterOptions doc comment.`);
+    }
+    return this.handlers;
+  }
+
+  private requireHandlerDeps(caller: string): HandlerDeps {
+    if (!this.handlerDeps) {
+      throw new Error(`MechAdapter.${caller}: no handlerDeps configured — see MechAdapterOptions doc comment.`);
+    }
+    return this.handlerDeps;
   }
 
   private static readonly RESUMABLE_STATES: readonly number[] = [

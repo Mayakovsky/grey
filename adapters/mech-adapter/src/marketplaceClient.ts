@@ -51,12 +51,25 @@ import { MECH_MARKETPLACE_ABI } from './marketplaceAbi.js';
 export function decodeCreateMechAddress(logs: readonly Pick<Log, 'data' | 'topics'>[], txHash: string): Address {
   for (const log of logs) {
     try {
+      // BION-DIRECTIVE-43 fix: `decodeEventLog`'s `eventName` is a type hint, not a strict
+      // filter — confirmed live, the hard way: it will happily decode a log against a
+      // DIFFERENT event in the same ABI that structurally matches, silently ignoring the
+      // requested `eventName`, if that other event's own signature matches the log's real
+      // topic0. This decoder used to get away with a bare try/catch here because
+      // MarketplaceRequest's ABI entry was ITSELF wrong (missing `indexed`, fixed this same
+      // directive) — every real MarketplaceRequest log failed to decode as anything at all,
+      // accidentally making this loop's assumption look safe. Now that MarketplaceRequest
+      // decodes correctly, a real MarketplaceRequest log in the same receipt (there always is
+      // one — createMech is called via MechMarketplace.create(), the same tx that emits it)
+      // would otherwise be silently accepted here and returned with `args.mech === undefined`.
+      // Guard explicitly on the decoded event's own name, not just "didn't throw".
       const decoded = decodeEventLog({
         abi: MECH_MARKETPLACE_ABI,
         eventName: 'CreateMech',
         data: log.data,
         topics: log.topics,
       });
+      if (decoded.eventName !== 'CreateMech') continue;
       return decoded.args.mech;
     } catch {
       continue;

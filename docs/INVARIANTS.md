@@ -223,6 +223,13 @@ underlying invariant is process- or machine-state, not pure repo-state (flagged 
 - **Rationale:** without the sweep, a funded-delivered-but-uncompleted job strands as `submitted` forever and the buyer-reputation ladder can never advance — a hard prerequisite for flip-to-enforce, discovered via dist inspection (FDQ-73) and proven live (#70352).
 - **Established by:** M6 FDQ-73 (reconciliation) / FDQ-74 (expiry-semantics determination).
 
+## 30. `agent-instance-key-isolated` (extends #17/#19)
+- **Statement:** the mech agent-instance hot signing key `BASE_MECH_AGENT_INSTANCE_PRIVATE_KEY` is referenced ONLY under `adapters/mech-adapter/src/` (its dedicated loader, `agentInstanceSigner.ts`) — never in `packages/grey-core/src/`. Same isolated-hot-key shape as #17 (sweeper key, confined to `packages/grey-sweeper/`) and #19 (x402 relayer key, confined to `adapters/x402-middleware/`): every signing key in this repo has its import graph confined to the single package that owns it, so a grey-core compromise cannot reach any of them.
+- **Verification:** `! git grep -qE --untracked "BASE_MECH_AGENT_INSTANCE_PRIVATE_KEY" -- packages/grey-core/src/ && git grep -lE --untracked "BASE_MECH_AGENT_INSTANCE_PRIVATE_KEY" -- adapters/mech-adapter/src/ | grep -q .`
+- **Expected:** exit 0 (no match in `grey-core/src`; at least one match in `mech-adapter/src` — the loader itself).
+- **Rationale:** BION-DIRECTIVE-38 — once wired to a live delivery trigger (separate, later work — not done by this directive), this key becomes signing authority over the service's real Safe multisig (threshold=1, confirmed live). grey-core is the buyer-facing HTTP surface and must never have a code path to construct it, same reasoning as #17/#19.
+- **Established by:** BION-DIRECTIVE-38 (isolated key loader + Safe execTransaction signing/delivery capability built and fork-proven against real Base mainnet state; not yet wired to any live trigger — see mechAdapter.ts's "Signed delivery capability" file-header note).
+
 ---
 
 *Invariants 11–13 established at M3 close (grey-core); #11 replaced + #14/#15 appended at M3.5 close (live-compute fill). #16/#17/#18 appended at M4 close (ERC-8004 DID mint + sweeper). #19/#20 appended at M5 Phase C close (x402 middleware). #21/#22 appended at M5 Phase F close (relayer refuel loop). #23–#29 appended at M6 close (ACP `ChannelIngress` adapter cutover + ElizaOS decommission). Future movements append at their close, not mid-flight. Invariant #3 was retargeted src → dist at M5 Phase C (FDQ-37) to reflect the Phase B real-build flip — Phase B's close should have done this but ran only a partial invariant check (#13/#16–#18).*

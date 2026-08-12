@@ -1,7 +1,8 @@
-// Test doubles for the mech adapter — a fake MarketplaceClient and a fake ServiceRegistryClient,
-// no real RPC, no network calls.
-import type { Address } from 'viem';
+// Test doubles for the mech adapter — a fake MarketplaceClient, a fake ServiceRegistryClient, and
+// a fake SafeDeliveryClient (BION-DIRECTIVE-38), no real RPC, no network calls.
+import type { Address, Hash, Hex } from 'viem';
 import type { MarketplaceClient } from '../src/marketplaceClient.js';
+import type { SafeDeliveryClient, SignedSafeDelivery } from '../src/safeDeliveryClient.js';
 import type { ServiceInfo, ServiceRegistryClient } from '../src/serviceRegistryClient.js';
 
 export const FAKE_PAY_TO = '0x1111111111111111111111111111111111111111' as Address;
@@ -35,6 +36,32 @@ export function fakeServiceInfo(overrides: Partial<ServiceInfo> = {}): ServiceIn
     numAgentInstances: 1,
     state: 1, // PreRegistration — a realistic default; a fresh/typical service isn't NonExistent
     agentIds: [],
+    ...overrides,
+  };
+}
+
+const FAKE_SAFE_TX_HASH = `0x${'cd'.repeat(32)}` as const;
+const FAKE_SIGNATURE = `0x${'ef'.repeat(64)}1c` as const;
+
+export function fakeSignedDelivery(overrides: Partial<SignedSafeDelivery> = {}): SignedSafeDelivery {
+  return {
+    mech: FAKE_MECH,
+    multisig: FAKE_MULTISIG,
+    data: '0x1234' as Hex,
+    nonce: 0n,
+    safeTxGas: 100000n,
+    safeTxHash: FAKE_SAFE_TX_HASH,
+    signature: FAKE_SIGNATURE,
+    ...overrides,
+  };
+}
+
+export function fakeSafeDeliveryClient(overrides: Partial<SafeDeliveryClient> = {}): SafeDeliveryClient {
+  return {
+    buildSignedDelivery: async (_mech: Address, _requestIds: readonly Hash[], _datas: readonly Hex[]) =>
+      fakeSignedDelivery(),
+    simulateDelivery: async (_signed: SignedSafeDelivery) => ({ success: true }),
+    executeDelivery: async (_signed: SignedSafeDelivery) => ({ success: true, txHash: FAKE_TX_HASH }),
     ...overrides,
   };
 }
