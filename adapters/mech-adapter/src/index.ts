@@ -4,6 +4,7 @@ export { MechAdapter } from './mechAdapter.js';
 export type { MechAdapterOptions } from './mechAdapter.js';
 export {
   loadConfig,
+  loadPollIntervalMs,
   GREY_DID,
   MARKETPLACE_ADDRESSES,
   BASE_MECH_PAY_TO_ADDRESS,

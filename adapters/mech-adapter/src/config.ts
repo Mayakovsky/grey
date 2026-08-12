@@ -10,6 +10,7 @@
 // are ceremony-generated, address only, never a key in this repo).
 import process from 'node:process';
 import type { Address } from 'viem';
+import type { OfferingSlug } from '@grey/schemas/responses';
 
 /** Grey's on-chain ERC-8004 DID — the unifying identity layer (Base mainnet, tokenId 58618). */
 export const GREY_DID = 'did:erc8004:8453:58618';
@@ -164,6 +165,34 @@ export const BASE_MECH_POOL_WALLET_ADDRESS = '0xB98A06D0D92A429dFeb95438BaE9e624
  *  separate, later decision — not resolved here. */
 export const BASE_MECH_AGENT_INSTANCE_ADDRESS = '0x4391C092cF342C6a8eeCe352712fC0C8df14450d' as const;
 
+/** Real, live, confirmed E3-B1 registration result (BION-E3-B1-LIVE-REGISTRATION-COMPLETE-REPORT-
+ *  KOV.md, 2026-08-11) — same source-literal posture as the addresses above (invariant #16):
+ *  address only, independently re-confirmed against real Base mainnet state (real deployed
+ *  bytecode at both; `MechMarketplace.checkMech(GREY_MECH_ADDRESS)` returns exactly
+ *  `GREY_MECH_MULTISIG_ADDRESS`, cross-confirming both against each other). Service 635, state
+ *  Deployed. Until BION-DIRECTIVE-45, these values existed ONLY in that status report and in fork
+ *  test fixtures (test/taskIntake.anvil.test.ts, test/safeDeliveryClient.anvil.test.ts) — a real
+ *  gap this directive found: a systemd-run main.ts calling `deliverSigned`/`pollAndRespond` for
+ *  real has nowhere else to get either address from. `GREY_MECH_ADDRESS` is specifically the
+ *  address recovered from the real `CreateMech` event AFTER the live-registration report's own
+ *  post-launch bug fix (the script's original printout, `0x15A8303D...`, has zero deployed
+ *  bytecode and is NOT this mech) — see that report for the full trace; do not substitute the
+ *  printed value from an older source. */
+export const GREY_MECH_ADDRESS = '0x1ECFb7c086bCd483cF49405dadA00c3a6294f6A8' as const;
+export const GREY_MECH_MULTISIG_ADDRESS = '0x5587335a6Fa1Dc7C421f2b87D91C7E9def095872' as const;
+
+/** The exact `tools` array committed in `metadata/mech-payload.json` — the real, on-chain-
+ *  referenced tool catalog `GREY_MECH_PAYLOAD_HASH` pins. This is deliberately NOT
+ *  `MECH_OFFERING_SLUGS` (prices.ts), which also includes `daily_tech_brief` — an offering priced
+ *  elsewhere but never published as a mech tool, so a real buyer can never address it through this
+ *  channel. `pollAndRespond`'s `registeredTools` param (and the offerings a live main.ts actually
+ *  registers) should use this list, not the broader prices.ts one, to stay consistent with what's
+ *  really reachable on-chain. */
+export const GREY_MECH_REGISTERED_TOOLS = [
+  'prediction_market_research',
+  'resolution_evidence_compiler',
+] as const satisfies readonly OfferingSlug[];
+
 export interface MechAdapterConfig {
   /** Tier A hot wallet — receives mech task payments. Ceremony-generated, address only. */
   payToAddress: Address;
@@ -217,4 +246,22 @@ export function loadConfig(env: Env = process.env): MechAdapterConfig {
     databaseUrl: required(env, 'GREY_DATABASE_URL'),
     observeOnly: (env.MECH_ADAPTER_OBSERVE_ONLY?.trim() ?? 'true') !== 'false',
   };
+}
+
+/** BION-DIRECTIVE-45 — cadence (ms) main.ts's poll loop calls pollAndRespond on. Deliberately NOT
+ *  a field on MechAdapterConfig: pollAndRespond is a pure fromBlock/toBlock range query with no
+ *  internal cadence of its own (see mechAdapter.ts's file header — cadence is explicitly a
+ *  deployment concern, not this class's job), so this lives alongside loadConfig as its own
+ *  env-parsing function rather than growing the class-consumed config shape for a value the class
+ *  itself never reads. Configurable via env, not hardcoded, matching every other adapter's config
+ *  pattern in this codebase (acp-adapter's ACP_ADAPTER_POLL_INTERVAL_MS, grey-sweeper's
+ *  GREY_SWEEPER_TICK_MS). Default 300_000ms (5 min) mirrors grey-sweeper's own tick — see
+ *  main.ts's header for why that's a reasonable starting cadence for this adapter too. */
+export function loadPollIntervalMs(env: Env = process.env): number {
+  const raw = env.MECH_ADAPTER_POLL_INTERVAL_MS?.trim();
+  const value = raw ? Number(raw) : 300_000;
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`mech-adapter: MECH_ADAPTER_POLL_INTERVAL_MS must be a positive integer, got "${raw}"`);
+  }
+  return value;
 }

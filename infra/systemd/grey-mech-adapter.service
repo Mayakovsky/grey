@@ -1,0 +1,27 @@
+# grey-mech-adapter — the Olas Mech Marketplace (Base) as a ChannelIngress (BION-DIRECTIVE-45).
+# Holds the mech agent-instance signing key AND the Filebase pinning credential, so it runs as its
+# OWN unit, independent of grey-core/grey-sweeper/grey-acp-adapter. Ships INSTALLED-BUT-DISABLED —
+# same posture grey-sweeper and grey-acp-adapter originally shipped under: enabling/starting this
+# unit is a separate, later, explicit Forces act (see EXPANSION-E3-B1-MECH-GO-LIVE-RUNBOOK-FORCES.md),
+# NOT this directive's. Building and installing it disabled is.
+[Unit]
+Description=Grey mech adapter (ChannelIngress — Olas Mech Marketplace, Base)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=grey
+WorkingDirectory=/opt/grey/grey
+ExecStart=/usr/bin/node adapters/mech-adapter/dist/main.js
+EnvironmentFile=/etc/grey/mech-adapter.env
+Restart=on-failure
+RestartSec=5
+
+# Hardening (drop if a probe shows it breaks node/pg; report before removing).
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
