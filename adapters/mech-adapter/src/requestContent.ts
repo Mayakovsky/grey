@@ -36,6 +36,7 @@
 import type { CID } from 'multiformats/cid';
 import { importer } from 'ipfs-unixfs-importer';
 import { MemoryBlockstore } from 'blockstore-core/memory';
+import { CarWriter } from '@ipld/car';
 import type { Hash, Hex } from 'viem';
 
 export interface RequestContent {
@@ -121,19 +122,14 @@ function tryParseRequestContent(text: string): RequestContent | null {
   return json as RequestContent;
 }
 
-/** Derives the bytes32 hash Grey's own response content WOULD get once pinned to IPFS —
- *  empirically verified (file header) to reproduce the real on-chain convention exactly:
- *  directory-wrapped (`metadata.json`), CIDv0, non-raw-leaves (the legacy `ipfs add` defaults the
- *  real observed requests/deliveries were created under, not the newer library defaults, which
- *  differ — verified directly, not assumed).
- *
- *  Deliberately does NOT pin anything to a real IPFS/Filebase service — that's a real external
- *  side effect belonging to the same Kov-computes/Forces-publishes split this repo already uses
- *  for GREY_MECH_CONFIG_HASH/GREY_MECH_PAYLOAD_HASH (computed here, published later, separately —
- *  see config.ts's own doc comment and the D-38-ADDENDUM Filebase pin). A real go-live needs the
- *  content actually published somewhere resolvable before delivering this hash on-chain; this
- *  function only computes what that hash would be. */
-export async function deriveResponseHash(content: string): Promise<Hex> {
+/** Shared core of `deriveResponseHash`/`deriveResponseCar` — runs the real UnixFS import ONCE
+ *  (empirically verified, see the exported functions' own doc comments) and returns everything
+ *  either caller needs: the blockstore holding every real block the import produced, and the real
+ *  root CID. Kept as ONE function rather than two independent implementations so there is no
+ *  possibility of the hash-only path and the CAR-export path silently drifting apart (same
+ *  "ground truth by construction, not a parallel implementation" discipline used elsewhere in this
+ *  package). */
+async function importResponseDag(content: string): Promise<{ blockstore: MemoryBlockstore; rootCid: CID }> {
   const blockstore = new MemoryBlockstore();
   const bytes = new TextEncoder().encode(content);
   let rootCid: CID | undefined;
@@ -147,10 +143,81 @@ export async function deriveResponseHash(content: string): Promise<Hex> {
   if (!rootCid) {
     throw new Error('requestContent: directory-wrapped import produced no root CID');
   }
+  return { blockstore, rootCid };
+}
+
+/** `Blockstore#get()`/`getAll()` return chunked `Generator<Uint8Array> | AsyncGenerator<Uint8Array>`
+ *  values (interface-blockstore's real, documented shape — not a plain `Promise<Uint8Array>`),
+ *  since a real backing store may stream large blocks; `CarWriter`'s own `out` is likewise an
+ *  `AsyncIterable<Uint8Array>` of encoded CAR chunks. Same concatenation need either way — every
+ *  block/CAR this package produces is small (response payloads, not media), so buffering fully in
+ *  memory is the right tradeoff over adding streaming complexity nothing here needs yet. */
+async function drainToBytes(chunks: Iterable<Uint8Array> | AsyncIterable<Uint8Array>): Promise<Uint8Array> {
+  const collected: Uint8Array[] = [];
+  let total = 0;
+  for await (const chunk of chunks) {
+    collected.push(chunk);
+    total += chunk.length;
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of collected) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
+function hashBytes32FromCid(cid: CID): Hex {
   // CIDv0 is base58btc(0x12 0x20 <32-byte sha256 digest>) — decode via the CID class's own
   // multihash rather than hand-rolled base58 (this library already parsed it correctly; no
   // point re-deriving what it already computed).
-  const digestBytes = rootCid.multihash.digest;
-  const hex = Buffer.from(digestBytes).toString('hex');
-  return `0x${hex}` as Hex;
+  return `0x${Buffer.from(cid.multihash.digest).toString('hex')}` as Hex;
+}
+
+/** Derives the bytes32 hash Grey's own response content WOULD get once pinned to IPFS —
+ *  empirically verified (file header) to reproduce the real on-chain convention exactly:
+ *  directory-wrapped (`metadata.json`), CIDv0, non-raw-leaves (the legacy `ipfs add` defaults the
+ *  real observed requests/deliveries were created under, not the newer library defaults, which
+ *  differ — verified directly, not assumed).
+ *
+ *  Deliberately does NOT pin anything to a real IPFS/Filebase service on its own — that's
+ *  `deriveResponseCar` + `responsePinner.ts`'s job (BION-DIRECTIVE-45/47). This function only
+ *  computes what the hash would be; used directly by tests/fixtures that need the real hash
+ *  without needing an exportable CAR alongside it. */
+export async function deriveResponseHash(content: string): Promise<Hex> {
+  const { rootCid } = await importResponseDag(content);
+  return hashBytes32FromCid(rootCid);
+}
+
+/** BION-DIRECTIVE-47 — the same real import as `deriveResponseHash`, but also serializes every
+ *  real block it produced into an actual CAR (Content-Addressable aRchive) file, root-anchored at
+ *  the same CID the hash is derived from. Exists because pinning content via a flat single-object
+ *  upload lets the pinning provider compute (and potentially disagree with) its own CID for it —
+ *  confirmed a REAL problem, not a hypothetical one, against Grey's live Filebase account
+ *  (BION-DIRECTIVE-46-ADDENDUM): Filebase's own computed CID for a flat upload was a completely
+ *  different digest than this exact function's own `deriveResponseHash` computation. A CAR file
+ *  is the standard IPFS mechanism for handing a pinning provider the EXACT DAG (blocks + root) to
+ *  pin verbatim, rather than asking it to (re)compute one — confirmed real and supported by
+ *  Filebase specifically via its S3 API's `import=car` object-metadata flag (its own docs;
+ *  responsePinner.ts cites the exact mechanism). `writer.put()`'s `Promise` does not resolve
+ *  until `out` is drained (documented backpressure in `@ipld/car`, not assumed) — this drains
+ *  `out` concurrently with the writes (an unawaited async IIFE started first), not sequentially
+ *  after, to avoid a real deadlock risk for anything beyond a trivially small CAR. */
+export async function deriveResponseCar(content: string): Promise<{ hashBytes32: Hex; carBytes: Uint8Array }> {
+  const { blockstore, rootCid } = await importResponseDag(content);
+
+  const { writer, out } = await CarWriter.create([rootCid]);
+  const outChunks: Uint8Array[] = [];
+  const drained = (async () => {
+    for await (const chunk of out) outChunks.push(chunk);
+  })();
+  for await (const pair of blockstore.getAll()) {
+    const bytes = await drainToBytes(pair.bytes);
+    await writer.put({ cid: pair.cid, bytes });
+  }
+  await writer.close();
+  await drained;
+
+  return { hashBytes32: hashBytes32FromCid(rootCid), carBytes: await drainToBytes(outChunks) };
 }
