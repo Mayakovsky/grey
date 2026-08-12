@@ -126,7 +126,7 @@ confirmed working together, for real, against the live account. This preconditio
 met — the earlier "BLOCKED" finding from the original flat-upload design (BION-DIRECTIVE-46-
 ADDENDUM) no longer applies to the code actually running on `main`.
 
-## Precondition 3 — the unit's own fork-proof gate is green, on the actual code being deployed
+## Precondition 3 — the unit's own fork-proof gate is green, on the actual code being deployed — **MET** (BION-DIRECTIVE-49, 2026-08-12)
 
 Before enabling, confirm on the VPS (not trusted from a prior local run):
 
@@ -141,6 +141,18 @@ GREY_MECH_ANVIL=1 pnpm --filter @grey/mech-adapter test
 Both the plain unit suite and the `GREY_MECH_ANVIL=1` fork suite (registration, signed delivery,
 full task-intake-with-pinning) must pass on the exact commit being deployed — not assumed carried
 over from Kov's own pre-merge report, since a merge or rebase could in principle introduce drift.
+
+**Real result, on the actual deployed commit (`58e66af` — `main` had moved one commit past what
+D-48 left the VPS at; re-confirmed via `git rev-parse HEAD` before running anything, not
+assumed):** build clean, unit suite **88/88** passed, fork-proof suite **2/2** passed —
+**90/90 total, no anvil previously installed on this box, installed fresh (Foundry v1.7.1) for
+this verification.** Real, not simulated: `safeDeliveryClient.anvil.test.ts` executed a real
+signed `execTransaction` against a real forked Base-mainnet state; `taskIntake.anvil.test.ts` ran
+the full detect→route→pin→sign→deliver loop end to end. Ran carefully given this box hosts live
+production services with real signing keys — RAM checked before/during/after (stable throughout,
+never dropped below ~300Mi free), `grey-core`/`grey-sweeper`/`grey-acp-adapter` independently
+confirmed `active` the whole time, anvil stopped and its install artifacts left in place only as
+harmless static binaries (no process left running).
 
 ## Enabling the unit (does NOT yet permit real writes)
 
@@ -187,7 +199,7 @@ The four preconditions above are not self-certifying — this line is the actual
 ```
 [x] Precondition 1 confirmed — BASE_MECH_AGENT_INSTANCE funded, amount: 0.001 ETH (~4.7 deliveries at sampled gas price, thin margin — see math above), confirmed via eth_getBalance 2026-08-12
 [x] Precondition 2 confirmed — Filebase credential live, verified via the smoke-test script above (real cid f01701220662ff0...c7, vendorCid digest-matched independently), confirmed 2026-08-12
-[ ] Precondition 3 confirmed — fork-proof gate green on the deployed commit: ______
+[x] Precondition 3 confirmed — fork-proof gate green on the deployed commit: 58e66af (90/90: 88 unit + 2 real anvil fork), confirmed 2026-08-12
 [ ] Unit enabled + started, observed clean under observeOnly=true for: ______ (duration)
 [ ] Precondition 4 — Forces says go: flip MECH_ADAPTER_OBSERVE_ONLY=false — signed: ______  date: ______
 ```
