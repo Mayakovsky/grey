@@ -6,7 +6,9 @@
 // against a fake fetch implementation here (no live network in `vitest run`); real network fetch
 // is exercised in the anvil fork test.
 import { describe, it, expect } from 'vitest';
-import { hashToIpfsCid, fetchRequestContent, deriveResponseHash } from '../src/requestContent.js';
+import { CarReader } from '@ipld/car';
+import { sha256 } from 'multiformats/hashes/sha2';
+import { hashToIpfsCid, fetchRequestContent, deriveResponseHash, deriveResponseCar } from '../src/requestContent.js';
 
 const REAL_HASH = '0xc05263b67b6b7814afd7648e311c765b85cec6674d93f2cdc9a75616c0c4a0d8' as const;
 const REAL_CID = 'f01701220c05263b67b6b7814afd7648e311c765b85cec6674d93f2cdc9a75616c0c4a0d8';
@@ -80,5 +82,47 @@ describe('deriveResponseHash (BION-DIRECTIVE-43)', () => {
     const hash = await deriveResponseHash('{"prompt":"something else"}');
     expect(hash).not.toBe(REAL_HASH);
     expect(hash).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+});
+
+describe('deriveResponseCar (BION-DIRECTIVE-47)', () => {
+  it('produces the same hash deriveResponseHash does for the exact real content bytes', async () => {
+    const { hashBytes32 } = await deriveResponseCar(REAL_CONTENT_BYTES);
+    expect(hashBytes32).toBe(REAL_HASH);
+  });
+
+  it('produces a real, valid CAR file — parseable, root-anchored at the computed hash, every block content-addressed correctly', async () => {
+    const { hashBytes32, carBytes } = await deriveResponseCar(REAL_CONTENT_BYTES);
+
+    // A real CAR reader, not a hand-parsed byte check — proves this is an actual valid CAR
+    // container, not just some bytes we happen to also call "carBytes".
+    const reader = await CarReader.fromBytes(carBytes);
+
+    const roots = await reader.getRoots();
+    expect(roots).toHaveLength(1);
+    // The CAR's own root CID digest matches deriveResponseCar's returned hash — the actual
+    // load-bearing property (this is what Filebase pins as x-amz-meta-cid).
+    expect(Buffer.from(roots[0].multihash.digest).toString('hex')).toBe(hashBytes32.slice(2));
+
+    // Content-address integrity: for EVERY block the CAR carries, re-hash its raw bytes with the
+    // real sha2-256 hasher and confirm it equals the block's own claimed CID digest — proves the
+    // CAR doesn't just have the right root pointer, every block inside is genuinely what it says
+    // it is (exactly the property a pinning provider needs to trust when importing it verbatim).
+    let blockCount = 0;
+    for await (const { cid, bytes } of reader.blocks()) {
+      blockCount++;
+      const recomputed = await sha256.digest(bytes);
+      expect(Buffer.from(recomputed.digest).toString('hex')).toBe(Buffer.from(cid.multihash.digest).toString('hex'));
+    }
+    // Exactly two blocks for this content: the file's leaf block + the wrapping directory block
+    // (same real shape requestContent.ts's own header documents for deriveResponseHash).
+    expect(blockCount).toBe(2);
+  });
+
+  it('round-trips different content to different CAR roots (sanity — not a constant)', async () => {
+    const a = await deriveResponseCar(REAL_CONTENT_BYTES);
+    const b = await deriveResponseCar('{"prompt":"something else"}');
+    expect(a.hashBytes32).not.toBe(b.hashBytes32);
+    expect(a.carBytes).not.toEqual(b.carBytes);
   });
 });
