@@ -40,8 +40,8 @@ describe('buildPaymentRequirements — strict-canonical x402', () => {
 
   it('carries per-slug pricing', () => {
     expect(
-      buildPaymentRequirements(TEST_CFG, 'daily_tech_brief', '/r').accepts[0].maxAmountRequired,
-    ).toBe('8000000');
+      buildPaymentRequirements(TEST_CFG, 'verify_whitepaper', '/r').accepts[0].maxAmountRequired,
+    ).toBe('1500000');
     expect(
       buildPaymentRequirements(TEST_CFG, 'quick_protocol_facts', '/r').accepts[0].maxAmountRequired,
     ).toBe('300000');

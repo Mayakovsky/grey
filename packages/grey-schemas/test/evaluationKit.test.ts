@@ -18,11 +18,11 @@ describe('EvaluationKit — Bazaar extension projection (E1-B, Invariant #33)', 
     }
   });
 
-  it('discoverable tracks PRICING_TABLE.enabled — 10 enabled, 2 not-yet-offered (merge-prep ruling)', () => {
+  it('discoverable tracks PRICING_TABLE.enabled — 9 enabled, 3 not-yet-offered (merge-prep ruling + BION-DIRECTIVE-62)', () => {
     const kits = buildAllEvaluationKits();
     const notYetOffered = kits.filter((k) => !k.discoverable).map((k) => k.slug);
-    expect(notYetOffered.sort()).toEqual(['daily_greenlight_list', 'scam_alert_feed']);
-    expect(kits.filter((k) => k.discoverable)).toHaveLength(10);
+    expect(notYetOffered.sort()).toEqual(['daily_greenlight_list', 'daily_tech_brief', 'scam_alert_feed'].sort());
+    expect(kits.filter((k) => k.discoverable)).toHaveLength(9);
   });
 
   it('the 7 paid offerings carry an inputSchema; the 2 free resources do not', () => {

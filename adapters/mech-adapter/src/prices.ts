@@ -9,10 +9,13 @@ import type { OfferingSlug } from '@grey/schemas/responses';
 
 const CHANNEL = 'mech' as const;
 
+// `daily_tech_brief` deliberately excluded (BION-DIRECTIVE-62) — already correctly excluded from
+// GREY_MECH_REGISTERED_TOOLS (config.ts), but this list independently fed listing.ts's
+// buildMechListing() with all three, a real (if inert — never wired to a publish step, D-60)
+// content-accuracy gap. Removed here too so the two lists agree.
 export const MECH_OFFERING_SLUGS = [
   'prediction_market_research',
   'resolution_evidence_compiler',
-  'daily_tech_brief',
 ] as const satisfies readonly OfferingSlug[];
 
 export type MechOfferingSlug = (typeof MECH_OFFERING_SLUGS)[number];

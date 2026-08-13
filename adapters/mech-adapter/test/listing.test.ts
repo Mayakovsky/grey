@@ -5,7 +5,7 @@ import { MECH_OFFERING_SLUGS } from '../src/prices.js';
 describe('buildMechListing — e3-b3 EvaluationKit render (Base)', () => {
   const listing = buildMechListing();
 
-  it('renders exactly the three mech offerings, in MECH_OFFERING_SLUGS order', () => {
+  it('renders exactly the two real mech offerings, in MECH_OFFERING_SLUGS order (BION-DIRECTIVE-62: daily_tech_brief excluded)', () => {
     expect(listing.map((l) => l.slug)).toEqual([...MECH_OFFERING_SLUGS]);
   });
 
@@ -24,7 +24,6 @@ describe('buildMechListing — e3-b3 EvaluationKit render (Base)', () => {
     const byPrice = Object.fromEntries(listing.map((l) => [l.slug, l.priceUsd]));
     expect(byPrice.prediction_market_research).toBeCloseTo(0.065, 10);
     expect(byPrice.resolution_evidence_compiler).toBeCloseTo(0.13, 10);
-    expect(byPrice.daily_tech_brief).toBeCloseTo(5.2, 10);
   });
 
   it('every entry carries a schema-valid sample (evaluation-friction answer, spec §0.2)', () => {
@@ -35,7 +34,7 @@ describe('buildMechListing — e3-b3 EvaluationKit render (Base)', () => {
     }
   });
 
-  it('inputSchema is present for all three (all paid offerings)', () => {
+  it('inputSchema is present for both (all paid offerings)', () => {
     for (const entry of listing) {
       expect(entry.inputSchema).toBeTruthy();
     }

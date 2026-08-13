@@ -8,7 +8,8 @@ import {
   isPaidSlug,
 } from '../src/prices.js';
 
-// The authoritative 7 from OpenAPI x-x402-pricing (invariant #20 = ONE source).
+// The authoritative 6 from OpenAPI x-x402-pricing (invariant #20 = ONE source). daily_tech_brief
+// removed BION-DIRECTIVE-62 — held back entirely (Forces ruling), no longer a paid slug on x402.
 const EXPECTED: Record<string, [string, bigint]> = {
   legitimacy_scan: ['0.25', 250_000n],
   verify_whitepaper: ['1.50', 1_500_000n],
@@ -16,13 +17,18 @@ const EXPECTED: Record<string, [string, bigint]> = {
   claim_extraction: ['0.75', 750_000n],
   claim_history: ['0.25', 250_000n],
   quick_protocol_facts: ['0.30', 300_000n],
-  daily_tech_brief: ['8.00', 8_000_000n],
 };
 
 describe('prices — single price source', () => {
-  it('has exactly the 7 paid slugs', () => {
+  it('has exactly the 6 paid slugs', () => {
     expect([...PAID_SLUGS].sort()).toEqual(Object.keys(EXPECTED).sort());
-    expect(PAID_SLUGS).toHaveLength(7);
+    expect(PAID_SLUGS).toHaveLength(6);
+  });
+
+  it('BION-DIRECTIVE-62: daily_tech_brief is NOT a paid slug on x402 (held back)', () => {
+    expect(isPaidSlug('daily_tech_brief')).toBe(false);
+    expect(() => priceAtomicFor('daily_tech_brief')).toThrow();
+    expect(() => priceUsdFor('daily_tech_brief')).toThrow();
   });
 
   it.each(Object.entries(EXPECTED))('%s: usd + atomic match OpenAPI', (slug, [usd, atomic]) => {

@@ -9,9 +9,17 @@
 // 2026-07-30 session): these are NOT priced gaps to fill, they are not being offered yet, period,
 // pending daily-customer usage data. `canonicalUsd` stays `null` (don't invent a price for
 // something not for sale); `enabled: false` is the actual reason, replacing the earlier "UNPRICED,
-// flagged for Desktop" framing from the E1-A PR, which is now resolved. Table reads as 7 priced +
-// 2 disabled = 9, matching the full handler count (10th is the trust rung, gated separately by
+// flagged for Desktop" framing from the E1-A PR, which is now resolved. Table reads as 6 priced +
+// 3 disabled = 9, matching the full handler count (10th is the trust rung, gated separately by
 // its own runtime disable flag — see below).
+//
+// `daily_tech_brief` is ALSO `enabled: false` as of BION-DIRECTIVE-62 — a different reason from
+// the two above: held back entirely (Forces ruling) until there's revenue to justify rolling it
+// into the continually-operating version of Grey, not an unpriced gap — `canonicalUsd` stays
+// `8.0` (a real, already-decided price for when it's turned back on), unlike the two `null`
+// entries above. D-61 found `enabled` alone only governs listing (MCP tools/discovery); real
+// route/registration reachability is separately gated by grey-core's offerings.ts PAID array and
+// x402-middleware's PAID_SLUG_ORDER — both edited alongside this flag, all three required.
 import type { OfferingSlug } from '../responses/types';
 import type { Channel, ComputeClass, OfferingPricing } from './types';
 
@@ -72,7 +80,7 @@ export const PRICING_TABLE: Record<OfferingSlug, OfferingPricing> = {
     slug: 'daily_tech_brief',
     canonicalUsd: 8.0,
     computeClass: 'CACHE_ONLY',
-    enabled: true,
+    enabled: false,
   },
   // NOT YET OFFERED (merge-prep ruling) — no price, not for sale, pending usage data.
   daily_greenlight_list: {

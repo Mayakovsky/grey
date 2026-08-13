@@ -33,7 +33,16 @@ export interface X402Gate {
 }
 
 // Exported so other surfaces over the SAME x402 rail (e.g. server/routes/mcp.ts, E1-D) reuse this
-// exact list instead of re-declaring it — one place names "the 7 normal paid offerings".
+// exact list instead of re-declaring it — one place names "the 6 normal paid offerings".
+//
+// `daily_tech_brief` deliberately excluded (BION-DIRECTIVE-62) — Forces ruling: held back
+// entirely until there's revenue to justify rolling it into the continually-operating version of
+// Grey, same "not being offered yet, period" posture as `daily_greenlight_list`/`scam_alert_feed`
+// (packages/grey-schemas/src/pricing/table.ts). D-61 found this array (and its independent
+// x402-middleware/prices.ts PAID_SLUG_ORDER counterpart) is the REAL reachability gate for
+// x402/CDP/ACP — PRICING_TABLE.enabled alone only governs listing (MCP tools/discovery), not
+// whether a route/registration actually exists. All three pieces must agree; see that file and
+// PAID_SLUG_ORDER for the other two.
 export const PAID: PaidOfferingSlug[] = [
   'legitimacy_scan',
   'verify_whitepaper',
@@ -41,7 +50,6 @@ export const PAID: PaidOfferingSlug[] = [
   'claim_extraction',
   'claim_history',
   'quick_protocol_facts',
-  'daily_tech_brief',
 ];
 
 export function registerOfferingRoutes(

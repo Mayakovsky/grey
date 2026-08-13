@@ -126,7 +126,7 @@ function decodeHeader<T>(header: string): T {
 describe('cdpSlugFromUrl', () => {
   it('extracts a paid slug from the /v1/cdp/offerings/ prefix', () => {
     expect(cdpSlugFromUrl('/v1/cdp/offerings/legitimacy_scan')).toBe('legitimacy_scan');
-    expect(cdpSlugFromUrl('/v1/cdp/offerings/daily_tech_brief?x=1')).toBe('daily_tech_brief');
+    expect(cdpSlugFromUrl('/v1/cdp/offerings/quick_protocol_facts?x=1')).toBe('quick_protocol_facts');
   });
 
   it('returns null for the primary (non-cdp) route prefix — the two route families are separate', () => {

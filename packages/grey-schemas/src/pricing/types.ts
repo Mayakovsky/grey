@@ -12,10 +12,12 @@ export type ComputeClass = 'CACHE_ONLY' | 'LIVE_ALLOWED' | 'LIVE_PRIORITY';
  * One canonical USD price per offering (spec §2.3, Invariant #31) — channel-agnostic.
  *
  * `enabled: false` (merge-prep ruling, Forces 2026-07-26 session) means the offering is not being
- * sold yet, period — a deliberate not-yet-offered status, not a pricing gap. `canonicalUsd` stays
- * `null` for a disabled offering; don't invent a price for one that isn't for sale. Toggle-on is a
- * separate, later Forces decision (needs daily-customer usage data first per the ruling) — this
- * field is not something Kov or Bion flips.
+ * sold yet, period — a deliberate not-yet-offered status, not a pricing gap. `canonicalUsd`
+ * usually stays `null` for a disabled offering (don't invent a price for one that isn't for
+ * sale) — but this isn't a hard rule: BION-DIRECTIVE-62's `daily_tech_brief` is the real
+ * exception, disabled with a real, already-decided `canonicalUsd` kept intact for when it's
+ * turned back on, since that offering already had a genuine price, not an unpriced gap. Toggle-on
+ * is a separate, later Forces decision — this field is not something Kov or Bion flips.
  */
 export interface OfferingPricing {
   readonly slug: OfferingSlug;
