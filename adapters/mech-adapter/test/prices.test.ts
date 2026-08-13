@@ -10,13 +10,9 @@ describe('mech-adapter prices — Invariant #31 (0.65× resolved at the adapter 
     expect(mechPriceUsdFor('resolution_evidence_compiler')).toBeCloseTo(0.13, 10);
   });
 
-  it('resolves daily_tech_brief at $5.20 (8.00 canonical × 0.65) — exposed, not re-authored', () => {
-    expect(mechPriceUsdFor('daily_tech_brief')).toBeCloseTo(5.2, 10);
-  });
-
-  it('MECH_OFFERING_SLUGS is exactly the three e3-b2 offerings', () => {
+  it('MECH_OFFERING_SLUGS is exactly the two real mech-registered offerings (BION-DIRECTIVE-62: daily_tech_brief excluded)', () => {
     expect([...MECH_OFFERING_SLUGS].sort()).toEqual(
-      ['daily_tech_brief', 'prediction_market_research', 'resolution_evidence_compiler'].sort(),
+      ['prediction_market_research', 'resolution_evidence_compiler'].sort(),
     );
   });
 });

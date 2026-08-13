@@ -86,13 +86,19 @@ describe('pricing — computeClass + canonical table (E1-A, Invariant #30/#31)',
     }
   });
 
-  it('merge-prep ruling: the 2 unpriced offerings are enabled:false (not-yet-offered, not a pricing gap) — 10 priced + 2 disabled = 12', () => {
+  it('merge-prep ruling + BION-DIRECTIVE-62: 3 offerings are enabled:false — 9 enabled + 3 disabled = 12', () => {
     const disabled = ALL_SLUGS.filter((slug) => !isEnabled(slug));
-    expect(disabled.sort()).toEqual(['daily_greenlight_list', 'scam_alert_feed']);
+    expect(disabled.sort()).toEqual(['daily_greenlight_list', 'daily_tech_brief', 'scam_alert_feed'].sort());
     const enabled = ALL_SLUGS.filter((slug) => isEnabled(slug));
-    // 7 priced + the trust rung (priced, gated by its own runtime flag) + the 2 e3-b2 offerings.
-    expect(enabled).toHaveLength(10);
+    // 6 priced (daily_tech_brief moved to disabled) + the trust rung (priced, gated by its own
+    // runtime flag) + the 2 e3-b2 offerings.
+    expect(enabled).toHaveLength(9);
     expect(isEnabled('legitimacy_scan_trust_rung')).toBe(true); // static table says "real offering"; route reachability is a separate runtime flag
+  });
+
+  it('BION-DIRECTIVE-62: daily_tech_brief is disabled but keeps its real canonicalUsd (unlike the two null-priced offerings — held back, not unpriced)', () => {
+    expect(isEnabled('daily_tech_brief')).toBe(false);
+    expect(PRICING_TABLE.daily_tech_brief.canonicalUsd).toBe(8.0);
   });
 
   it('networkMultiplier resolves to 1.00 for both live channels today (Invariant #31)', () => {

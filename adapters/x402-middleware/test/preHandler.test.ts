@@ -63,7 +63,7 @@ function gate(clients: {
 describe('slugFromUrl', () => {
   it('extracts a paid slug', () => {
     expect(slugFromUrl('/v1/offerings/legitimacy_scan')).toBe('legitimacy_scan');
-    expect(slugFromUrl('/v1/offerings/daily_tech_brief?x=1')).toBe('daily_tech_brief');
+    expect(slugFromUrl('/v1/offerings/quick_protocol_facts?x=1')).toBe('quick_protocol_facts');
   });
   it('returns null for non-paid / unknown', () => {
     expect(slugFromUrl('/v1/resources/scam_alert_feed')).toBeNull();

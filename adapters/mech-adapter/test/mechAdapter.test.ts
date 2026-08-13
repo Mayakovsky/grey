@@ -140,7 +140,7 @@ describe('MechAdapter — ChannelIngress contract', () => {
     expect(executeCreateMech).not.toHaveBeenCalled();
   });
 
-  it('e3-b2: registers all three mech offerings at their 0.65× resolved prices', () => {
+  it('e3-b2: registers both real mech offerings at their 0.65× resolved prices (BION-DIRECTIVE-62: daily_tech_brief excluded)', () => {
     const adapter = new MechAdapter({
       config: CONFIG,
       marketplaceClient: fakeMarketplaceClient(),
@@ -154,7 +154,6 @@ describe('MechAdapter — ChannelIngress contract', () => {
     const byPrice = Object.fromEntries(registered.map((o) => [o.slug, o.priceUsd]));
     expect(byPrice.prediction_market_research).toBeCloseTo(0.065, 10);
     expect(byPrice.resolution_evidence_compiler).toBeCloseTo(0.13, 10);
-    expect(byPrice.daily_tech_brief).toBeCloseTo(5.2, 10);
   });
 
   it('start() calls the injected client, not a real network (proves the seam works)', async () => {

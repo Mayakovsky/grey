@@ -33,6 +33,7 @@ const gate = {
   }),
 };
 
+// daily_tech_brief removed BION-DIRECTIVE-62 — held back entirely (Forces ruling), no route.
 const PRICE: Record<string, string> = {
   legitimacy_scan: '250000',
   verify_whitepaper: '1500000',
@@ -40,7 +41,6 @@ const PRICE: Record<string, string> = {
   claim_extraction: '750000',
   claim_history: '250000',
   quick_protocol_facts: '300000',
-  daily_tech_brief: '8000000',
 };
 
 const TOKEN = '0x1111111111111111111111111111111111111111';
@@ -54,10 +54,9 @@ const PAYLOAD: Record<string, object> = {
   claim_extraction: { whitepaperUrl: 'https://uniswap.org/whitepaper.pdf' },
   claim_history: { projectIdentifier: 'Uniswap' },
   quick_protocol_facts: { projectQuery: 'Uniswap' },
-  daily_tech_brief: {},
 };
 
-describe('x402 gate on the 7 paid routes', () => {
+describe('x402 gate on the 6 paid routes', () => {
   it.each(Object.keys(PRICE))(
     'POST /v1/offerings/%s without payment → 402 + exact-scheme requirements',
     async (slug) => {
@@ -82,8 +81,7 @@ describe('x402 gate on the 7 paid routes', () => {
   // CDP/Bazaar alignment Phase 1, Task 2: the gap the audit report found — a probe that doesn't
   // already know the required body shape (no payment, empty/schema-invalid body) must still get a
   // 402 carrying the Bazaar metadata, not a 400 that never reaches the payment gate at all. Every
-  // offering here has SOME way to violate its schema even with no required fields
-  // (daily_tech_brief has none, so its "malformed" case is an additionalProperties:false trip).
+  // offering here has SOME way to violate its schema even with no required fields.
   const MALFORMED: Record<string, object> = {
     legitimacy_scan: {}, // missing required token_address
     verify_whitepaper: {}, // missing required token_address
@@ -91,7 +89,6 @@ describe('x402 gate on the 7 paid routes', () => {
     claim_extraction: {}, // missing required whitepaperUrl
     claim_history: {}, // missing required projectIdentifier
     quick_protocol_facts: {}, // missing required projectQuery
-    daily_tech_brief: { bogus_field: true }, // no required fields; additionalProperties:false trips instead
   };
 
   it.each(Object.keys(PRICE))(
@@ -129,6 +126,17 @@ describe('x402 gate on the 7 paid routes', () => {
     const app = makeApp({}, gate);
     const res = await app.inject({ method: 'GET', url: '/v1/resources/scam_alert_feed' });
     expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('BION-DIRECTIVE-62: POST /v1/offerings/daily_tech_brief 404s — the route no longer exists (real exposure, not just gated off)', async () => {
+    const app = makeApp({}, gate);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/offerings/daily_tech_brief',
+      payload: {},
+    });
+    expect(res.statusCode).toBe(404);
     await app.close();
   });
 });

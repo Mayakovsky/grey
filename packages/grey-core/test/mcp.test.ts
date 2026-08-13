@@ -32,16 +32,17 @@ describe('MCP — initialize + tools/list (E1-D)', () => {
     expect(body.result.capabilities.tools).toBeDefined();
   });
 
-  it('tools/list projects the SAME EvaluationKit source as the HTTP surface — 7 tools: never the trust rung, never a not-yet-offered offering', async () => {
+  it('tools/list projects the SAME EvaluationKit source as the HTTP surface — 6 tools: never the trust rung, never a not-yet-offered offering', async () => {
     const app = makeApp({}, undefined, { mcp: mcpDeps });
     const res = await app.inject({ method: 'POST', url: '/v1/mcp', payload: rpc('tools/list') });
     const body = res.json();
-    expect(body.result.tools).toHaveLength(7);
+    expect(body.result.tools).toHaveLength(6);
     const names = body.result.tools.map((t: { name: string }) => t.name);
     expect(names).toContain('legitimacy_scan');
     expect(names).not.toContain('legitimacy_scan_trust_rung');
     expect(names).not.toContain('daily_greenlight_list'); // merge-prep: not-yet-offered
     expect(names).not.toContain('scam_alert_feed'); // merge-prep: not-yet-offered
+    expect(names).not.toContain('daily_tech_brief'); // BION-DIRECTIVE-62: held back entirely
     const legit = body.result.tools.find((t: { name: string }) => t.name === 'legitimacy_scan');
     expect(legit.inputSchema).toBeTruthy();
     expect(typeof legit.description).toBe('string');
@@ -61,9 +62,9 @@ describe('MCP — initialize + tools/list (E1-D)', () => {
 // the not-yet-offered test below). If a future offering ships free+enabled, add a tools/call
 // happy-path test against that slug here.
 describe('MCP — tools/call (E1-D)', () => {
-  it('merge-prep ruling: not-yet-offered offerings cannot be called by name, same as the trust rung', async () => {
+  it('merge-prep ruling + BION-DIRECTIVE-62: not-yet-offered offerings cannot be called by name, same as the trust rung', async () => {
     const app = makeApp({}, undefined, { mcp: mcpDeps });
-    for (const name of ['daily_greenlight_list', 'scam_alert_feed']) {
+    for (const name of ['daily_greenlight_list', 'scam_alert_feed', 'daily_tech_brief']) {
       const res = await app.inject({
         method: 'POST',
         url: '/v1/mcp',

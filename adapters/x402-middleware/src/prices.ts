@@ -23,6 +23,10 @@ function usdLabel(usd: number): string {
   return usd.toFixed(2);
 }
 
+// `daily_tech_brief` deliberately excluded (BION-DIRECTIVE-62) — see the identical exclusion (and
+// its full reasoning) in grey-core's offerings.ts PAID array, which this list mirrors. Kept in
+// sync by convention, not derivation — both must be edited together (D-61's own finding: this is
+// the real gate for ACP via PAID_SLUGS, independent of PAID above).
 const PAID_SLUG_ORDER: PaidSlug[] = [
   'legitimacy_scan',
   'verify_whitepaper',
@@ -30,7 +34,6 @@ const PAID_SLUG_ORDER: PaidSlug[] = [
   'claim_extraction',
   'claim_history',
   'quick_protocol_facts',
-  'daily_tech_brief',
 ];
 
 /** Derived from @grey/schemas/pricing — NOT the source. Kept as a stable {usd,atomic} shape for
