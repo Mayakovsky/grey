@@ -664,6 +664,83 @@ describe('MechAdapter — ChannelIngress contract', () => {
       }
     });
 
+    it('BION-DIRECTIVE-58: threads requestContentGatewayUrl through to the request-content fetch', async () => {
+      const handler = vi.fn(async () => ({ payload: { answer: 'yes' }, subject: {} as never, cacheHit: true }));
+      const OVERRIDE_GATEWAY = 'https://ipfs.io';
+
+      const adapter = new MechAdapter({
+        config: { ...CONFIG, observeOnly: false },
+        marketplaceClient: fakeMarketplaceClient(),
+        safeDeliveryClient: fakeSafeDeliveryClient({ buildSignedDelivery: vi.fn(async () => fakeSignedDelivery()) }),
+        publicClient: fakePublicClient([
+          {
+            args: { priorityMech: FAKE_MECH, requester: REQUESTER, numRequests: 1n, requestIds: [REQUEST_ID], requestDatas: [REQUEST_DATA] },
+            blockNumber: 100n,
+            transactionHash: `0x${'44'.repeat(32)}`,
+          },
+        ]),
+        handlers: { prediction_market_research: handler } as never,
+        handlerDeps: {} as never,
+        responsePinner: createStubResponsePinner(),
+        requestContentGatewayUrl: OVERRIDE_GATEWAY,
+        logger: silentLogger(),
+      });
+
+      const fetchedUrls: string[] = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (url: string | URL) => {
+        fetchedUrls.push(String(url));
+        return new Response(JSON.stringify({ prompt: 'q', tool: 'prediction_market_research', nonce: 'n', schema_version: '2.0', request_context: null }));
+      }) as typeof fetch;
+      try {
+        const result = await adapter.pollAndRespond(FAKE_MECH, MARKETPLACE, 90n, 110n, ['prediction_market_research'] as never);
+        expect(result.routingErrors).toEqual([]);
+        expect(result.routed).toHaveLength(1);
+        expect(fetchedUrls).toHaveLength(1);
+        expect(fetchedUrls[0].startsWith(OVERRIDE_GATEWAY)).toBe(true);
+        expect(fetchedUrls[0].includes('gateway.autonolas.tech')).toBe(false);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('BION-DIRECTIVE-58: falls back to the real default gateway when requestContentGatewayUrl is unset', async () => {
+      const handler = vi.fn(async () => ({ payload: { answer: 'yes' }, subject: {} as never, cacheHit: true }));
+
+      const adapter = new MechAdapter({
+        config: { ...CONFIG, observeOnly: false },
+        marketplaceClient: fakeMarketplaceClient(),
+        safeDeliveryClient: fakeSafeDeliveryClient({ buildSignedDelivery: vi.fn(async () => fakeSignedDelivery()) }),
+        publicClient: fakePublicClient([
+          {
+            args: { priorityMech: FAKE_MECH, requester: REQUESTER, numRequests: 1n, requestIds: [REQUEST_ID], requestDatas: [REQUEST_DATA] },
+            blockNumber: 100n,
+            transactionHash: `0x${'44'.repeat(32)}`,
+          },
+        ]),
+        handlers: { prediction_market_research: handler } as never,
+        handlerDeps: {} as never,
+        responsePinner: createStubResponsePinner(),
+        // requestContentGatewayUrl deliberately omitted.
+        logger: silentLogger(),
+      });
+
+      const fetchedUrls: string[] = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (url: string | URL) => {
+        fetchedUrls.push(String(url));
+        return new Response(JSON.stringify({ prompt: 'q', tool: 'prediction_market_research', nonce: 'n', schema_version: '2.0', request_context: null }));
+      }) as typeof fetch;
+      try {
+        const result = await adapter.pollAndRespond(FAKE_MECH, MARKETPLACE, 90n, 110n, ['prediction_market_research'] as never);
+        expect(result.routingErrors).toEqual([]);
+        expect(fetchedUrls).toHaveLength(1);
+        expect(fetchedUrls[0].startsWith('https://gateway.autonolas.tech')).toBe(true);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
     it('isolates a routing failure — one bad request does not block the rest, and nothing delivers if all fail', async () => {
       const buildSignedDelivery = vi.fn();
       const adapter = new MechAdapter({
