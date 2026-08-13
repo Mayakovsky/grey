@@ -68,22 +68,30 @@ lag, not an unauthorized or accidental enable. Full investigation:
   (low-risk call, no external interaction with the agent yet beyond internal testing — revisit if
   that changes).
 
-## Mech adapter — built, installed, DISABLED (BION-DIRECTIVE-45)
+## Mech adapter — LIVE since 2026-08-13 (BION-DIRECTIVE-52), `observeOnly` still true
 
-`grey-mech-adapter` is the ChannelIngress for Grey's real, live-registered Olas mech
-(`0x1ECFb7c086bCd483cF49405dadA00c3a6294f6A8`, serviceId 635 — see `BION-E3-B1-LIVE-REGISTRATION-
-COMPLETE-REPORT-KOV.md`). It has its own systemd unit (`infra/systemd/grey-mech-adapter.service`,
-`EnvironmentFile=/etc/grey/mech-adapter.env`) because it holds two real, isolated hot credentials —
-`BASE_MECH_AGENT_INSTANCE_PRIVATE_KEY` (the multisig's sole signer) and the new Filebase pinning
-credential (`MECH_ADAPTER_FILEBASE_*`) — same "own unit, independent of grey-core/grey-sweeper/
-grey-acp-adapter" posture every other signing capability in this repo uses.
+`grey-mech-adapter` is the ChannelIngress for Grey's real, live-registered Olas mech,
+**`0x1a2A7b94726B0711E5365C0D73E79C77a9256Ad7`** (serviceId 635). This is a *corrected*
+registration (BION-DIRECTIVE-55, 2026-08-13) — the original mech,
+`0x1ECFb7c086bCd483cF49405dadA00c3a6294f6A8` (see the original `BION-E3-B1-LIVE-REGISTRATION-
+COMPLETE-REPORT-KOV.md`), is **permanently inert**: its `maxDeliveryRate` was accidentally set to
+an IPFS metadata hash reinterpreted as a number (~1.14×10⁴¹ ETH) at original registration time,
+is immutable, and no removal mechanism exists in the protocol. It's real, on-chain, and still
+discoverable — just structurally unable to ever receive a valid payment. Don't reference it as
+Grey's live mech anywhere. It has its own systemd unit
+(`infra/systemd/grey-mech-adapter.service`, `EnvironmentFile=/etc/grey/mech-adapter.env`) because
+it holds two real, isolated hot credentials — `BASE_MECH_AGENT_INSTANCE_PRIVATE_KEY` (the
+multisig's sole signer) and the Filebase pinning credential (`MECH_ADAPTER_FILEBASE_*`) — same
+"own unit, independent of grey-core/grey-sweeper/grey-acp-adapter" posture every other signing
+capability in this repo uses.
 
-**Ships installed but `disabled`, not started — same as grey-sweeper and grey-acp-adapter
-originally shipped.** Enabling it is a separate, later, explicit Forces act, gated on real
-preconditions (funding `BASE_MECH_AGENT_INSTANCE` with real ETH, a live Filebase credential, the
-unit's own fork-proof gate green) — see `EXPANSION-E3-B1-MECH-GO-LIVE-RUNBOOK-FORCES.md` for the full
-checklist. Installing the unit/env file does NOT make it live: `MECH_ADAPTER_OBSERVE_ONLY` defaults
-`true` regardless, and the unit isn't running at all until explicitly `enable`d + `start`ed.
+**`enabled` + `active` on the VPS** (BION-DIRECTIVE-52, real startup banner confirmed clean, no
+crash-loop, stable past multiple poll ticks) — detecting, routing, pinning, and *simulating*
+delivery for any real request that lands, but `MECH_ADAPTER_OBSERVE_ONLY` still defaults `true`,
+so no real `execTransaction` has ever been submitted through this channel for a task delivery.
+Flipping that is still a separate, later, explicit Forces act — see
+`EXPANSION-E3-B1-MECH-GO-LIVE-RUNBOOK-FORCES.md` for the full checklist (Preconditions 1–3 all
+met with real evidence as of D-49; Precondition 4, the `observeOnly` flip itself, is what remains).
 
 ```bash
 # On unit-file change only:

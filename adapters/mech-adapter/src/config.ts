@@ -165,20 +165,38 @@ export const BASE_MECH_POOL_WALLET_ADDRESS = '0xB98A06D0D92A429dFeb95438BaE9e624
  *  separate, later decision — not resolved here. */
 export const BASE_MECH_AGENT_INSTANCE_ADDRESS = '0x4391C092cF342C6a8eeCe352712fC0C8df14450d' as const;
 
-/** Real, live, confirmed E3-B1 registration result (BION-E3-B1-LIVE-REGISTRATION-COMPLETE-REPORT-
- *  KOV.md, 2026-08-11) — same source-literal posture as the addresses above (invariant #16):
- *  address only, independently re-confirmed against real Base mainnet state (real deployed
- *  bytecode at both; `MechMarketplace.checkMech(GREY_MECH_ADDRESS)` returns exactly
- *  `GREY_MECH_MULTISIG_ADDRESS`, cross-confirming both against each other). Service 635, state
- *  Deployed. Until BION-DIRECTIVE-45, these values existed ONLY in that status report and in fork
- *  test fixtures (test/taskIntake.anvil.test.ts, test/safeDeliveryClient.anvil.test.ts) — a real
- *  gap this directive found: a systemd-run main.ts calling `deliverSigned`/`pollAndRespond` for
- *  real has nowhere else to get either address from. `GREY_MECH_ADDRESS` is specifically the
- *  address recovered from the real `CreateMech` event AFTER the live-registration report's own
- *  post-launch bug fix (the script's original printout, `0x15A8303D...`, has zero deployed
- *  bytecode and is NOT this mech) — see that report for the full trace; do not substitute the
- *  printed value from an older source. */
-export const GREY_MECH_ADDRESS = '0x1ECFb7c086bCd483cF49405dadA00c3a6294f6A8' as const;
+/** SUPERSEDED (BION-DIRECTIVE-55, 2026-08-13) — kept only as a documented, permanent dead end, NOT
+ *  used anywhere in this codebase anymore. The original E3-B1 registration (BION-E3-B1-LIVE-
+ *  REGISTRATION-COMPLETE-REPORT-KOV.md, 2026-08-11) passed `GREY_MECH_PAYLOAD_HASH` (an IPFS
+ *  metadata hash) into `MechFactoryFixedPriceNative.createMech()`'s `payload` argument — but that
+ *  argument is a raw `uint256` delivery rate, not a metadata reference (BION-DIRECTIVE-51's real,
+ *  primary-source-traced finding). The call succeeded (any 32 bytes decodes as *some* uint256),
+ *  silently setting this mech's `maxDeliveryRate()` to the hash reinterpreted as a number —
+ *  ~1.14×10⁴¹ ETH, more than the total ETH supply, permanently unpayable. No setter exists
+ *  anywhere in `MechFixedPriceBase`/`OlasMech` — this is immutable, and no removal/deprecation
+ *  function exists anywhere in the protocol (confirmed, BION-DIRECTIVE-53). **This address is
+ *  real, permanently on-chain, permanently discoverable via the real subgraph — and permanently
+ *  unable to ever receive a valid payment.** Left alone deliberately (BION-DIRECTIVE-53 Task 5's
+ *  recommendation) — there is no real removal mechanism to use even if leaving it were not the
+ *  right call. Do not reference this address anywhere a live mech identity is needed. */
+export const GREY_MECH_ADDRESS_ORIGINAL_INERT = '0x1ECFb7c086bCd483cF49405dadA00c3a6294f6A8' as const;
+
+/** The real, live, corrected mech (BION-DIRECTIVE-55, 2026-08-13) — replaces
+ *  `GREY_MECH_ADDRESS_ORIGINAL_INERT` above. Registered via a real, signed Safe `execTransaction`
+ *  (the real multisig, `GREY_MECH_MULTISIG_ADDRESS` below, calling `MechMarketplace.create(635,
+ *  NATIVE_FACTORY, abi.encode(uint256(69094909831143)))`), fork-proven first (a local anvil fork
+ *  of real Base-mainnet state), then executed for real: tx
+ *  `0xaafc49ccb21fa8f8d1a24319d5532e9bfb9fdf0c1cb5dd72c6b18a3a54513e3b`. `maxDeliveryRate()`
+ *  independently re-read after execution and confirmed exactly `69094909831143` wei (~$0.13 at
+ *  the ETH/USD rate BION-DIRECTIVE-53 Task 2 used) — the higher of Grey's two real mech-registered
+ *  offerings ($0.065/$0.13), chosen so neither is underpriced, since a `FixedPriceNative` mech
+ *  can only charge one flat rate for every request (BION-DIRECTIVE-54's finding; Option A — one
+ *  corrected mech, not two — was chosen specifically because a second mech under the same service
+ *  would collide in the real subgraph's `serviceId`-keyed `Mech`-entity indexing and not actually
+ *  deliver independent discoverability, BION-DIRECTIVE-54). Same real service (635), same real
+ *  multisig, same real `configHash` (shared at the service level, not per-mech — BION-DIRECTIVE-54
+ *  Task 2) as the original, now-inert mech above. */
+export const GREY_MECH_ADDRESS = '0x1a2A7b94726B0711E5365C0D73E79C77a9256Ad7' as const;
 export const GREY_MECH_MULTISIG_ADDRESS = '0x5587335a6Fa1Dc7C421f2b87D91C7E9def095872' as const;
 
 /** The exact `tools` array committed in `metadata/mech-payload.json` — the real, on-chain-
