@@ -200,9 +200,10 @@ The four preconditions above are not self-certifying — this line is the actual
 [x] Precondition 1 confirmed — BASE_MECH_AGENT_INSTANCE funded, amount: 0.001 ETH (~4.7 deliveries at sampled gas price, thin margin — see math above), confirmed via eth_getBalance 2026-08-12
 [x] Precondition 2 confirmed — Filebase credential live, verified via the smoke-test script above (real cid f01701220662ff0...c7, vendorCid digest-matched independently), confirmed 2026-08-12
 [x] Precondition 3 confirmed — fork-proof gate green on the deployed commit: 58e66af (90/90: 88 unit + 2 real anvil fork), confirmed 2026-08-12
-[ ] Unit enabled + started, observed clean under observeOnly=true for: ______ (duration)
-[ ] Precondition 4 — Forces says go: flip MECH_ADAPTER_OBSERVE_ONLY=false — signed: ______  date: ______
+[x] Unit enabled + started, observed clean under observeOnly=true — enabled BION-DIRECTIVE-52 (2026-08-12), observed clean (real requests detected/routed/pinned/simulate-delivered, no errors) through BION-DIRECTIVE-56/57/58's self-test track, roughly 24 hours of clean simulate-only running before the flip
+[x] Precondition 4 — Forces says go: flip MECH_ADAPTER_OBSERVE_ONLY=false — Forces edited /etc/grey/mech-adapter.env directly and instructed Kov to proceed, 2026-08-13 (BION-DIRECTIVE-59). Real, non-simulated delivery confirmed the same day: tx 0x64eab064e6207b0d0b0c32c95aba6da816b4dbb5ff6554ebdf60599b0ec98c2c, independently verified (getRequestStatus=Delivered, real IPFS content resolved and matched, numTotalDeliveries()=1). Full detail: bion/_internal/BION-E3-B1-MECH-GO-LIVE-COMPLETE-REPORT-KOV.md
 ```
 
-Nothing past this line runs without that explicit signature — same standing posture as every other
-real-money capability this project has shipped.
+**All four preconditions met. This runbook is closed out — E3-B1 go-live is genuinely complete,**
+not a hedge. Retained here as the historical record of how each precondition was actually met, not
+as a pending checklist.

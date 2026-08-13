@@ -68,7 +68,7 @@ lag, not an unauthorized or accidental enable. Full investigation:
   (low-risk call, no external interaction with the agent yet beyond internal testing — revisit if
   that changes).
 
-## Mech adapter — LIVE since 2026-08-13 (BION-DIRECTIVE-52), `observeOnly` still true
+## Mech adapter — FULLY LIVE since 2026-08-13 (BION-DIRECTIVE-59), `observeOnly=false`
 
 `grey-mech-adapter` is the ChannelIngress for Grey's real, live-registered Olas mech,
 **`0x1a2A7b94726B0711E5365C0D73E79C77a9256Ad7`** (serviceId 635). This is a *corrected*
@@ -85,13 +85,16 @@ multisig's sole signer) and the Filebase pinning credential (`MECH_ADAPTER_FILEB
 "own unit, independent of grey-core/grey-sweeper/grey-acp-adapter" posture every other signing
 capability in this repo uses.
 
-**`enabled` + `active` on the VPS** (BION-DIRECTIVE-52, real startup banner confirmed clean, no
-crash-loop, stable past multiple poll ticks) — detecting, routing, pinning, and *simulating*
-delivery for any real request that lands, but `MECH_ADAPTER_OBSERVE_ONLY` still defaults `true`,
-so no real `execTransaction` has ever been submitted through this channel for a task delivery.
-Flipping that is still a separate, later, explicit Forces act — see
-`EXPANSION-E3-B1-MECH-GO-LIVE-RUNBOOK-FORCES.md` for the full checklist (Preconditions 1–3 all
-met with real evidence as of D-49; Precondition 4, the `observeOnly` flip itself, is what remains).
+**`enabled` + `active` on the VPS, `MECH_ADAPTER_OBSERVE_ONLY=false`** (BION-DIRECTIVE-59,
+2026-08-13, real startup banner confirmed clean, stable past multiple poll ticks) — detecting,
+routing, pinning, and **really delivering** real requests: Grey's first-ever non-simulated
+`execTransaction` to `deliverToMarketplace` succeeded that same day (tx
+`0x64eab064e6207b0d0b0c32c95aba6da816b4dbb5ff6554ebdf60599b0ec98c2c`), independently confirmed via
+`getRequestStatus` reading `Delivered`, the real IPFS response content resolving and matching, and
+`numTotalDeliveries()` on the mech contract reading `1`. Full detail:
+`bion/_internal/BION-E3-B1-MECH-GO-LIVE-COMPLETE-REPORT-KOV.md`. All four preconditions in
+`EXPANSION-E3-B1-MECH-GO-LIVE-RUNBOOK-FORCES.md` are met — that runbook is now fully closed out,
+not a pending checklist.
 
 ```bash
 # On unit-file change only:
@@ -106,7 +109,12 @@ Required env (`/etc/grey/mech-adapter.env`, root-only `600`, Forces-authored on-
 `MECH_ADAPTER_OBSERVE_ONLY`, `MECH_ADAPTER_POLL_INTERVAL_MS`,
 `BASE_MECH_AGENT_INSTANCE_PRIVATE_KEY`, `MECH_ADAPTER_FILEBASE_ACCESS_KEY_ID`,
 `MECH_ADAPTER_FILEBASE_SECRET_ACCESS_KEY`, `MECH_ADAPTER_FILEBASE_BUCKET`
-(optionally `MECH_ADAPTER_PIN_VERIFY_GATEWAY_URL`).
+(optionally `MECH_ADAPTER_PIN_VERIFY_GATEWAY_URL` — currently set to `https://ipfs.io` in
+production. BION-DIRECTIVE-58: this ONE var now covers BOTH real gateway-dependent legs — the
+response-pin-verify check `responsePinner.ts` runs, and the request-content-fetch
+`taskIntake.ts`/`requestContent.ts` uses to read what an incoming request actually asks for.
+Deliberately unified, not two separate vars — see `mechAdapter.ts`'s `requestContentGatewayUrl`
+doc comment for the reasoning).
 
 ## Firewall
 Port 3002 stays **firewalled** this phase — verify via on-box `curl` / SSH tunnel only. Public
