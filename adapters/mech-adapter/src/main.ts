@@ -41,11 +41,17 @@ import { mechPriceUsdFor } from './prices.js';
 import { MechAdapter } from './mechAdapter.js';
 import { createLogger } from './logger.js';
 
-/** Independent-of-Filebase gateway used for post-pin verification (responsePinner.ts's own
- *  design). Env-overridable — same "an outage shouldn't require a code change" reasoning as
- *  BASE_RPC_URL_FALLBACK elsewhere in this codebase — defaults to the same gateway this adapter
- *  already trusts for request-content fetches (requestContent.ts, config.ts's own precedent). */
-function loadPinVerifyGatewayUrl(env: NodeJS.ProcessEnv): string | undefined {
+/** Independent-of-`gateway.autonolas.tech` gateway, env-overridable — same "an outage shouldn't
+ *  require a code change" reasoning as BASE_RPC_URL_FALLBACK elsewhere in this codebase. Used for
+ *  BOTH real gateway-dependent legs this package has: post-pin verification (responsePinner.ts)
+ *  and, since BION-DIRECTIVE-58, fetching an incoming request's real content
+ *  (mechAdapter.ts's `requestContentGatewayUrl` -> taskIntake.ts's routeRequest ->
+ *  requestContent.ts's fetchRequestContent). Deliberately ONE env var for both, not two: D-57's
+ *  self-test found `gateway.autonolas.tech` itself genuinely degraded (not a per-leg quirk — the
+ *  gateway's actual IPFS-resolution backend was failing full stop, confirmed via three independent
+ *  checks), so an operator routing around a real gateway outage wants one flip that covers
+ *  everything gateway-dependent, not two separate switches to remember and keep in sync. */
+function loadGatewayOverride(env: NodeJS.ProcessEnv): string | undefined {
   return env.MECH_ADAPTER_PIN_VERIFY_GATEWAY_URL?.trim() || undefined;
 }
 
@@ -130,9 +136,10 @@ async function main(): Promise<void> {
   const deps = createHandlerDeps({ databaseUrl: config.databaseUrl });
   const publicClient = createPublicClient({ chain: base, transport: http(config.rpcUrl) });
   const safeDeliveryClient = createSafeDeliveryClient(config.rpcUrl, GREY_MECH_MULTISIG_ADDRESS, agentInstanceAccount);
+  const gatewayOverride = loadGatewayOverride(process.env);
   const responsePinner = createFilebasePinner({
     credentials: filebaseCredentials,
-    gatewayBaseUrl: loadPinVerifyGatewayUrl(process.env),
+    gatewayBaseUrl: gatewayOverride,
   });
 
   const adapter = new MechAdapter({
@@ -140,6 +147,7 @@ async function main(): Promise<void> {
     publicClient,
     safeDeliveryClient,
     responsePinner,
+    requestContentGatewayUrl: gatewayOverride,
     handlers: offeringHandlers,
     handlerDeps: deps,
     logger: log,

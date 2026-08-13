@@ -219,6 +219,17 @@ export interface MechAdapterOptions {
    *  `createFilebasePinner` (responsePinner.ts) in production, `createStubResponsePinner` or a
    *  fake in tests. */
   responsePinner?: ResponsePinner;
+  /** BION-DIRECTIVE-58 — independent-of-`gateway.autonolas.tech` gateway for fetching an incoming
+   *  request's real content (`requestContent.ts`'s `fetchRequestContent`, called from
+   *  `taskIntake.ts`'s `routeRequest`). Mirrors `responsePinner`'s own `gatewayBaseUrl` override
+   *  (main.ts's `loadGatewayOverride`) — this is the same real gap on the intake side: D-57's
+   *  self-test found `gateway.autonolas.tech` itself genuinely degraded (confirmed via three
+   *  independent checks — Filebase's own pin-status, two other public gateways resolving fine,
+   *  and a real 504/context-deadline-exceeded from this one specifically), and this fetch had no
+   *  override path at all until now, unlike the response-pin-verify leg. Undefined → `taskIntake.ts`
+   *  keeps `fetchRequestContent`'s own hardcoded default, same "an outage shouldn't require a code
+   *  change, but only for whoever set the override" posture as the pin-verify leg. */
+  requestContentGatewayUrl?: string;
   logger?: AdapterLogger;
   /** `waitForServiceVisible`'s poll knobs (BION-DIRECTIVE-32) — overridable so tests can exercise
    *  the wait/timeout logic without real delays. Defaults match the real-world lag this was
@@ -276,6 +287,7 @@ export class MechAdapter implements ChannelIngress {
   private readonly handlers?: Record<OfferingSlug, OfferingHandler>;
   private readonly handlerDeps?: HandlerDeps;
   private readonly responsePinner?: ResponsePinner;
+  private readonly requestContentGatewayUrl?: string;
   private readonly log: AdapterLogger;
   private readonly offerings: OfferingRegistration[] = [];
   private readonly serviceVisibilityPoll: { maxAttempts: number; delayMs: number };
@@ -290,6 +302,7 @@ export class MechAdapter implements ChannelIngress {
     this.handlers = opts.handlers;
     this.handlerDeps = opts.handlerDeps;
     this.responsePinner = opts.responsePinner;
+    this.requestContentGatewayUrl = opts.requestContentGatewayUrl;
     this.log = opts.logger ?? createLogger({ component: 'mech-adapter' });
     this.serviceVisibilityPoll = opts.serviceVisibilityPoll ?? DEFAULT_SERVICE_VISIBILITY_POLL;
   }
@@ -505,7 +518,8 @@ export class MechAdapter implements ChannelIngress {
     const routingErrors: Array<{ requestId: Hash; error: string }> = [];
     for (const request of detected) {
       try {
-        const result = await routeRequest(request, { registeredTools, handlers, handlerDeps, responsePinner });
+        const fetchOpts = this.requestContentGatewayUrl ? { gatewayBaseUrl: this.requestContentGatewayUrl } : undefined;
+        const result = await routeRequest(request, { registeredTools, handlers, handlerDeps, responsePinner }, fetchOpts);
         routed.push({
           requestId: request.requestId,
           slug: result.slug,
