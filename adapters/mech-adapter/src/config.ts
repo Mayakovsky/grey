@@ -214,6 +214,15 @@ export interface MechAdapterConfig {
    *  throw a clear error if `registerAgents` actually needs to run and this is missing. MUST be
    *  different from `payToAddress` — see `BASE_MECH_AGENT_INSTANCE_ADDRESS`'s doc comment for why. */
   agentInstanceAddress?: Address;
+  /** BION-DIRECTIVE-51 — the real deployed mech contract address, used only for `start()`'s own
+   *  read-only registration sanity-check log line (`MechMarketplace.checkMech(mech)`, which
+   *  requires an actual factory-created mech address, NOT the operator/payToAddress EOA — a real
+   *  bug found live: `start()` used to pass `payToAddress` here, which always reverts
+   *  `UnauthorizedAccount` since that address was never created via a factory). Optional: the
+   *  mech doesn't exist yet before registration runs (`register-live.ts`, most tests never need
+   *  this); a real running deployment has it as `GREY_MECH_ADDRESS` and should pass it. Absent →
+   *  `start()` simply skips the diagnostic rather than guessing an address to check. */
+  mechAddress?: Address;
 }
 
 type Env = Record<string, string | undefined>;

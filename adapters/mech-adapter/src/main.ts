@@ -136,7 +136,7 @@ async function main(): Promise<void> {
   });
 
   const adapter = new MechAdapter({
-    config: { ...config, agentInstanceAddress: BASE_MECH_AGENT_INSTANCE_ADDRESS },
+    config: { ...config, agentInstanceAddress: BASE_MECH_AGENT_INSTANCE_ADDRESS, mechAddress: GREY_MECH_ADDRESS },
     publicClient,
     safeDeliveryClient,
     responsePinner,
