@@ -91,6 +91,19 @@ export interface SignedSafeDelivery {
   signature: Hex;
 }
 
+/** BION-DIRECTIVE-55 — the same real shape as `SignedSafeDelivery`, generalized: `target` instead
+ *  of `mech`, since a generic Safe call has no reason to assume its destination is a mech at all
+ *  (e.g. `ComplementaryServiceMetadata.changeHash`, `MechMarketplace.create`). */
+export interface SignedSafeCall {
+  target: Address;
+  multisig: Address;
+  data: Hex;
+  nonce: bigint;
+  safeTxGas: bigint;
+  safeTxHash: Hash;
+  signature: Hex;
+}
+
 export interface SafeDeliveryClient {
   /** Builds deliverToMarketplace calldata, reads the multisig's real current nonce + estimated
    *  gas + real transaction hash, and signs it with the injected agent-instance account. Pure
@@ -100,11 +113,43 @@ export interface SafeDeliveryClient {
   simulateDelivery(signed: SignedSafeDelivery): Promise<{ success: boolean }>;
   /** Submits the real, already-signed execTransaction. */
   executeDelivery(signed: SignedSafeDelivery): Promise<{ txHash: Hash; success: boolean }>;
+  /** BION-DIRECTIVE-55 — generic Safe execTransaction signing for an arbitrary (target, data)
+   *  pair. Reuses the exact same core as buildSignedDelivery above (signSafeTransactionHash, the
+   *  same real SAFE_ABI nonce/getTransactionHash reads, the same 1.2x safeTxGas margin) — this is
+   *  NOT a parallel implementation, just without a deliverToMarketplace-specific calldata/gas-
+   *  estimate shape. Gas is estimated via viem's ABI-agnostic `estimateGas` (no functionName
+   *  needed for a truly generic call), executed as the multisig, same as every other write path
+   *  in this file — accurate for real, since eth_estimateGas simulates the full call including
+   *  any internal calls/contract creation (e.g. MechMarketplace.create's internal
+   *  MechFactory.createMech deployment), not just the outer call's own gas. */
+  buildSignedCall(target: Address, data: Hex): Promise<SignedSafeCall>;
+  /** Predicts execTransaction's result via simulateContract — no submission. */
+  simulateCall(signed: SignedSafeCall): Promise<{ success: boolean }>;
+  /** Submits the real, already-signed execTransaction. */
+  executeCall(signed: SignedSafeCall): Promise<{ txHash: Hash; success: boolean }>;
 }
 
 function execTransactionArgs(signed: SignedSafeDelivery) {
   return [
     signed.mech,
+    0n,
+    signed.data,
+    SAFE_OPERATION_CALL,
+    signed.safeTxGas,
+    0n,
+    0n,
+    ZERO_ADDRESS,
+    ZERO_ADDRESS,
+    signed.signature,
+  ] as const;
+}
+
+/** BION-DIRECTIVE-55 — identical shape to `execTransactionArgs` above, just reading `target`
+ *  instead of `mech`. Kept as a separate function (not a shared helper taking a `to` field) so
+ *  neither this nor the original ever needs to know about the other's field naming. */
+function genericExecTransactionArgs(signed: SignedSafeCall) {
+  return [
+    signed.target,
     0n,
     signed.data,
     SAFE_OPERATION_CALL,
@@ -187,6 +232,50 @@ export function createSafeDeliveryClient(rpcUrl: string, multisig: Address, acco
       // real transaction always emits (see GnosisSafe.sol's execTransaction). Ground truth from the
       // real receipt's logs, not the pre-submission simulation's `result` — same discipline as
       // marketplaceClient.ts's executeCreateMech fix (BION-DIRECTIVE-36 addendum).
+      const success = receipt.logs.some(
+        (log) => log.topics[0] === EXECUTION_SUCCESS_TOPIC && log.address.toLowerCase() === signed.multisig.toLowerCase(),
+      );
+      return { txHash, success };
+    },
+
+    async buildSignedCall(target, data) {
+      const acct = requireAccount();
+      const nonce = await client.readContract({ address: multisig, abi: SAFE_ABI, functionName: 'nonce' });
+      const rawGasEstimate = await client.estimateGas({ account: multisig, to: target, data });
+      const safeTxGas = (rawGasEstimate * SAFE_TX_GAS_MARGIN_PPT) / 1000n;
+      const safeTxHash = await client.readContract({
+        address: multisig,
+        abi: SAFE_ABI,
+        functionName: 'getTransactionHash',
+        args: [target, 0n, data, SAFE_OPERATION_CALL, safeTxGas, 0n, 0n, ZERO_ADDRESS, ZERO_ADDRESS, nonce],
+      });
+      const signature = await signSafeTransactionHash(acct, safeTxHash);
+      return { target, multisig, data, nonce, safeTxGas, safeTxHash, signature };
+    },
+
+    async simulateCall(signed) {
+      const acct = requireAccount();
+      const { result } = await client.simulateContract({
+        address: signed.multisig,
+        abi: SAFE_ABI,
+        functionName: 'execTransaction',
+        args: genericExecTransactionArgs(signed),
+        account: acct,
+      });
+      return { success: result };
+    },
+
+    async executeCall(signed) {
+      requireAccount();
+      const { request } = await client.simulateContract({
+        address: signed.multisig,
+        abi: SAFE_ABI,
+        functionName: 'execTransaction',
+        args: genericExecTransactionArgs(signed),
+        account,
+      });
+      const txHash: Hash = await walletClient!.writeContract(request);
+      const receipt = await client.waitForTransactionReceipt({ hash: txHash });
       const success = receipt.logs.some(
         (log) => log.topics[0] === EXECUTION_SUCCESS_TOPIC && log.address.toLowerCase() === signed.multisig.toLowerCase(),
       );

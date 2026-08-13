@@ -50,7 +50,9 @@ const ENABLED = process.env.GREY_MECH_ANVIL === '1';
 const RPC = process.env.MECH_ANVIL_RPC ?? 'http://127.0.0.1:8545';
 const d = ENABLED ? describe : describe.skip;
 
-const MECH: Address = getAddress('0x1ECFb7c086bCd483cF49405dadA00c3a6294f6A8');
+// BION-DIRECTIVE-55: the real, corrected mech (the original, 0x1ECFb7c086bCd483cF49405dadA00c3a
+// 6294f6A8, is permanently inert — see config.ts's GREY_MECH_ADDRESS_ORIGINAL_INERT).
+const MECH: Address = getAddress('0x1a2A7b94726B0711E5365C0D73E79C77a9256Ad7');
 const MULTISIG: Address = getAddress('0x5587335a6Fa1Dc7C421f2b87D91C7E9def095872');
 const MARKETPLACE: Address = MARKETPLACE_ADDRESSES.mechMarketplaceProxy;
 const SENTINEL_OWNERS: Address = '0x0000000000000000000000000000000000000001';
