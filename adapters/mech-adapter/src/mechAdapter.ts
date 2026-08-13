@@ -297,14 +297,22 @@ export class MechAdapter implements ChannelIngress {
   async start(): Promise<void> {
     if (this.started) throw new Error('MechAdapter: already started');
     const numMechs = await this.client.numMechs();
-    const selfRegistered = await this.client.checkMech(this.config.payToAddress);
+    // BION-DIRECTIVE-51: checkMech(address mech) requires an actual factory-created mech address
+    // (real source: reverts UnauthorizedAccount when mapAgentMechFactories[mech] == address(0))
+    // — it is NOT a generic "is this address registered" check, and payToAddress (the operator
+    // EOA) was never created via a factory, so calling it with payToAddress always reverted. Only
+    // call it when config.mechAddress is actually set (see that field's own doc comment).
+    let mechMultisig: Address | undefined;
+    if (this.config.mechAddress) {
+      mechMultisig = await this.client.checkMech(this.config.mechAddress);
+    }
     this.started = true;
-    this.log.info('MechAdapter: started (read-only until registration lands)', {
+    this.log.info('MechAdapter: started', {
       observeOnly: this.config.observeOnly,
       offerings: this.offerings.map((o) => o.slug),
       payToAddress: this.config.payToAddress,
       marketplaceMechCount: numMechs.toString(),
-      selfRegisteredAsMech: selfRegistered,
+      ...(mechMultisig ? { mechMultisig } : {}),
     });
   }
 

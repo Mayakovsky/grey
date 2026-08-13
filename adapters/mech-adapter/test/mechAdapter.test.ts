@@ -159,15 +159,36 @@ describe('MechAdapter — ChannelIngress contract', () => {
 
   it('start() calls the injected client, not a real network (proves the seam works)', async () => {
     const numMechs = vi.fn(async () => 7n);
-    const checkMech = vi.fn(async () => '0x0000000000000000000000000000000000000000' as const);
     const adapter = new MechAdapter({
       config: CONFIG,
-      marketplaceClient: fakeMarketplaceClient({ numMechs, checkMech }),
+      marketplaceClient: fakeMarketplaceClient({ numMechs }),
       logger: silentLogger(),
     });
     await adapter.start();
     expect(numMechs).toHaveBeenCalledOnce();
-    expect(checkMech).toHaveBeenCalledWith(FAKE_PAY_TO);
+  });
+
+  it('BION-DIRECTIVE-51: start() skips the checkMech diagnostic when config.mechAddress is not set (real bug found live: checkMech(mech) requires an actual factory-created mech address — calling it with payToAddress, an EOA never created via a factory, always reverted UnauthorizedAccount)', async () => {
+    const checkMech = vi.fn(async () => '0x0000000000000000000000000000000000000000' as const);
+    const adapter = new MechAdapter({
+      config: CONFIG, // no mechAddress set
+      marketplaceClient: fakeMarketplaceClient({ checkMech }),
+      logger: silentLogger(),
+    });
+    await expect(adapter.start()).resolves.toBeUndefined();
+    expect(checkMech).not.toHaveBeenCalled();
+  });
+
+  it('BION-DIRECTIVE-51: start() calls checkMech with the real mech address when config.mechAddress is set, not payToAddress', async () => {
+    const checkMech = vi.fn(async () => FAKE_MULTISIG);
+    const adapter = new MechAdapter({
+      config: { ...CONFIG, mechAddress: FAKE_MECH },
+      marketplaceClient: fakeMarketplaceClient({ checkMech }),
+      logger: silentLogger(),
+    });
+    await adapter.start();
+    expect(checkMech).toHaveBeenCalledWith(FAKE_MECH);
+    expect(checkMech).not.toHaveBeenCalledWith(FAKE_PAY_TO);
   });
 
   describe('waitForServiceVisible (BION-DIRECTIVE-32)', () => {
