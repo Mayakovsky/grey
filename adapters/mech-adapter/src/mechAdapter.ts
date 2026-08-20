@@ -126,8 +126,6 @@ import type { OfferingSlug } from '@grey/schemas/responses';
 import {
   ETH_TOKEN_ADDRESS,
   GREY_DID,
-  MARKETPLACE_ADDRESSES,
-  SERVICE_REGISTRY_ADDRESSES,
   type MechAdapterConfig,
   type MechPaymentType,
 } from './config.js';
@@ -706,7 +704,9 @@ export class MechAdapter implements ChannelIngress {
   }
 
   private async runDeployStep(registry: ServiceRegistryClient, serviceId: bigint, simulatedOnly: boolean): Promise<Address> {
-    const multisigImplementation = SERVICE_REGISTRY_ADDRESSES.gnosisSafeMultisig;
+    // BION-DIRECTIVE-104 fix — was the bare Base constant, chain-blind; `registry` already knows
+    // its own chain (via the `chainId` passed to createServiceRegistryClient, D-97/98).
+    const multisigImplementation = registry.gnosisSafeMultisig;
     const deployData = '0x' as const;
     return simulatedOnly
       ? (await registry.simulateDeploy(serviceId, multisigImplementation, deployData)).multisig
@@ -719,7 +719,10 @@ export class MechAdapter implements ChannelIngress {
     mechPayload: `0x${string}`,
     simulatedOnly: boolean,
   ): Promise<Address> {
-    const factory = MARKETPLACE_ADDRESSES.factories[paymentType];
+    // BION-DIRECTIVE-104 fix — was the bare Base constant, chain-blind; `this.client` already
+    // knows its own chain (via the `chainId` passed to createMarketplaceClient, D-97/98), and
+    // fails closed if this chain has no factory for the requested payment type.
+    const factory = this.client.getFactoryAddress(paymentType);
     return simulatedOnly
       ? await this.simulateCreateMech(factory, serviceId, mechPayload)
       : await this.executeCreateMech(factory, serviceId, mechPayload);
