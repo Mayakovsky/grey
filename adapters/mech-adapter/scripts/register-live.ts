@@ -26,10 +26,23 @@
 // confirmation. Whatever step is next for the service's real current state is what runs — could
 // be `activateRegistration`, `registerAgents`, `deploy`, or `createMech`. Run this script again
 // after each real step lands to execute the next one.
+//
+// FIXED (BION-DIRECTIVE-103): D-101's `--chain gnosis` support hardcoded `EXISTING_SERVICE_ID =
+// undefined` for any non-Base chain, with no way to carry a discovered serviceId across process
+// restarts. Real, live consequence: Forces' terminal closed between two runs, the script forgot
+// serviceId 3789 (real, confirmed `create()`, tx `0xb780b849...`), and created a second, orphaned
+// service 3790 (tx `0x8c6d25b0...`) instead of resuming. Fixed via `registrationResume.ts`'s
+// `resolveExistingServiceId` — a real `--service-id <n>` flag (validated against `getService`
+// before trusting it), plus a `balanceOf`-based safety check when no default/flag is given (real,
+// live-confirmed: `ServiceRegistryL2` supports `balanceOf` but NOT owner-indexed enumeration —
+// `tokenOfOwnerByIndex` reverts — so this can only report a COUNT, not recover which id(s), which
+// is exactly why the flag is still required to actually resume; the count check exists only to
+// abort a silent duplicate `create()`, not to replace the flag). Base's behavior is completely
+// unchanged: hardcoded default `635n` still wins whenever no `--service-id` is passed.
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { createInterface } from 'node:readline';
-import { formatEther, toHex } from 'viem';
+import { createPublicClient, formatEther, http, parseAbi, toHex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { parseKeystore } from '@grey/ceremony/dist/crypto/index.js';
 import { unlockKeystore } from '@grey/ceremony/dist/commands/address.js';
@@ -48,6 +61,7 @@ import {
 } from '../src/config.js';
 import { createMarketplaceClient } from '../src/marketplaceClient.js';
 import { createServiceRegistryClient } from '../src/serviceRegistryClient.js';
+import { resolveExistingServiceId } from '../src/registrationResume.js';
 import { MechAdapter, type ServiceRegistrationParams, type SingleStepResult } from '../src/mechAdapter.js';
 import { createLogger } from '../src/logger.js';
 
@@ -76,10 +90,20 @@ const RPC_URL = process.env[RPC_ENV_VAR]?.trim() || CHAINS[CHAIN_ID].defaultRpcU
 const AGENT_ID = 424242; // matches service 635's real, already-registered agentIds on Base — reused on Gnosis too, not chain-specific
 const BOND_WEI = 100_000_000_000_000n; // 0.0001 ETH/xDAI-equivalent, confirmed by Forces (D-31 on Base; D-97/98/100 re-confirmed as the right figure to reuse on Gnosis)
 const PAYMENT_TYPE: MechPaymentType = 'NATIVE';
-// Base: real, already-created service (BION-DIRECTIVE-32) — resume, don't recreate. Gnosis: no
-// service exists yet — `existingServiceId: undefined` lets registerAsMechStep's own real state
-// check decide the first real step is `create`, same as Base's original first-ever run.
-const EXISTING_SERVICE_ID: bigint | undefined = CHAIN_ID === 100 ? undefined : 635n;
+// Base only — real, already-created service (BION-DIRECTIVE-32), unchanged hardcoded default.
+// Gnosis (and any other future chain) has no such default — see resolveExistingServiceId's real
+// decision logic below (BION-DIRECTIVE-103), which replaces the old bare `undefined` literal that
+// caused the real 3789/3790 duplicate.
+const HARDCODED_DEFAULT_SERVICE_ID: bigint | undefined = CHAIN_ID === 8453 ? 635n : undefined;
+
+// Minimal read-only ABI for the two calls resolveExistingServiceId needs — deliberately not
+// importing SERVICE_REGISTRY_L2_ABI's full surface here, since balanceOf/getService are the only
+// two this script's own resume-decision logic needs directly (registerAsMechStep's own internal
+// getService call, inside MechAdapter, is separate and unaffected by this).
+const RESUME_CHECK_ABI = parseAbi([
+  'function getService(uint256 serviceId) view returns ((uint96 securityDeposit, address multisig, bytes32 configHash, uint32 threshold, uint32 maxNumAgentInstances, uint32 numAgentInstances, uint8 state, uint32[] agentIds) service)',
+  'function balanceOf(address owner) view returns (uint256)',
+]);
 
 // Steps that require sending BOND_WEI as msg.value (real Olas ServiceRegistry semantics —
 // activateRegistration's service-level deposit and registerAgents' per-instance operator bond
@@ -87,10 +111,17 @@ const EXISTING_SERVICE_ID: bigint | undefined = CHAIN_ID === 100 ? undefined : 6
 // no value.
 const VALUE_BEARING_STEPS: ReadonlySet<SingleStepResult['step']> = new Set(['activateRegistration', 'registerAgents']);
 
-function parseArgs(argv: string[]): { keyfile: string } {
+function parseArgs(argv: string[]): { keyfile: string; serviceIdFlag: bigint | undefined; forceCreateNewService: boolean } {
   const idx = argv.indexOf('--keyfile');
   const keyfile = idx !== -1 && argv[idx + 1] ? argv[idx + 1] : DEFAULT_KEYFILE;
-  return { keyfile };
+  const serviceIdIdx = argv.indexOf('--service-id');
+  const serviceIdRaw = serviceIdIdx !== -1 ? argv[serviceIdIdx + 1] : undefined;
+  if (serviceIdIdx !== -1 && (serviceIdRaw === undefined || !/^\d+$/.test(serviceIdRaw))) {
+    throw new Error(`--service-id requires a plain non-negative integer, got "${serviceIdRaw}"`);
+  }
+  const serviceIdFlag = serviceIdRaw !== undefined ? BigInt(serviceIdRaw) : undefined;
+  const forceCreateNewService = argv.includes('--force-create-new-service');
+  return { keyfile, serviceIdFlag, forceCreateNewService };
 }
 
 async function askLine(prompt: string): Promise<string> {
@@ -103,7 +134,39 @@ async function askLine(prompt: string): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const { keyfile } = parseArgs(process.argv.slice(2));
+  const { keyfile, serviceIdFlag, forceCreateNewService } = parseArgs(process.argv.slice(2));
+
+  // BION-DIRECTIVE-103 — resolve which service this run targets BEFORE prompting for the real
+  // passphrase, using only public, read-only calls (no key material needed: the owner address,
+  // BASE_MECH_PAY_TO_ADDRESS, is already a known constant). Fails fast on an abort — Forces
+  // doesn't have to type a real passphrase only to hit a refusal afterward.
+  const readOnlyClient = createPublicClient({ chain: CHAINS[CHAIN_ID].viemChain, transport: http(RPC_URL) });
+  const decision = await resolveExistingServiceId({
+    hardcodedDefaultServiceId: HARDCODED_DEFAULT_SERVICE_ID,
+    serviceIdFlag,
+    forceCreateNewService,
+    getService: (serviceId) =>
+      readOnlyClient.readContract({
+        address: CHAINS[CHAIN_ID].serviceRegistry.serviceRegistryL2,
+        abi: RESUME_CHECK_ABI,
+        functionName: 'getService',
+        args: [serviceId],
+      }),
+    getOwnedServiceCount: () =>
+      readOnlyClient.readContract({
+        address: CHAINS[CHAIN_ID].serviceRegistry.serviceRegistryL2,
+        abi: RESUME_CHECK_ABI,
+        functionName: 'balanceOf',
+        args: [BASE_MECH_PAY_TO_ADDRESS],
+      }),
+  });
+  if (decision.mode === 'abort') {
+    console.log(`\nABORTED before any passphrase prompt — ${decision.reason}`);
+    process.exitCode = 1;
+    return;
+  }
+  const existingServiceId = decision.mode === 'resume' ? decision.serviceId : undefined;
+
   console.log(`Loading keystore: ${keyfile}`);
   const keystore = parseKeystore(readFileSync(keyfile, 'utf8'));
 
@@ -143,7 +206,7 @@ async function main(): Promise<void> {
       bondWei: BOND_WEI,
       configHash: GREY_MECH_CONFIG_HASH,
       mechPayload: GREY_MECH_PAYLOAD_HASH,
-      existingServiceId: EXISTING_SERVICE_ID, // resume real service 635 — do NOT create a new one
+      existingServiceId, // resolved above (BION-DIRECTIVE-103) — resume, or undefined only after a real, checked "no existing service" verdict
     };
 
     console.log('\n--- Step 3: live pre-flight check — which real step is next, and does it simulate cleanly right now ---');
@@ -164,8 +227,12 @@ async function main(): Promise<void> {
     console.log('\n=== FINAL SUMMARY — READ CAREFULLY BEFORE CONFIRMING ===');
     console.log(`Chain:                           ${CHAIN_ID === 100 ? 'Gnosis' : 'Base'} (chain id ${CHAIN_ID})`);
     console.log(`Service owner (this wallet):     ${account.address}`);
+    // BION-DIRECTIVE-103 §1.3 — made impossible to miss (this exact line was visible, but not
+    // distinct enough, in both the 3789 and the accidental 3790 run's transcripts).
     console.log(
-      `Service id:                      ${EXISTING_SERVICE_ID !== undefined ? EXISTING_SERVICE_ID : '(new — will be created by this run)'}`,
+      existingServiceId !== undefined
+        ? `>>> RESUMING service ${existingServiceId} <<<`
+        : '>>> CREATING A NEW SERVICE — no existing service specified, none found via balanceOf <<<',
     );
     console.log(`Real state before this run:      ${preflight.stateBefore}`);
     console.log(`>>> Step this run will execute:  ${preflight.step} <<<`);
