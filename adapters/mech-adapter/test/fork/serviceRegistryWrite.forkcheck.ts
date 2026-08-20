@@ -1,9 +1,10 @@
-// BION-DIRECTIVE-28's fork-test task — proves (or honestly disproves) the ServiceRegistry
-// write-path simulate* calls (simulateCreate/simulateActivateRegistration/simulateRegisterAgents/
-// simulateDeploy, as exposed by serviceRegistryClient.ts) against a local Hardhat fork of real
-// Base mainnet state. Same harness, same opt-in posture as the sibling e3-b1 file
-// (marketplaceRead.forkcheck.ts) — run via `pnpm --filter @grey/mech-adapter test:fork`, never
-// part of `vitest run`.
+// BION-DIRECTIVE-28's fork-test task, extended for Gnosis (BION-DIRECTIVE-97/98 Task 3) — proves
+// (or honestly disproves) the ServiceRegistry write-path simulate* calls
+// (simulateCreate/simulateActivateRegistration/simulateRegisterAgents/simulateDeploy, as exposed
+// by serviceRegistryClient.ts) against a local Hardhat fork of real mainnet state for whichever
+// chain `MECH_FORK_CHAIN` (hardhat.config.cts) selected. Same harness, same opt-in posture as the
+// sibling e3-b1 file (marketplaceRead.forkcheck.ts) — run via
+// `pnpm --filter @grey/mech-adapter test:fork`, never part of `vitest run`.
 //
 // Calls go straight through viem's `simulateContract` against the ABIs/addresses in
 // serviceRegistryAbi.ts/config.ts, the same way the sibling file calls MECH_MARKETPLACE_ABI
@@ -11,20 +12,25 @@
 // both factories bind an `http(rpcUrl)` transport, which can't reach Hardhat's in-process forked
 // network; only `custom(hre.network.provider)` can.
 //
-// The e3-b1 report flagged a KNOWN UNRESOLVED EDR bug (see hardhat.config.cts): every
-// `readContract` (eth_call) against this forked Base state failed with "No known hardfork for
+// The e3-b1 report flagged a KNOWN UNRESOLVED EDR bug on Base (see hardhat.config.cts): every
+// `readContract` (eth_call) against forked Base state failed with "No known hardfork for
 // execution on historical block ...", even for calls against the current block — only
 // `getCode`/`eth_sendTransaction` were unaffected. `simulateContract` also compiles down to
-// eth_call, so THIS SUITE MAY HIT THE SAME BUG — that is an open question this file answers by
-// actually attempting the calls, not by assuming either way. No test below swallows a resulting
-// error into a soft pass; if the bug reproduces, the test fails and stays failing, same as the
-// sibling file's three already-failing tests — left in place undeleted so the failure is a real,
-// reproducible artifact for whoever picks this up, not a hidden gap.
+// eth_call, so THIS SUITE MAY HIT THE SAME BUG on either chain — that is an open question this
+// file answers by actually attempting the calls, not by assuming either way (D-28 inferred the
+// bug is EDR-native rather than Base-specific, but that inference was Base-only evidence; this
+// file's real Gnosis run is what actually tests that inference). No test below swallows a
+// resulting error into a soft pass; if the bug reproduces, the test fails and stays failing, same
+// as the sibling file's already-failing Base tests — left in place undeleted so the failure is a
+// real, reproducible artifact for whoever picks this up, not a hidden gap.
 import hre from 'hardhat';
 import { strict as assert } from 'node:assert';
 import { createPublicClient, custom, type Address } from 'viem';
-import { SERVICE_REGISTRY_ADDRESSES } from '../../src/config.js';
+import { CHAINS } from '../../src/config.js';
 import { SERVICE_MANAGER_ABI, SERVICE_REGISTRY_L2_ABI } from '../../src/serviceRegistryAbi.js';
+
+const FORK_CHAIN_ID = process.env.MECH_FORK_CHAIN?.trim() === 'gnosis' ? 100 : 8453;
+const SERVICE_REGISTRY_ADDRESSES = CHAINS[FORK_CHAIN_ID].serviceRegistry;
 
 // Hardhat's own well-known default local dev account (index 0) — pre-funded 10000 ETH on ANY
 // forked network by Hardhat itself, regardless of that account's real balance on the chain being
@@ -41,7 +47,7 @@ const HARDHAT_DEFAULT_ACCOUNT: Address = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb9
 // result that reveals nothing about the call path itself.
 const REAL_LOW_SERVICE_ID = 1n;
 
-describe('mech-adapter — ServiceRegistry write path on a Base mainnet fork (BION-DIRECTIVE-28)', function () {
+describe(`mech-adapter — ServiceRegistry write path on a chain ${FORK_CHAIN_ID} mainnet fork (BION-DIRECTIVE-28/97/98)`, function () {
   this.timeout(60_000);
 
   const client = createPublicClient({ transport: custom(hre.network.provider) });

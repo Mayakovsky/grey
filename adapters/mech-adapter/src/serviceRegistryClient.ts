@@ -13,8 +13,7 @@ import {
   type Account,
   type Hash,
 } from 'viem';
-import { base } from 'viem/chains';
-import { SERVICE_REGISTRY_ADDRESSES } from './config.js';
+import { CHAINS, type SupportedChainId } from './config.js';
 import { SERVICE_MANAGER_ABI, SERVICE_REGISTRY_L2_ABI, SERVICE_STATE } from './serviceRegistryAbi.js';
 
 export interface AgentParams {
@@ -85,11 +84,19 @@ export interface ServiceRegistryClient {
  *  material, same as every other adapter here). simulate* calls don't need a real signer's
  *  private key at all (viem's simulateContract just needs an `account` to set as `from`), but we
  *  take the same injected account for both so callers only ever construct one signer. */
-export function createServiceRegistryClient(rpcUrl: string, account: Account): ServiceRegistryClient {
-  const publicClient = createPublicClient({ chain: base, transport: http(rpcUrl) });
-  const walletClient = createWalletClient({ chain: base, transport: http(rpcUrl), account });
-  const address = SERVICE_REGISTRY_ADDRESSES.serviceManagerProxy;
-  const registryAddress = SERVICE_REGISTRY_ADDRESSES.serviceRegistryL2;
+/** `chainId` (BION-DIRECTIVE-97/98 Task 2) defaults to `8453` (Base) — every pre-existing call
+ *  site omits it, so live production behavior is unchanged unless a caller explicitly asks for
+ *  Gnosis (`100`). */
+export function createServiceRegistryClient(
+  rpcUrl: string,
+  account: Account,
+  chainId: SupportedChainId = 8453,
+): ServiceRegistryClient {
+  const chain = CHAINS[chainId];
+  const publicClient = createPublicClient({ chain: chain.viemChain, transport: http(rpcUrl) });
+  const walletClient = createWalletClient({ chain: chain.viemChain, transport: http(rpcUrl), account });
+  const address = chain.serviceRegistry.serviceManagerProxy;
+  const registryAddress = chain.serviceRegistry.serviceRegistryL2;
 
   return {
     async getService(serviceId: bigint) {

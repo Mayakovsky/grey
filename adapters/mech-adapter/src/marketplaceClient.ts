@@ -39,8 +39,7 @@ import {
   type Hash,
   type Log,
 } from 'viem';
-import { base } from 'viem/chains';
-import { MARKETPLACE_ADDRESSES } from './config.js';
+import { CHAINS, type SupportedChainId } from './config.js';
 import { MECH_MARKETPLACE_ABI } from './marketplaceAbi.js';
 
 /** Extracted so it's directly unit-testable against real, fixture'd log data (see
@@ -98,14 +97,24 @@ export interface MarketplaceClient {
   executeCreateMech(factory: Address, serviceId: bigint, payload: `0x${string}`): Promise<Address>;
 }
 
-export function createMarketplaceClient(rpcUrl: string, account?: Account): MarketplaceClient {
+/** `chainId` (BION-DIRECTIVE-97/98 Task 2) defaults to `8453` (Base) — every pre-existing call
+ *  site omits it, so live production behavior is unchanged unless a caller explicitly asks for
+ *  Gnosis (`100`). */
+export function createMarketplaceClient(
+  rpcUrl: string,
+  account?: Account,
+  chainId: SupportedChainId = 8453,
+): MarketplaceClient {
+  const chain = CHAINS[chainId];
   // No explicit `PublicClient` return-type annotation on `client` — viem's generic PublicClient
-  // type and the Base-chain-specific client createPublicClient({chain: base}) actually returns
-  // are structurally incompatible (Base's OP-stack deposit-transaction formatter isn't part of
+  // type and the chain-specific client createPublicClient({chain}) actually returns can be
+  // structurally incompatible (e.g. Base's OP-stack deposit-transaction formatter isn't part of
   // the generic type), so let inference carry the real (correct) type through instead.
-  const client = createPublicClient({ chain: base, transport: http(rpcUrl) });
-  const walletClient = account ? createWalletClient({ chain: base, transport: http(rpcUrl), account }) : undefined;
-  const address = MARKETPLACE_ADDRESSES.mechMarketplaceProxy;
+  const client = createPublicClient({ chain: chain.viemChain, transport: http(rpcUrl) });
+  const walletClient = account
+    ? createWalletClient({ chain: chain.viemChain, transport: http(rpcUrl), account })
+    : undefined;
+  const address = chain.marketplace.mechMarketplaceProxy;
 
   function requireAccount(): Account {
     if (!account) {
