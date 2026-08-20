@@ -339,11 +339,53 @@ function requiredAddress(env: Env, key: string): Address {
   return raw as Address;
 }
 
+/** Which chain this adapter *process* runs against (BION-DIRECTIVE-101 §3 — the chain-scoped
+ *  `observeOnly` fix). Defaults to `8453` (Base) when unset — the existing live deployment's env
+ *  file has no `MECH_ADAPTER_CHAIN_ID` entry, so it resolves identically to before this existed.
+ *  A genuinely separate process (its own systemd unit, its own `EnvironmentFile`) is how a second
+ *  chain gets its own `observeOnly` value — not a second flag on the same process/config. */
+export function loadChainId(env: Env = process.env): SupportedChainId {
+  const raw = env.MECH_ADAPTER_CHAIN_ID?.trim();
+  if (!raw) return 8453;
+  const n = Number(raw);
+  if (n !== 8453 && n !== 100) {
+    throw new Error(`mech-adapter: unsupported MECH_ADAPTER_CHAIN_ID "${raw}" — expected 8453 or 100`);
+  }
+  return n as SupportedChainId;
+}
+
+export interface MechIdentity {
+  mechAddress: Address;
+  mechMultisigAddress: Address;
+}
+
+/** The real, factory-created mech + its Safe multisig — `main.ts`'s poll loop needs both to know
+ *  which on-chain identity it's polling/delivering for. On Base this is `GREY_MECH_ADDRESS`/
+ *  `GREY_MECH_MULTISIG_ADDRESS` by default (env-overridable, but every real deployment today omits
+ *  the override, so behavior is unchanged). On any other chain there IS no hardcoded default —
+ *  those addresses only exist once that chain's real ServiceRegistry lifecycle
+ *  (create/activate/registerAgents/deploy) has actually completed (BION-DIRECTIVE-100/101), so
+ *  requiring them via env (fail-closed, same discipline as every other required field here) is
+ *  correct: a process for a not-yet-registered chain should refuse to start, not guess. */
+export function loadMechIdentity(env: Env = process.env, chainId: SupportedChainId = 8453): MechIdentity {
+  if (chainId === 8453) {
+    return {
+      mechAddress: (env.MECH_ADDRESS?.trim() as Address) || GREY_MECH_ADDRESS,
+      mechMultisigAddress: (env.MECH_MULTISIG_ADDRESS?.trim() as Address) || GREY_MECH_MULTISIG_ADDRESS,
+    };
+  }
+  return {
+    mechAddress: requiredAddress(env, 'MECH_ADDRESS'),
+    mechMultisigAddress: requiredAddress(env, 'MECH_MULTISIG_ADDRESS'),
+  };
+}
+
 export function loadConfig(env: Env = process.env): MechAdapterConfig {
+  const chainId = loadChainId(env);
   return {
     payToAddress: requiredAddress(env, 'BASE_MECH_PAY_TO'),
     poolWalletAddress: requiredAddress(env, 'BASE_MECH_POOL_WALLET'),
-    rpcUrl: env.BASE_RPC_URL?.trim() || 'https://mainnet.base.org',
+    rpcUrl: env.MECH_ADAPTER_RPC_URL?.trim() || env.BASE_RPC_URL?.trim() || CHAINS[chainId].defaultRpcUrl,
     databaseUrl: required(env, 'GREY_DATABASE_URL'),
     observeOnly: (env.MECH_ADAPTER_OBSERVE_ONLY?.trim() ?? 'true') !== 'false',
   };

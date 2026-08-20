@@ -116,7 +116,34 @@ response-pin-verify check `responsePinner.ts` runs, and the request-content-fetc
 Deliberately unified, not two separate vars — see `mechAdapter.ts`'s `requestContentGatewayUrl`
 doc comment for the reasoning).
 
-## Firewall
+### Gnosis instance — chain-scoped `observeOnly`, NOT YET installed (BION-DIRECTIVE-101 §3)
+
+`infra/systemd/grey-mech-adapter-gnosis.service` — an entirely separate unit/process from the Base
+one above, its own `EnvironmentFile` (`/etc/grey/mech-adapter-gnosis.env`), its own
+`MECH_ADAPTER_OBSERVE_ONLY` value. This is the fix for D-100 §1.3's finding: `observeOnly` was a
+single flag on one process, shared by construction, so flipping it for Gnosis would have touched
+Base's own live flag. A second, independent process is the real fix, not a chain-scoping flag on
+the same process.
+
+**Genuinely not installed on the VPS yet, honestly, not just "disabled":** the real Gnosis mech
+address / multisig don't exist until BION-DIRECTIVE-100/101's on-chain registration (still pending
+Forces' passphrase-gated run of `register-live.ts --chain gnosis`) actually completes.
+`loadMechIdentity()` (`config.ts`) fails closed — throws at startup — for any non-Base chain
+without real `MECH_ADDRESS`/`MECH_MULTISIG_ADDRESS` values, so there is nothing this unit could
+usefully do yet. The unit file is checked in and ready; copying it onto the VPS and authoring its
+real `EnvironmentFile` is deferred until those addresses are real, at which point it follows the
+exact same steps as the Base unit did originally:
+
+```bash
+# Once real MECH_ADDRESS/MECH_MULTISIG_ADDRESS exist:
+sudo cp infra/systemd/grey-mech-adapter-gnosis.service /etc/systemd/system/
+sudo systemctl daemon-reload
+# Same posture as Base's unit: no `enable`/`start` here — that stays a separate, later,
+# explicit Forces act, same split D-100 §1.3 already specified.
+```
+
+Required env (`/etc/grey/mech-adapter-gnosis.env`, root-only `600`, Forces-authored on-box, same
+posture as the Base file) — see `.env.example`'s "Chain-scoping" block for the full list.
 Port 3002 stays **firewalled** this phase — verify via on-box `curl` / SSH tunnel only. Public
 exposure of the paid API (Caddy reverse proxy in front is a candidate) is a Phase E decision.
 

@@ -22,15 +22,14 @@ import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { createPublicClient, http } from 'viem';
-import { base } from 'viem/chains';
 import { offeringHandlers, createHandlerDeps } from '@grey/core';
 import {
   loadConfig,
   loadPollIntervalMs,
-  MARKETPLACE_ADDRESSES,
+  loadChainId,
+  loadMechIdentity,
+  CHAINS,
   BASE_MECH_AGENT_INSTANCE_ADDRESS,
-  GREY_MECH_ADDRESS,
-  GREY_MECH_MULTISIG_ADDRESS,
   GREY_MECH_REGISTERED_TOOLS,
 } from './config.js';
 import { loadAgentInstanceAccount, loadAgentInstancePrivateKeyFromEnv } from './agentInstanceSigner.js';
@@ -128,14 +127,16 @@ export async function runPollLoop(
 
 async function main(): Promise<void> {
   const log = createLogger({ component: 'mech-adapter' });
+  const chainId = loadChainId(); // BION-DIRECTIVE-101 §3 — defaults to 8453, unchanged if unset
   const config = loadConfig(); // fail-closed on any missing env
+  const { mechAddress, mechMultisigAddress } = loadMechIdentity(process.env, chainId); // fail-closed on non-Base chains without real values
   const pollIntervalMs = loadPollIntervalMs();
   const agentInstanceAccount = loadAgentInstanceAccount(loadAgentInstancePrivateKeyFromEnv());
   const filebaseCredentials = loadFilebaseCredentialsFromEnv();
 
   const deps = createHandlerDeps({ databaseUrl: config.databaseUrl });
-  const publicClient = createPublicClient({ chain: base, transport: http(config.rpcUrl) });
-  const safeDeliveryClient = createSafeDeliveryClient(config.rpcUrl, GREY_MECH_MULTISIG_ADDRESS, agentInstanceAccount);
+  const publicClient = createPublicClient({ chain: CHAINS[chainId].viemChain, transport: http(config.rpcUrl) });
+  const safeDeliveryClient = createSafeDeliveryClient(config.rpcUrl, mechMultisigAddress, agentInstanceAccount);
   const gatewayOverride = loadGatewayOverride(process.env);
   const responsePinner = createFilebasePinner({
     credentials: filebaseCredentials,
@@ -143,7 +144,7 @@ async function main(): Promise<void> {
   });
 
   const adapter = new MechAdapter({
-    config: { ...config, agentInstanceAddress: BASE_MECH_AGENT_INSTANCE_ADDRESS, mechAddress: GREY_MECH_ADDRESS },
+    config: { ...config, agentInstanceAddress: BASE_MECH_AGENT_INSTANCE_ADDRESS, mechAddress },
     publicClient,
     safeDeliveryClient,
     responsePinner,
@@ -158,9 +159,10 @@ async function main(): Promise<void> {
   }
 
   log.info('mech-adapter: starting', {
+    chainId,
     observeOnly: config.observeOnly,
-    mech: GREY_MECH_ADDRESS,
-    multisig: GREY_MECH_MULTISIG_ADDRESS,
+    mech: mechAddress,
+    multisig: mechMultisigAddress,
     agentInstance: agentInstanceAccount.address,
     pollIntervalMs,
     offerings: GREY_MECH_REGISTERED_TOOLS.length,
@@ -178,8 +180,8 @@ async function main(): Promise<void> {
   await runPollLoop(
     adapter,
     publicClient,
-    GREY_MECH_ADDRESS,
-    MARKETPLACE_ADDRESSES.mechMarketplaceProxy,
+    mechAddress,
+    CHAINS[chainId].marketplace.mechMarketplaceProxy,
     GREY_MECH_REGISTERED_TOOLS,
     pollIntervalMs,
     log,

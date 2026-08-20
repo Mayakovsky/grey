@@ -1,0 +1,40 @@
+# grey-mech-adapter-gnosis — the Olas Mech Marketplace (Gnosis) as a ChannelIngress
+# (BION-DIRECTIVE-101 §3). Entirely separate process/unit from grey-mech-adapter.service (Base) —
+# own EnvironmentFile, own MECH_ADAPTER_OBSERVE_ONLY value — specifically so flipping payment
+# acceptance on for Gnosis can never touch Base's own live, currently-revenue-generating flag
+# (D-100 §1.3's finding: the flag was a single global value on one process; this is the fix,
+# not a chain-scoping flag on the same process).
+#
+# NOT YET INSTALLED ON THE VPS as of this commit — real mech address / multisig for Gnosis don't
+# exist yet (BION-DIRECTIVE-100/101: the actual on-chain registration is still pending Forces'
+# passphrase-gated run of register-live.ts). main.ts's loadMechIdentity() fails closed (throws at
+# startup) for any non-Base chain without real MECH_ADDRESS/MECH_MULTISIG_ADDRESS env values, so
+# there is nothing meaningful to install/start yet — this file exists so the unit is ready the
+# moment those real values exist, same "build now, enable later" split as grey-mech-adapter.service
+# itself originally shipped under.
+#
+# Same as the Base unit: ships (once actually placed on the VPS) INSTALLED-BUT-DISABLED.
+# Enabling/starting it, and flipping its own MECH_ADAPTER_OBSERVE_ONLY to false, are separate,
+# later, explicit Forces acts — same split D-100 §1.3 already specified.
+[Unit]
+Description=Grey mech adapter (ChannelIngress — Olas Mech Marketplace, Gnosis)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=grey
+WorkingDirectory=/opt/grey/grey
+ExecStart=/usr/bin/node adapters/mech-adapter/dist/main.js
+EnvironmentFile=/etc/grey/mech-adapter-gnosis.env
+Restart=on-failure
+RestartSec=5
+
+# Hardening (drop if a probe shows it breaks node/pg; report before removing) — mirrors the Base
+# unit's own hardening exactly.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

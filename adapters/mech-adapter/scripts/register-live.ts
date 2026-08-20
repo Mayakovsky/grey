@@ -41,8 +41,10 @@ import {
   BASE_MECH_POOL_WALLET_ADDRESS,
   GREY_MECH_CONFIG_HASH,
   GREY_MECH_PAYLOAD_HASH,
+  CHAINS,
   type MechAdapterConfig,
   type MechPaymentType,
+  type SupportedChainId,
 } from '../src/config.js';
 import { createMarketplaceClient } from '../src/marketplaceClient.js';
 import { createServiceRegistryClient } from '../src/serviceRegistryClient.js';
@@ -50,14 +52,34 @@ import { MechAdapter, type ServiceRegistrationParams, type SingleStepResult } fr
 import { createLogger } from '../src/logger.js';
 
 const DEFAULT_KEYFILE = 'C:\\Users\\kidco\\.grey\\keys\\BASE_MECH_PAY_TO.json';
-const RPC_URL = process.env.BASE_RPC_URL?.trim() || 'https://mainnet.base.org';
+
+/** `--chain` (BION-DIRECTIVE-101) selects which chain this run targets — defaults to `base`,
+ *  reproducing this script's exact prior behavior when omitted (every real run so far). `gnosis`
+ *  points the RPC/chain id at Gnosis mainnet via the same `CHAINS` map D-97/98 built; the
+ *  passphrase-gated signing path below is completely untouched either way — this only changes
+ *  which chain's RPC/contracts the resulting signed calls go to. Same wallet (`BASE_MECH_PAY_TO`)
+ *  is reused on both chains (D-77's decision), so the same keystore file/passphrase works for
+ *  either `--chain` value without a new key ceremony. */
+const CHAIN_ID: SupportedChainId = process.argv.includes('--chain')
+  ? process.argv[process.argv.indexOf('--chain') + 1] === 'gnosis'
+    ? 100
+    : 8453
+  : 8453;
+const RPC_ENV_VAR = CHAIN_ID === 100 ? 'GNOSIS_RPC_URL' : 'BASE_RPC_URL';
+const RPC_URL = process.env[RPC_ENV_VAR]?.trim() || CHAINS[CHAIN_ID].defaultRpcUrl;
 
 // Real params for Grey's actual registration — see BION-DIRECTIVE-31/32 and config.ts's own doc
-// comments on GREY_MECH_CONFIG_HASH/GREY_MECH_PAYLOAD_HASH for how each was derived.
-const AGENT_ID = 424242; // matches service 635's real, already-registered agentIds — do not change
-const BOND_WEI = 100_000_000_000_000n; // 0.0001 ETH, confirmed by Forces (D-31)
+// comments on GREY_MECH_CONFIG_HASH/GREY_MECH_PAYLOAD_HASH for how each was derived. Reused as-is
+// for Gnosis per BION-DIRECTIVE-101 §1 (Forces' explicit call — GREY_DID is a single cross-chain
+// identity anchor by design; the on-chain configHash gets updated as a normal follow-up once
+// e3-g2 defines Gnosis's own real offering set, not a blocker to registering now).
+const AGENT_ID = 424242; // matches service 635's real, already-registered agentIds on Base — reused on Gnosis too, not chain-specific
+const BOND_WEI = 100_000_000_000_000n; // 0.0001 ETH/xDAI-equivalent, confirmed by Forces (D-31 on Base; D-97/98/100 re-confirmed as the right figure to reuse on Gnosis)
 const PAYMENT_TYPE: MechPaymentType = 'NATIVE';
-const EXISTING_SERVICE_ID = 635n; // real, already-created service (BION-DIRECTIVE-32) — resume, don't recreate
+// Base: real, already-created service (BION-DIRECTIVE-32) — resume, don't recreate. Gnosis: no
+// service exists yet — `existingServiceId: undefined` lets registerAsMechStep's own real state
+// check decide the first real step is `create`, same as Base's original first-ever run.
+const EXISTING_SERVICE_ID: bigint | undefined = CHAIN_ID === 100 ? undefined : 635n;
 
 // Steps that require sending BOND_WEI as msg.value (real Olas ServiceRegistry semantics —
 // activateRegistration's service-level deposit and registerAgents' per-instance operator bond
@@ -107,8 +129,8 @@ async function main(): Promise<void> {
       agentInstanceAddress: BASE_MECH_AGENT_INSTANCE_ADDRESS,
     };
 
-    const serviceRegistryClient = createServiceRegistryClient(RPC_URL, account);
-    const marketplaceClient = createMarketplaceClient(RPC_URL, account);
+    const serviceRegistryClient = createServiceRegistryClient(RPC_URL, account, CHAIN_ID);
+    const marketplaceClient = createMarketplaceClient(RPC_URL, account, CHAIN_ID);
     const adapter = new MechAdapter({
       config,
       marketplaceClient,
@@ -140,8 +162,11 @@ async function main(): Promise<void> {
     const valueWei = VALUE_BEARING_STEPS.has(preflight.step) ? BOND_WEI : 0n;
 
     console.log('\n=== FINAL SUMMARY — READ CAREFULLY BEFORE CONFIRMING ===');
+    console.log(`Chain:                           ${CHAIN_ID === 100 ? 'Gnosis' : 'Base'} (chain id ${CHAIN_ID})`);
     console.log(`Service owner (this wallet):     ${account.address}`);
-    console.log(`Service id:                      ${EXISTING_SERVICE_ID}`);
+    console.log(
+      `Service id:                      ${EXISTING_SERVICE_ID !== undefined ? EXISTING_SERVICE_ID : '(new — will be created by this run)'}`,
+    );
     console.log(`Real state before this run:      ${preflight.stateBefore}`);
     console.log(`>>> Step this run will execute:  ${preflight.step} <<<`);
     console.log(`Agent id:                        ${AGENT_ID}`);
@@ -157,13 +182,16 @@ async function main(): Promise<void> {
     console.log(`configHash:                       ${GREY_MECH_CONFIG_HASH}`);
     console.log(`mechPayload:                      ${GREY_MECH_PAYLOAD_HASH}`);
     console.log(
-      'Gas: Base gas is consistently cheap (sub-cent to a few cents per D-29/D-30/D-32 live ' +
-        'measurements) — this script does not compute a fresh gas estimate for this specific step.',
+      CHAIN_ID === 100
+        ? 'Gas: not independently measured live on Gnosis by this script — xDAI gas is typically ' +
+            'very cheap (sub-cent), but this has not been confirmed the way Base\'s was (D-29/D-30/D-32).'
+        : 'Gas: Base gas is consistently cheap (sub-cent to a few cents per D-29/D-30/D-32 live ' +
+            'measurements) — this script does not compute a fresh gas estimate for this specific step.',
     );
     console.log(
-      `\nThis will submit ONE real transaction on Base mainnet (step: ${preflight.step}) with real ` +
-        'funds. This cannot be undone. Any remaining steps need a SEPARATE run of this script after ' +
-        'this one lands.',
+      `\nThis will submit ONE real transaction on ${CHAIN_ID === 100 ? 'Gnosis' : 'Base'} mainnet ` +
+        `(step: ${preflight.step}) with real funds. This cannot be undone. Any remaining steps need ` +
+        'a SEPARATE run of this script after this one lands.',
     );
 
     const typed = await askLine('\nType REGISTER (all caps) to proceed, anything else to abort: ');
