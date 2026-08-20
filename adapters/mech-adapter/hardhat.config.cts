@@ -1,9 +1,44 @@
-// e3-b1's Base-fork test tooling. Scoped to this package only (npm devDependency, no system
-// Foundry/anvil install — user's explicit choice given the Base Marketplace has no testnet
-// deployment, current or legacy, to test against instead; see test/fork/marketplaceRead.fork.test.ts).
+// e3-b1's Base-fork test tooling, extended for Gnosis (BION-DIRECTIVE-97/98 Task 2/3). Scoped to
+// this package only (npm devDependency, no system Foundry/anvil install — user's explicit choice
+// given neither Base nor Gnosis has a usable testnet deployment of the current Marketplace-based
+// mech stack to test against instead; see test/fork/marketplaceRead.fork.test.ts and D-97's Chiado
+// finding). `MECH_FORK_CHAIN` selects which chain gets forked — defaults to `base`, so omitting it
+// (every pre-existing invocation of `test:fork`) reproduces the exact e3-b1 config unchanged.
 import type { HardhatUserConfig } from 'hardhat/config';
 
-const FORK_RPC_URL = process.env.BASE_FORK_RPC_URL?.trim() || 'https://mainnet.base.org';
+type ForkChainKey = 'base' | 'gnosis';
+
+const FORK_CHAIN: ForkChainKey = process.env.MECH_FORK_CHAIN?.trim() === 'gnosis' ? 'gnosis' : 'base';
+
+const FORK_CHAIN_CONFIG: Record<
+  ForkChainKey,
+  { chainId: number; defaultRpcUrl: string; rpcEnvVar: string; blockNumber: number }
+> = {
+  base: {
+    chainId: 8453,
+    defaultRpcUrl: 'https://mainnet.base.org',
+    rpcEnvVar: 'BASE_FORK_RPC_URL',
+    // Picked comfortably recent during e3-b1 research (current head was ~49.7M at that time),
+    // must postdate the Mech Marketplace's Base deployment. Bump if the RPC's retained history
+    // window ages it out.
+    blockNumber: 49_700_000,
+  },
+  gnosis: {
+    chainId: 100,
+    defaultRpcUrl: 'https://rpc.gnosischain.com',
+    rpcEnvVar: 'GNOSIS_FORK_RPC_URL',
+    // Picked comfortably recent during D-97/98 research (real chain head read live via
+    // eth_blockNumber was 47_827_394 at the time; a real request in the Gnosis marketplace
+    // subgraph exists at block 47_827_388, so this postdates real, current marketplace activity,
+    // not just the contract's original deployment). Bump if the RPC's retained history window
+    // ages it out, same caveat as Base's entry above.
+    blockNumber: 47_827_450,
+  },
+};
+
+const { chainId: FORK_CHAIN_ID, defaultRpcUrl, rpcEnvVar, blockNumber: FORK_BLOCK_NUMBER } =
+  FORK_CHAIN_CONFIG[FORK_CHAIN];
+const FORK_RPC_URL = process.env[rpcEnvVar]?.trim() || defaultRpcUrl;
 
 const config: HardhatUserConfig = {
   solidity: '0.8.28',
@@ -13,43 +48,44 @@ const config: HardhatUserConfig = {
         url: FORK_RPC_URL,
         // Pinned (Hardhat's own startup warning recommends this for performance/determinism
         // regardless) — also rules out any interaction between a moving "latest" fork block and
-        // the hardfork-activation lookup below. Must postdate the Mech Marketplace's Base
-        // deployment (confirmed live via eth_getCode against current chain state during e3-b1
-        // research, current head was ~49.7M at that time) — picked comfortably recent, not an
-        // arbitrary early block that could predate the contract's deployment. Bump if the RPC's
-        // retained history window ages it out.
-        blockNumber: 49_700_000,
+        // the hardfork-activation lookup below.
+        blockNumber: FORK_BLOCK_NUMBER,
       },
-      // EDR (Hardhat's Rust simulator) inherits chain id 8453 from the forked RPC itself
-      // (leaving `chainId` unset does NOT default to 31337 in forking mode, contrary to an
-      // earlier assumption here) and has no built-in hardfork-activation-history table for that
-      // chain id — every eth_call failed with "No known hardfork for execution on historical
+      // EDR (Hardhat's Rust simulator) inherits the chain id from the forked RPC itself (leaving
+      // `chainId` unset does NOT default to 31337 in forking mode, contrary to an earlier
+      // assumption here) and has no built-in hardfork-activation-history table for either chain
+      // id — every eth_call failed with "No known hardfork for execution on historical
       // block ... The node was not configured with a hardfork activation history" (eth_getCode
       // was unaffected — only historical-state execution needs the lookup). A flat top-level
-      // `hardfork` setting did NOT fix this (EDR still consults the chain-specific activation
-      // table for historical-block execution, not just a flat default) — the documented fix is
-      // registering an explicit hardfork-activation-history entry for chain id 8453 via
-      // `chains`, so EDR has an answer for "which hardfork was active at any block on this
-      // chain" without needing its own built-in knowledge of Base's history.
-      chainId: 8453,
+      // `hardfork` setting did NOT fix this for Base (EDR still consults the chain-specific
+      // activation table for historical-block execution, not just a flat default) — the
+      // documented fix is registering an explicit hardfork-activation-history entry per chain id
+      // via `chains`, so EDR has an answer for "which hardfork was active at any block on this
+      // chain" without needing its own built-in knowledge of either chain's history.
+      chainId: FORK_CHAIN_ID,
       hardfork: 'cancun',
       chains: {
-        8453: {
+        [FORK_CHAIN_ID]: {
           hardforkHistory: {
             cancun: 0,
           },
         },
       },
-      // KNOWN UNRESOLVED (e3-b1, 2026-08-08): none of the above — individually or combined —
-      // actually fixes eth_call against the forked Base state. Every readContract still fails
-      // with "No known hardfork for execution on historical block ... The node was not
-      // configured with a hardfork activation history", even though this config matches
-      // Hardhat's own documented `chains`/`hardforkHistory` shape exactly (verified directly
-      // against hardhat's installed config-resolution.js — config.chains resolves correctly on
-      // the JS side; the failure appears to originate inside the EDR native (Rust/napi) binary,
-      // which this pass could not inspect further). eth_getCode against the fork DOES work
-      // (proves the forked bytecode is real) — eth_call does not. Flagging as a genuine,
-      // reproducible tooling limitation rather than guessing further; see the e3-b1 report.
+      // KNOWN UNRESOLVED, CONFIRMED CHAIN-AGNOSTIC (Base: e3-b1, 2026-08-08; Gnosis: D-97/98,
+      // 2026-08-20 — both real runs, not inferred): none of the above — individually or combined
+      // — actually fixes eth_call against forked state, on EITHER chain. Every readContract/
+      // simulateContract fails with "No known hardfork for execution on historical block ... The
+      // node was not configured with a hardfork activation history", identical error shape on
+      // both chain id 8453 and chain id 100, even though this config matches Hardhat's own
+      // documented `chains`/`hardforkHistory` shape exactly (verified directly against hardhat's
+      // installed config-resolution.js — config.chains resolves correctly on the JS side; the
+      // failure appears to originate inside the EDR native (Rust/napi) binary, which this pass
+      // could not inspect further). eth_getCode against the fork DOES work on both chains (proves
+      // the forked bytecode is real, including for a genuinely separate chain's real mainnet
+      // state) — eth_call/simulateContract does not, on either. D-28 inferred this was an EDR
+      // limitation rather than a Base-specific bug from Base-only evidence; running the identical
+      // suite against a real Gnosis fork (D-97/98) is the actual confirmation of that inference,
+      // not a restatement of it — see test/fork/*.forkcheck.ts's real observed pass/fail counts.
     },
   },
 };

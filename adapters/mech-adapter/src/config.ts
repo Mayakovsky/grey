@@ -9,7 +9,8 @@
 // for the full citation. RPC URL and the two wallet addresses ARE env-configurable (G4 — wallets
 // are ceremony-generated, address only, never a key in this repo).
 import process from 'node:process';
-import type { Address } from 'viem';
+import type { Address, Chain } from 'viem';
+import { base, gnosis } from 'viem/chains';
 import type { OfferingSlug } from '@grey/schemas/responses';
 
 /** Grey's on-chain ERC-8004 DID — the unifying identity layer (Base mainnet, tokenId 58618). */
@@ -42,6 +43,55 @@ export const MARKETPLACE_ADDRESSES = {
 } as const;
 
 export type MechPaymentType = keyof typeof MARKETPLACE_ADDRESSES.factories;
+
+/** Gnosis mainnet (chain id 100) Mech Marketplace deployment — BION-DIRECTIVE-97 Task 1.
+ *  Source: same `autonolas-marketplace` `docs/configuration.json` as Base's entry above
+ *  (raw-fetched 2026-08-20), cross-checked against `mech-client`'s `mech_client/configs/mechs.json`
+ *  (independent repo — both agree exactly on `mechMarketplaceProxy`), plus a direct `eth_getCode`
+ *  RPC check against `rpc.gnosischain.com` confirming real deployed bytecode at the proxy,
+ *  implementation, and all three factories. `VERSION()` read live off `serviceManagerProxy`
+ *  returns `"1.2.0"` — byte-identical to Base's, same contract source independently deployed.
+ *
+ *  Only 3 factories exist on Gnosis (vs. Base's 5) — no distinct USDC-token or NVM-token-USDC
+ *  factory, same payment-type-parity gap D-26 found for Base→Gnosis and D-97 reconfirmed still
+ *  current. `TOKEN` here is the raw source's generic `MechFactoryFixedPriceToken` — the source
+ *  doesn't label which ERC20 it targets (unlike Base's, explicitly tagged `usdc`/`olas`); not
+ *  independently confirmed which token this expects, flagged rather than assumed. */
+export const GNOSIS_MARKETPLACE_ADDRESSES = {
+  chainId: 100,
+  mechMarketplaceProxy: '0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB' as Address,
+  mechMarketplaceImplementation: '0xE035dcD99F7A8cE0b1d72C3141f100C5B0E9e3bd' as Address,
+  factories: {
+    NATIVE: '0x8b299c20F87e3fcBfF0e1B86dC0acC06AB6993EF' as Address,
+    TOKEN: '0x31ffDC795FDF36696B8eDF7583A3D115995a45FA' as Address,
+    NVM_NATIVE: '0x65fd74C29463afe08c879a3020323DD7DF02DA57' as Address,
+  },
+} as const;
+
+/** Gnosis mainnet Olas ServiceRegistry deployment — BION-DIRECTIVE-97 Task 1. Source:
+ *  `valory-xyz/autonolas-registries/scripts/deployment/l2/globals_gnosis_mainnet.json`
+ *  (raw-fetched 2026-08-20), field-mapped against the equivalent Base file
+ *  (`globals_base_mainnet.json`) to confirm which raw field is the proxy vs. the implementation —
+ *  same `serviceManagerAddress`=implementation / `serviceManagerProxyAddress`=proxy split Base's
+ *  own entry uses, avoiding the exact proxy/implementation mixup D-28/D-29 already burned time on.
+ *  All six addresses confirmed via direct `eth_getCode` against `rpc.gnosischain.com` — real,
+ *  non-empty bytecode, not assumed from the JSON alone. `ETH_TOKEN_ADDRESS()` read live off this
+ *  `serviceManagerProxy` returns the exact same sentinel as Base's (see `ETH_TOKEN_ADDRESS` below).
+ *
+ *  Note: `gnosisSafeMultisig` here is the same address as Base's `serviceRegistryL2` above
+ *  (`0x3C1fF68f5aa342D296d4DEe4Bb1cACCA912D95fE`) — a real, verified coincidence (cross-chain
+ *  deterministic/CREATE2-style deployment of generic Olas infra, a known pattern elsewhere in
+ *  this project's own research), not a copy-paste error; confirmed live via `eth_getCode`, not
+ *  assumed from the source JSON alone. */
+export const GNOSIS_SERVICE_REGISTRY_ADDRESSES = {
+  chainId: 100,
+  serviceRegistryL2: '0x9338b5153AE39BB89f50468E608eD9d764B755fD' as Address,
+  serviceRegistryTokenUtility: '0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8' as Address,
+  serviceManagerImplementation: '0x2D2754EAc33C4B456e96C7438C3141735C3b60B8' as Address,
+  serviceManagerProxy: '0x068a4f0946cF8c7f9C1B58a3b5243Ac8843bf473' as Address,
+  operatorWhitelist: '0x526E064cB694E8f5B7DB299158e17F33055B3943' as Address,
+  gnosisSafeMultisig: '0x3C1fF68f5aa342D296d4DEe4Bb1cACCA912D95fE' as Address,
+} as const;
 
 /** Base mainnet Olas ServiceRegistry deployment (BION-DIRECTIVE-28) — the prerequisite lifecycle
  *  a service must complete before MechFactory*.createMech() will accept its serviceId (see
@@ -77,6 +127,30 @@ export const SERVICE_REGISTRY_ADDRESSES = {
  *  `ETH_TOKEN_ADDRESS()` directly against both `serviceManagerProxy` and `serviceManagerImplementation`
  *  on live Base mainnet; both return this exact value (2026-08-10), not assumed from source alone. */
 export const ETH_TOKEN_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as Address;
+
+/** Chain-parameterization seam (BION-DIRECTIVE-97/98 Task 2) — bundles a `viem` `Chain` object with
+ *  this package's own address sets, keyed by chain id. `marketplaceClient.ts`/
+ *  `serviceRegistryClient.ts` read from here instead of importing `MARKETPLACE_ADDRESSES`/
+ *  `SERVICE_REGISTRY_ADDRESSES` directly, so a second chain is a new map entry, not a new code
+ *  path. Every existing call site (`mechAdapter.ts`, `register-live.ts`) omits the new `chainId`
+ *  parameter entirely, defaulting to `8453` — live production behavior for the real, currently
+ *  revenue-generating Base deployment is unchanged unless a caller explicitly asks for Gnosis. */
+export const CHAINS = {
+  8453: {
+    viemChain: base as Chain,
+    marketplace: MARKETPLACE_ADDRESSES,
+    serviceRegistry: SERVICE_REGISTRY_ADDRESSES,
+    defaultRpcUrl: 'https://mainnet.base.org',
+  },
+  100: {
+    viemChain: gnosis as Chain,
+    marketplace: GNOSIS_MARKETPLACE_ADDRESSES,
+    serviceRegistry: GNOSIS_SERVICE_REGISTRY_ADDRESSES,
+    defaultRpcUrl: 'https://rpc.gnosischain.com',
+  },
+} as const;
+
+export type SupportedChainId = keyof typeof CHAINS;
 
 /** Real, authored Olas service-config metadata (BION-DIRECTIVE-30) — the document `configHash`
  *  references. Content lives at
