@@ -36,6 +36,7 @@ import { loadAgentInstanceAccount, loadAgentInstancePrivateKeyFromEnv } from './
 import { loadFilebaseCredentialsFromEnv } from './filebaseCredentials.js';
 import { createFilebasePinner } from './responsePinner.js';
 import { createSafeDeliveryClient } from './safeDeliveryClient.js';
+import { createMarketplaceClient } from './marketplaceClient.js';
 import { mechPriceUsdFor } from './prices.js';
 import { MechAdapter } from './mechAdapter.js';
 import { createLogger } from './logger.js';
@@ -143,9 +144,18 @@ async function main(): Promise<void> {
     gatewayBaseUrl: gatewayOverride,
   });
 
+  // BION-DIRECTIVE-106 fix — a third instance of the D-104 bug class, this time caught live during
+  // the Gnosis staging deploy (real numMechs() call against Base's proxy address, on Gnosis's own
+  // RPC, "returned no data"). MechAdapter's own constructor default
+  // (createMarketplaceClient(rpcUrl), no chainId) silently defaults to 8453 when no client is
+  // injected — this file simply never injected one, on any chain, until now. Constructing it
+  // explicitly with chainId closes that gap for good.
+  const marketplaceClient = createMarketplaceClient(config.rpcUrl, undefined, chainId);
+
   const adapter = new MechAdapter({
     config: { ...config, agentInstanceAddress: BASE_MECH_AGENT_INSTANCE_ADDRESS, mechAddress },
     publicClient,
+    marketplaceClient,
     safeDeliveryClient,
     responsePinner,
     requestContentGatewayUrl: gatewayOverride,
