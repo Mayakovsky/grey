@@ -39,6 +39,19 @@
 // is exactly why the flag is still required to actually resume; the count check exists only to
 // abort a silent duplicate `create()`, not to replace the flag). Base's behavior is completely
 // unchanged: hardcoded default `635n` still wins whenever no `--service-id` is passed.
+//
+// FIXED (BION-DIRECTIVE-110): the `createMech` step's `payload` argument was `GREY_MECH_PAYLOAD_HASH`
+// (the IPFS metadata hash) passed straight through, unencoded — but `MechFactory.createMech`
+// expects `abi.encode(uint256(deliveryRateWei))`, a real price, not a hash. This is the exact same
+// bug BION-DIRECTIVE-51 hit on Base (fixed there only by registering a second, corrected mech,
+// BION-DIRECTIVE-53/55 — never by fixing this script), and it reproduced identically for real on
+// Gnosis the first time this script's `createMech` step ran (mech `0x1A235555...`, permanently
+// unpayable — same root cause, confirmed by reading the real `maxDeliveryRate()` back on-chain).
+// Fixed at the source this time: `--delivery-rate <wei>` is a real, required-when-needed CLI flag;
+// `mechPayload` is now genuinely `encodeAbiParameters([{type:'uint256'}], [deliveryRateWei])`, never
+// the raw hash. If the resolved next step turns out to be `createMech` and no `--delivery-rate` was
+// given, this now fails closed with an explicit, specific error before the `REGISTER` prompt —
+// third time was not going to be acceptable.
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { createInterface } from 'node:readline';
@@ -61,7 +74,7 @@ import {
 } from '../src/config.js';
 import { createMarketplaceClient } from '../src/marketplaceClient.js';
 import { createServiceRegistryClient } from '../src/serviceRegistryClient.js';
-import { resolveExistingServiceId } from '../src/registrationResume.js';
+import { resolveExistingServiceId, resolveMechPayload } from '../src/registrationResume.js';
 import { MechAdapter, type ServiceRegistrationParams, type SingleStepResult } from '../src/mechAdapter.js';
 import { createLogger } from '../src/logger.js';
 
@@ -111,7 +124,12 @@ const RESUME_CHECK_ABI = parseAbi([
 // no value.
 const VALUE_BEARING_STEPS: ReadonlySet<SingleStepResult['step']> = new Set(['activateRegistration', 'registerAgents']);
 
-function parseArgs(argv: string[]): { keyfile: string; serviceIdFlag: bigint | undefined; forceCreateNewService: boolean } {
+function parseArgs(argv: string[]): {
+  keyfile: string;
+  serviceIdFlag: bigint | undefined;
+  forceCreateNewService: boolean;
+  deliveryRateWei: bigint | undefined;
+} {
   const idx = argv.indexOf('--keyfile');
   const keyfile = idx !== -1 && argv[idx + 1] ? argv[idx + 1] : DEFAULT_KEYFILE;
   const serviceIdIdx = argv.indexOf('--service-id');
@@ -121,7 +139,18 @@ function parseArgs(argv: string[]): { keyfile: string; serviceIdFlag: bigint | u
   }
   const serviceIdFlag = serviceIdRaw !== undefined ? BigInt(serviceIdRaw) : undefined;
   const forceCreateNewService = argv.includes('--force-create-new-service');
-  return { keyfile, serviceIdFlag, forceCreateNewService };
+
+  // BION-DIRECTIVE-110 — required only when the resolved next step turns out to be `createMech`
+  // (checked further down, once that's known); optional here purely because this script can't
+  // know the next step until after the read-only preflight resolves it.
+  const deliveryRateIdx = argv.indexOf('--delivery-rate');
+  const deliveryRateRaw = deliveryRateIdx !== -1 ? argv[deliveryRateIdx + 1] : undefined;
+  if (deliveryRateIdx !== -1 && (deliveryRateRaw === undefined || !/^\d+$/.test(deliveryRateRaw))) {
+    throw new Error(`--delivery-rate requires a plain non-negative integer (wei), got "${deliveryRateRaw}"`);
+  }
+  const deliveryRateWei = deliveryRateRaw !== undefined ? BigInt(deliveryRateRaw) : undefined;
+
+  return { keyfile, serviceIdFlag, forceCreateNewService, deliveryRateWei };
 }
 
 async function askLine(prompt: string): Promise<string> {
@@ -134,7 +163,7 @@ async function askLine(prompt: string): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const { keyfile, serviceIdFlag, forceCreateNewService } = parseArgs(process.argv.slice(2));
+  const { keyfile, serviceIdFlag, forceCreateNewService, deliveryRateWei } = parseArgs(process.argv.slice(2));
 
   // BION-DIRECTIVE-103 — resolve which service this run targets BEFORE prompting for the real
   // passphrase, using only public, read-only calls (no key material needed: the owner address,
@@ -201,11 +230,15 @@ async function main(): Promise<void> {
       logger: createLogger({ component: 'register-live' }),
     });
 
+    // BION-DIRECTIVE-110 — placeholder until the real next step is known (below); never the raw
+    // metadata hash, which is the bug this fixes. Whether this placeholder needs replacing with a
+    // real ABI-encoded delivery rate depends on `preflight.step`, resolved after this first call —
+    // see resolveMechPayload's own doc comment for why this can't be decided any earlier.
     const params: ServiceRegistrationParams = {
       agentId: AGENT_ID,
       bondWei: BOND_WEI,
       configHash: GREY_MECH_CONFIG_HASH,
-      mechPayload: GREY_MECH_PAYLOAD_HASH,
+      mechPayload: '0x',
       existingServiceId, // resolved above (BION-DIRECTIVE-103) — resume, or undefined only after a real, checked "no existing service" verdict
     };
 
@@ -221,6 +254,24 @@ async function main(): Promise<void> {
       `Pre-flight check succeeded — real current state is ${preflight.stateBefore}; the next real ` +
         `step is "${preflight.step}", and it simulates cleanly right now.`,
     );
+
+    // BION-DIRECTIVE-110 — the actual fail-closed check, and the actual fix: only now that
+    // preflight.step is real and known do we decide the real payload for the step that will
+    // actually execute. Never falls through to using the placeholder/metadata-hash for a real
+    // createMech call — that's the exact bug (BION-DIRECTIVE-51/110) that made two mechs
+    // permanently unpayable already.
+    const payloadDecision = resolveMechPayload(preflight.step, deliveryRateWei);
+    if (payloadDecision.mode === 'missing-delivery-rate') {
+      throw new Error(
+        'createMech is the real next step for this service, but --delivery-rate <wei> was not ' +
+          'provided. Refusing to proceed with a placeholder payload — this is exactly the bug ' +
+          '(BION-DIRECTIVE-51/110) that made two mechs permanently unpayable already. Pass ' +
+          '--delivery-rate <wei> (a real ABI-encoded uint256 price, e.g. 130000000000000000 for ' +
+          '0.13 xDAI/ETH) and run again.',
+      );
+    }
+    params.mechPayload = payloadDecision.payload;
+    const mechPayload = payloadDecision.payload;
 
     const valueWei = VALUE_BEARING_STEPS.has(preflight.step) ? BOND_WEI : 0n;
 
@@ -247,7 +298,14 @@ async function main(): Promise<void> {
       console.log('  (this step does not send any ETH value)');
     }
     console.log(`configHash:                       ${GREY_MECH_CONFIG_HASH}`);
-    console.log(`mechPayload:                      ${GREY_MECH_PAYLOAD_HASH}`);
+    if (preflight.step === 'createMech') {
+      // BION-DIRECTIVE-110 — the real thing that matters for this step is the delivery rate, not
+      // the metadata hash (which this step's payload is NOT, unlike configHash above).
+      console.log(`createMech payload (delivery rate): ${deliveryRateWei} wei (${formatEther(deliveryRateWei ?? 0n)} native)`);
+      console.log(`  ABI-encoded as:                  ${mechPayload}`);
+    } else {
+      console.log(`mechPayload (unused by this step): ${GREY_MECH_PAYLOAD_HASH}`);
+    }
     console.log(
       CHAIN_ID === 100
         ? 'Gas: not independently measured live on Gnosis by this script — xDAI gas is typically ' +

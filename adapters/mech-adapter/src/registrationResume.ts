@@ -101,3 +101,39 @@ export async function resolveExistingServiceId(params: ResolveExistingServiceIdP
 
   return { mode: 'create' };
 }
+
+// Real fix for BION-DIRECTIVE-110 — a second real, live consequence: register-live.ts's createMech
+// step passed GREY_MECH_PAYLOAD_HASH (the IPFS metadata hash) straight through as the real
+// createMech `payload` argument, unencoded. The real contracts (MechFactory/MechMarketplace)
+// expect `abi.encode(uint256(deliveryRateWei))` there — a real price, not a hash. This is the exact
+// same bug BION-DIRECTIVE-51 hit on Base, worked around there only by registering a second,
+// corrected mech (D-53/55) rather than fixing this script — it reproduced for real on Gnosis
+// (mech 0x1A235555..., confirmed permanently unpayable via a live maxDeliveryRate() read-back)
+// the very first time this script's createMech step actually ran there. Extracted so the encoding
+// is independently unit-testable, same reasoning as resolveExistingServiceId above.
+import { encodeAbiParameters } from 'viem';
+
+export type MechPayloadDecision =
+  | { mode: 'encoded'; payload: `0x${string}` }
+  | { mode: 'not-needed'; payload: `0x${string}` }
+  | { mode: 'missing-delivery-rate' };
+
+/** `step` is whatever `registerAsMechStep`'s own preflight already resolved as the real next step
+ *  — only `createMech` actually consumes the returned payload as a delivery rate; every other step
+ *  ignores it, so `deliveryRateWei` being absent is only ever a real problem when `step ===
+ *  'createMech'`. Never returns the raw metadata hash for `createMech` — that's the bug this
+ *  fixes. */
+export function resolveMechPayload(
+  step: 'create' | 'activateRegistration' | 'registerAgents' | 'deploy' | 'createMech',
+  deliveryRateWei: bigint | undefined,
+): MechPayloadDecision {
+  if (step !== 'createMech') {
+    // Real placeholder, not the metadata hash — no other step reads this field, so its exact
+    // value doesn't matter, only that it's never mistakable for a real delivery-rate encoding.
+    return { mode: 'not-needed', payload: '0x' };
+  }
+  if (deliveryRateWei === undefined) {
+    return { mode: 'missing-delivery-rate' };
+  }
+  return { mode: 'encoded', payload: encodeAbiParameters([{ type: 'uint256' }], [deliveryRateWei]) };
+}
