@@ -290,24 +290,16 @@ export const GREY_MECH_MULTISIG_ADDRESS = '0x5587335a6Fa1Dc7C421f2b87D91C7E9def0
  *  live Gnosis mech identity is needed once the corrected one exists. */
 export const GNOSIS_MECH_ADDRESS_ORIGINAL_INERT = '0x1A235555e9545f2B4f1a8E929317FFb893c94dDB' as const;
 
-// GNOSIS_MECH_ADDRESS — the real, corrected Gnosis mech (mirrors GREY_MECH_ADDRESS above) — does
-// NOT exist as a constant yet. D-110 fork-proved the corrected createMech call succeeds and
-// produces a mech charging exactly 130_000_000_000_000_000 wei (0.13 xDAI, Forces' confirmed real
-// price), but the real, signed call itself is still pending Forces' own action. Add this constant,
-// with the same doc-comment discipline as GREY_MECH_ADDRESS's above (real tx hash, real
-// maxDeliveryRate() re-confirmation), once that real address exists — not before.
-//
-// Every place currently treating GNOSIS_MECH_ADDRESS_ORIGINAL_INERT's address as if it were the
-// live Gnosis mech will need updating once the corrected one is real (D-110's own audit,
-// prepared, not yet applied):
-//   - main.ts / /etc/grey/mech-adapter-gnosis.env's MECH_ADDRESS — currently the inert address
-//     (set during D-105/106's go-live deploy, before this bug was found); needs the corrected
-//     address once it's real, restart required.
-//   - metadata/mech-payload-gnosis.json's description text names this address explicitly.
-//   - config.ts's GREY_MECH_REGISTERED_TOOLS doc comment (added D-106/107) names this address.
-//   - _internal/BION-DIRECTIVE-100-STATUS.md's own D-105/107 sections report this as "the real
-//     mech" — historically accurate for what was known at the time, not something to edit
-//     retroactively, but worth a forward-pointing note once the correction lands for real.
+/** The real, live, corrected Gnosis mech (BION-DIRECTIVE-111/112, 2026-08-21) — replaces
+ *  `GNOSIS_MECH_ADDRESS_ORIGINAL_INERT` above. Registered via `register-live.ts`'s now-fixed
+ *  `createMech` step (real, signed, Forces' own passphrase-gated action — same real service 3789,
+ *  same `NATIVE` factory), fork-proven first (`test/fork/registerLivePreflightOrdering.forkcheck.ts`,
+ *  the actual corrected call sequence, not just the payload encoding in isolation), then executed
+ *  for real: tx `0x62c919b2ff77016fc42fea9123db6e7c884c1a9f008070733c3946c28fd1e747`.
+ *  `maxDeliveryRate()` independently re-read after execution (by Desktop, not taken from the
+ *  script's own printed output) and confirmed exactly `130000000000000000` wei (0.13 xDAI, Forces'
+ *  confirmed real price) — this mech is real, correctly priced, and payable. */
+export const GNOSIS_MECH_ADDRESS = '0xf482B2Abbd0230b960320096B7b132fABc66830b' as const;
 
 /** The exact `tools` array committed in `metadata/mech-payload.json` — the real, on-chain-
  *  referenced tool catalog `GREY_MECH_PAYLOAD_HASH` pins. This is deliberately NOT

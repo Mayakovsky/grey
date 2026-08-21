@@ -13,9 +13,13 @@
 # is this unit's alone; nothing else reads from it. Once PR #54 merges at arc-end review, this
 # staging checkout's job is done and it can be removed, ExecStart repointed at the shared one.
 #
-# Real mech/multisig now exist (BION-DIRECTIVE-105 §0: service 3789 Deployed, mech
-# 0x1a235555E9545F2B4F1A8e929317FFb893C94dDb) — this unit is genuinely installable now, unlike
-# when this file was first authored (D-101, before registration completed).
+# Real mech/multisig now exist (BION-DIRECTIVE-105 §0: service 3789 Deployed) — this unit is
+# genuinely installable now, unlike when this file was first authored (D-101, before registration
+# completed). CORRECTED (BION-DIRECTIVE-111/112, 2026-08-21): D-105's mech
+# (0x1a235555E9545F2B4F1A8e929317FFb893C94dDb, GNOSIS_MECH_ADDRESS_ORIGINAL_INERT in config.ts) was
+# found permanently unpayable (D-109) and superseded by a corrected mech, GNOSIS_MECH_ADDRESS in
+# config.ts (0xf482B2Abbd0230b960320096B7b132fABc66830b) — this unit's own real MECH_ADDRESS value
+# lives in the EnvironmentFile below, not in this file; see config.ts for which address is current.
 #
 # Ships INSTALLED-BUT-DISABLED, same as the Base unit did originally. Enabling/starting it, and
 # flipping its own MECH_ADAPTER_OBSERVE_ONLY to false, are separate, later, explicit Forces acts —
