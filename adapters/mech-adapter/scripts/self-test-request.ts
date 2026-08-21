@@ -24,6 +24,24 @@
 // any simulate/execute, never a placeholder that gets fixed up after) — same discipline applied
 // here throughout: every real value (mech's own maxDeliveryRate/paymentType, the pinned content
 // hash) is resolved BEFORE the preflight simulate, not after.
+//
+// FIXED (BION-DIRECTIVE-114) — a real bug in THIS script's first version, found the first time
+// Forces ran it for real (twice, identically): it built `createFilebasePinner` without an explicit
+// `gatewayBaseUrl`, so it silently fell back to the hardcoded default, `gateway.autonolas.tech`.
+// That gateway's own IPFS-resolution backend was already found genuinely broken once before
+// (BION-DIRECTIVE-57, 2026-08-13 — confirmed via Filebase's own pin-status, two other public
+// gateways resolving the same content fine, and a real 504/timeout from this one specifically) —
+// re-confirmed live during this directive, against that exact same old, definitely-still-pinned
+// CID: 20s, zero bytes, no response. Not a propagation-delay issue a wider retry budget would fix
+// — the gateway doesn't respond at all, so retrying more just wastes more time against a dead
+// backend. Production (main.ts's `loadGatewayOverride`) already has the real, proven fix: route
+// both gateway-dependent legs (pin-verify AND request-content-fetch) through
+// `MECH_ADAPTER_PIN_VERIFY_GATEWAY_URL`, set to `https://ipfs.io` in `/etc/grey/mech-adapter.env`.
+// This script now does the same — reads the same env var, but (unlike main.ts) defaults to
+// `https://ipfs.io` directly rather than the broken gateway if the var is unset, since this is a
+// standalone script with no other safety net if an operator's local environment doesn't happen to
+// have it set.
+const GATEWAY_OVERRIDE = process.env.MECH_ADAPTER_PIN_VERIFY_GATEWAY_URL?.trim() || 'https://ipfs.io';
 import process from 'node:process';
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -147,7 +165,7 @@ async function main(): Promise<void> {
   console.log(`Real request content:\n${requestContentJson}`);
   console.log(`Real derived request hash: ${requestDataHash}`);
 
-  console.log('\n--- Step 2: pin the real request content to Filebase, verify independently — BEFORE any passphrase prompt ---');
+  console.log(`\n--- Step 2: pin the real request content to Filebase, verify independently via ${GATEWAY_OVERRIDE} — BEFORE any passphrase prompt ---`);
   // Same real pin-and-verify mechanism responsePinner.ts already proves for response content
   // (BION-DIRECTIVE-45/47) — the live adapter fetches REQUEST content the identical way
   // (requestContent.ts's fetchRequestContent), so this needs to be genuinely resolvable before the
@@ -155,7 +173,7 @@ async function main(): Promise<void> {
   // request up. Reads MECH_ADAPTER_FILEBASE_* from env — same three vars main.ts's own production
   // config already requires (filebaseCredentials.ts) — fails closed here if unset, before wasting a
   // passphrase entry on a request that could never actually be served.
-  const pinner = createFilebasePinner({ credentials: loadFilebaseCredentialsFromEnv() });
+  const pinner = createFilebasePinner({ credentials: loadFilebaseCredentialsFromEnv(), gatewayBaseUrl: GATEWAY_OVERRIDE });
   const pinResult = await pinner.pinAndVerify(requestContentJson);
   if (pinResult.hashBytes32.toLowerCase() !== requestDataHash.toLowerCase()) {
     // Should be structurally impossible (both computations are the same deriveResponseHash call)
@@ -310,7 +328,7 @@ async function main(): Promise<void> {
       return;
     }
     console.log(`Real Deliver event found — deliveryRate paid: ${deliveredRate} wei, response content hash: ${deliveredDataHash}`);
-    const delivered_content = await fetchRequestContent(deliveredDataHash);
+    const delivered_content = await fetchRequestContent(deliveredDataHash, { gatewayBaseUrl: GATEWAY_OVERRIDE });
     console.log('\n=== REAL DELIVERED RESPONSE ===');
     console.log(JSON.stringify(delivered_content, null, 2));
     console.log('\nWhole cycle confirmed: request submitted, picked up, delivered, and the delivered content is real and independently fetchable.');
