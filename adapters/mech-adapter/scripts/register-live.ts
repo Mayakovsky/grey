@@ -52,6 +52,17 @@
 // the raw hash. If the resolved next step turns out to be `createMech` and no `--delivery-rate` was
 // given, this now fails closed with an explicit, specific error before the `REGISTER` prompt —
 // third time was not going to be acceptable.
+//
+// FIXED (BION-DIRECTIVE-111): D-110's fix above had its own real ordering bug — this script
+// computed the real payload only AFTER calling `adapter.registerAsMechStep` to learn the next
+// step, but that call doesn't just report the step, it immediately simulates it (mechAdapter.ts's
+// `runCreateMechStep`, same call) using whatever `mechPayload` was passed in — still the '0x'
+// placeholder at that point. Forces' real run hit exactly this: the pre-flight simulate reverted
+// with the placeholder payload, safely, before ever reaching the REGISTER prompt. Fixed by
+// resolving the real step (via the new `nextStepForState`, a direct read-only `getService` call —
+// no simulate needed) and the real payload (via `resolveMechPayload`, aborting first if a required
+// `--delivery-rate` is missing) BEFORE constructing `params` at all, so the pre-flight simulate
+// below runs with the real, final payload the first time — no placeholder, no post-hoc fixup.
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { createInterface } from 'node:readline';
@@ -74,7 +85,12 @@ import {
 } from '../src/config.js';
 import { createMarketplaceClient } from '../src/marketplaceClient.js';
 import { createServiceRegistryClient } from '../src/serviceRegistryClient.js';
-import { resolveExistingServiceId, resolveMechPayload } from '../src/registrationResume.js';
+import {
+  resolveExistingServiceId,
+  resolveMechPayload,
+  nextStepForState,
+  type MechRegistrationStep,
+} from '../src/registrationResume.js';
 import { MechAdapter, type ServiceRegistrationParams, type SingleStepResult } from '../src/mechAdapter.js';
 import { createLogger } from '../src/logger.js';
 
@@ -196,6 +212,39 @@ async function main(): Promise<void> {
   }
   const existingServiceId = decision.mode === 'resume' ? decision.serviceId : undefined;
 
+  // BION-DIRECTIVE-111 — the real fix: determine the step BEFORE resolving the payload, and
+  // BEFORE ever calling MechAdapter.registerAsMechStep (which, for an existing service, simulates
+  // the step in the very same call it reports it in — D-110's bug was computing the payload AFTER
+  // that call, too late). Still entirely read-only, still before the passphrase prompt, same
+  // fail-fast discipline as the resolveExistingServiceId check above — no key material needed,
+  // this is the exact same real getService read `registerAsMechStep` would do internally anyway.
+  const step: MechRegistrationStep | 'create' =
+    existingServiceId === undefined
+      ? 'create'
+      : nextStepForState(
+          (
+            await readOnlyClient.readContract({
+              address: CHAINS[CHAIN_ID].serviceRegistry.serviceRegistryL2,
+              abi: RESUME_CHECK_ABI,
+              functionName: 'getService',
+              args: [existingServiceId],
+            })
+          ).state,
+        );
+  const payloadDecision = resolveMechPayload(step, deliveryRateWei);
+  if (payloadDecision.mode === 'missing-delivery-rate') {
+    console.log(
+      `\nABORTED before any passphrase prompt — createMech is the real next step for this ` +
+        'service, but --delivery-rate <wei> was not provided. Refusing to proceed with a ' +
+        'placeholder payload — this is exactly the bug (BION-DIRECTIVE-51/110) that made two ' +
+        'mechs permanently unpayable already. Pass --delivery-rate <wei> (a real ABI-encoded ' +
+        'uint256 price, e.g. 130000000000000000 for 0.13 xDAI/ETH) and run again.',
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const mechPayload = payloadDecision.payload;
+
   console.log(`Loading keystore: ${keyfile}`);
   const keystore = parseKeystore(readFileSync(keyfile, 'utf8'));
 
@@ -230,15 +279,16 @@ async function main(): Promise<void> {
       logger: createLogger({ component: 'register-live' }),
     });
 
-    // BION-DIRECTIVE-110 — placeholder until the real next step is known (below); never the raw
-    // metadata hash, which is the bug this fixes. Whether this placeholder needs replacing with a
-    // real ABI-encoded delivery rate depends on `preflight.step`, resolved after this first call —
-    // see resolveMechPayload's own doc comment for why this can't be decided any earlier.
+    // BION-DIRECTIVE-111 — mechPayload is already the real, correct value here (resolved above,
+    // before the passphrase prompt, via nextStepForState + resolveMechPayload). No placeholder,
+    // no post-hoc fixup: the preflight call below simulates with the SAME payload the real
+    // execution call later will use — that's the actual fix, D-110's own version of this block
+    // computed the payload only after the preflight call had already run with a placeholder.
     const params: ServiceRegistrationParams = {
       agentId: AGENT_ID,
       bondWei: BOND_WEI,
       configHash: GREY_MECH_CONFIG_HASH,
-      mechPayload: '0x',
+      mechPayload,
       existingServiceId, // resolved above (BION-DIRECTIVE-103) — resume, or undefined only after a real, checked "no existing service" verdict
     };
 
@@ -255,24 +305,12 @@ async function main(): Promise<void> {
         `step is "${preflight.step}", and it simulates cleanly right now.`,
     );
 
-    // BION-DIRECTIVE-110 — the actual fail-closed check, and the actual fix: only now that
-    // preflight.step is real and known do we decide the real payload for the step that will
-    // actually execute. Never falls through to using the placeholder/metadata-hash for a real
-    // createMech call — that's the exact bug (BION-DIRECTIVE-51/110) that made two mechs
-    // permanently unpayable already.
-    const payloadDecision = resolveMechPayload(preflight.step, deliveryRateWei);
-    if (payloadDecision.mode === 'missing-delivery-rate') {
-      throw new Error(
-        'createMech is the real next step for this service, but --delivery-rate <wei> was not ' +
-          'provided. Refusing to proceed with a placeholder payload — this is exactly the bug ' +
-          '(BION-DIRECTIVE-51/110) that made two mechs permanently unpayable already. Pass ' +
-          '--delivery-rate <wei> (a real ABI-encoded uint256 price, e.g. 130000000000000000 for ' +
-          '0.13 xDAI/ETH) and run again.',
-      );
-    }
-    params.mechPayload = payloadDecision.payload;
-    const mechPayload = payloadDecision.payload;
-
+    // BION-DIRECTIVE-111 — no post-preflight payload recomputation anymore: params.mechPayload was
+    // already correct going INTO the preflight call above, so preflight.step's simulate already
+    // ran against the real payload, not a placeholder. (If preflight.step somehow disagreed with
+    // the pre-passphrase `step` this script derived for payload resolution — e.g. real on-chain
+    // state changed in the seconds between the two reads — registerAsMechStep's own simulate above
+    // would have failed loudly already; this script does not silently paper over that.)
     const valueWei = VALUE_BEARING_STEPS.has(preflight.step) ? BOND_WEI : 0n;
 
     console.log('\n=== FINAL SUMMARY — READ CAREFULLY BEFORE CONFIRMING ===');

@@ -11,6 +11,35 @@
 // same hardcoded literal as before — this module's non-trivial logic only applies when no
 // hardcoded default exists for the chain in question.
 
+import { SERVICE_STATE } from './serviceRegistryAbi.js';
+
+export type MechRegistrationStep = 'activateRegistration' | 'registerAgents' | 'deploy' | 'createMech';
+
+/** Real fix for BION-DIRECTIVE-111 — a genuine ordering bug in D-110's own fix, found the first
+ *  time Forces actually ran the corrected script for real: `register-live.ts` computed the real
+ *  ABI-encoded delivery rate only AFTER calling `MechAdapter.registerAsMechStep` to learn which
+ *  step was next — but `registerAsMechStep` doesn't just report the step, it immediately simulates
+ *  it too (same call, `mechAdapter.ts:426`), using whatever payload was passed in at that point.
+ *  For a `Deployed` service that's `createMech`, so the FIRST (and, since `observeOnly` gates it,
+ *  only-simulated) real call ran with the still-placeholder `'0x'` payload, before this script ever
+ *  got a chance to correct it. Aborted safely (D-110's own layered defenses caught it), but told
+ *  Forces nothing useful about whether the real fix actually worked.
+ *
+ *  Real fix: the step is fully determined by `state` alone (no simulate needed to know it —
+ *  `mechAdapter.ts`'s own `stateBefore === ...` branching already proves this). Extracted here as
+ *  the one source of truth so `register-live.ts` can determine `step` itself (via a direct
+ *  `getService` read, which it already has the client for), resolve the real payload via
+ *  `resolveMechPayload`, and only THEN call `registerAsMechStep` — with the now-correct
+ *  `params.mechPayload` — for its actual (still real, still `observeOnly`-gated) preflight
+ *  simulate. `mechAdapter.ts`'s own `registerAsMechStep` also uses this function internally now,
+ *  so the state→step mapping can't drift into two different implementations. */
+export function nextStepForState(state: number): MechRegistrationStep {
+  if (state === SERVICE_STATE.PreRegistration) return 'activateRegistration';
+  if (state === SERVICE_STATE.ActiveRegistration) return 'registerAgents';
+  if (state === SERVICE_STATE.FinishedRegistration) return 'deploy';
+  return 'createMech'; // caller is responsible for confirming state is actually Deployed (or NonExistent, handled separately) first
+}
+
 export interface GetServiceLike {
   (serviceId: bigint): Promise<{ state: number }>;
 }
