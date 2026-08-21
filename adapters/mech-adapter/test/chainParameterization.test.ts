@@ -11,6 +11,7 @@ import {
   GNOSIS_MARKETPLACE_ADDRESSES,
   SERVICE_REGISTRY_ADDRESSES,
   GNOSIS_SERVICE_REGISTRY_ADDRESSES,
+  loadMechIdentity,
 } from '../src/config.js';
 import { createServiceRegistryClient } from '../src/serviceRegistryClient.js';
 import { createMarketplaceClient } from '../src/marketplaceClient.js';
@@ -65,6 +66,28 @@ describe('MarketplaceClient.getFactoryAddress — chain-correct, not Base-hardco
     // (NATIVE/USDC_TOKEN/OLAS_TOKEN/NATIVE_NVM/TOKEN_NVM_USDC) — USDC_TOKEN genuinely doesn't
     // exist on Gnosis's real, deployed factory set.
     expect(() => client.getFactoryAddress('USDC_TOKEN')).toThrow(/no "USDC_TOKEN" factory on chain 100/);
+  });
+});
+
+describe('loadMechIdentity — checksum normalization (BION-DIRECTIVE-106, caught live in Gnosis staging)', () => {
+  // The real, live-caught bug: Desktop's D-105 mail reported this exact real mech address, but not
+  // in strict EIP-55 checksum case. requiredAddress()/loadMechIdentity used to pass it straight to
+  // viem's readContract, which enforces checksum strictly and threw "Address must match its
+  // checksum counterpart" the first time MechAdapter.start() actually called checkMech() on Gnosis.
+  const NON_CHECKSUMMED = '0x1a235555E9545F2B4F1A8e929317FFb893C94dDb';
+  const CORRECT_CHECKSUM = '0x1A235555e9545f2B4f1a8E929317FFb893c94dDB';
+
+  it('normalizes a shape-valid but wrongly-cased MECH_ADDRESS on a non-Base chain (the fail-closed path)', () => {
+    const identity = loadMechIdentity(
+      { MECH_ADDRESS: NON_CHECKSUMMED, MECH_MULTISIG_ADDRESS: NON_CHECKSUMMED },
+      100,
+    );
+    expect(identity.mechAddress).toBe(CORRECT_CHECKSUM);
+  });
+
+  it('normalizes the same on the Base override path (MECH_ADDRESS env override, chain 8453)', () => {
+    const identity = loadMechIdentity({ MECH_ADDRESS: NON_CHECKSUMMED }, 8453);
+    expect(identity.mechAddress).toBe(CORRECT_CHECKSUM);
   });
 });
 

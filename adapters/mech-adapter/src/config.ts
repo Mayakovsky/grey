@@ -9,7 +9,7 @@
 // for the full citation. RPC URL and the two wallet addresses ARE env-configurable (G4 — wallets
 // are ceremony-generated, address only, never a key in this repo).
 import process from 'node:process';
-import type { Address, Chain } from 'viem';
+import { getAddress, type Address, type Chain } from 'viem';
 import { base, gnosis } from 'viem/chains';
 import type { OfferingSlug } from '@grey/schemas/responses';
 
@@ -331,12 +331,20 @@ function isAddress(v: string): v is Address {
   return /^0x[0-9a-fA-F]{40}$/.test(v);
 }
 
+/** Real, live-caught bug (BION-DIRECTIVE-106): this only checked hex *shape*, never checksum —
+ *  an env-provided address in an inconsistent (but shape-valid) case slips through here silently,
+ *  then fails deep inside viem's own strict EIP-55 checksum enforcement the first time it's
+ *  actually used in a contract call ("Address must match its checksum counterpart"), far from
+ *  where the real problem (a manually-copy-pasted env value) originated. `getAddress()` normalizes
+ *  any validly-shaped input to its correct checksum — applying it here means every address this
+ *  function resolves is always safe to hand directly to viem, regardless of how an operator or a
+ *  dispatched directive happened to capitalize it. */
 function requiredAddress(env: Env, key: string): Address {
   const raw = required(env, key);
   if (!isAddress(raw)) {
     throw new Error(`mech-adapter: ${key} is not a valid 0x-address, got "${raw}"`);
   }
-  return raw as Address;
+  return getAddress(raw);
 }
 
 /** Which chain this adapter *process* runs against (BION-DIRECTIVE-101 §3 — the chain-scoped
@@ -370,8 +378,10 @@ export interface MechIdentity {
 export function loadMechIdentity(env: Env = process.env, chainId: SupportedChainId = 8453): MechIdentity {
   if (chainId === 8453) {
     return {
-      mechAddress: (env.MECH_ADDRESS?.trim() as Address) || GREY_MECH_ADDRESS,
-      mechMultisigAddress: (env.MECH_MULTISIG_ADDRESS?.trim() as Address) || GREY_MECH_MULTISIG_ADDRESS,
+      mechAddress: env.MECH_ADDRESS?.trim() ? getAddress(env.MECH_ADDRESS.trim()) : GREY_MECH_ADDRESS,
+      mechMultisigAddress: env.MECH_MULTISIG_ADDRESS?.trim()
+        ? getAddress(env.MECH_MULTISIG_ADDRESS.trim())
+        : GREY_MECH_MULTISIG_ADDRESS,
     };
   }
   return {
