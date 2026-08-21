@@ -137,7 +137,10 @@ async function main(): Promise<void> {
 
   const deps = createHandlerDeps({ databaseUrl: config.databaseUrl });
   const publicClient = createPublicClient({ chain: CHAINS[chainId].viemChain, transport: http(config.rpcUrl) });
-  const safeDeliveryClient = createSafeDeliveryClient(config.rpcUrl, mechMultisigAddress, agentInstanceAccount);
+  // BION-DIRECTIVE-115 fix — createSafeDeliveryClient used to hardcode Base's chain object
+  // internally regardless of chainId; real live consequence: Gnosis's first real delivery attempt
+  // failed at eth_sendRawTransaction ("invalid chain id for signer: have 8453 want 100").
+  const safeDeliveryClient = createSafeDeliveryClient(config.rpcUrl, mechMultisigAddress, agentInstanceAccount, chainId);
   const gatewayOverride = loadGatewayOverride(process.env);
   const responsePinner = createFilebasePinner({
     credentials: filebaseCredentials,

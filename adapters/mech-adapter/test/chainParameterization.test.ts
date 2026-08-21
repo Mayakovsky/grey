@@ -15,6 +15,7 @@ import {
 } from '../src/config.js';
 import { createServiceRegistryClient } from '../src/serviceRegistryClient.js';
 import { createMarketplaceClient } from '../src/marketplaceClient.js';
+import { createSafeDeliveryClient } from '../src/safeDeliveryClient.js';
 import { MechAdapter } from '../src/mechAdapter.js';
 import {
   FAKE_PAY_TO,
@@ -66,6 +67,29 @@ describe('MarketplaceClient.getFactoryAddress — chain-correct, not Base-hardco
     // (NATIVE/USDC_TOKEN/OLAS_TOKEN/NATIVE_NVM/TOKEN_NVM_USDC) — USDC_TOKEN genuinely doesn't
     // exist on Gnosis's real, deployed factory set.
     expect(() => client.getFactoryAddress('USDC_TOKEN')).toThrow(/no "USDC_TOKEN" factory on chain 100/);
+  });
+});
+
+describe('SafeDeliveryClient.chainId — chain-correct, not Base-hardcoded (BION-DIRECTIVE-115)', () => {
+  // Real, live consequence this fixes: the Gnosis adapter's first real delivery attempt
+  // (BION-DIRECTIVE-113's self-test request) failed at eth_sendRawTransaction with "invalid chain
+  // id for signer: have 8453 want 100" — createSafeDeliveryClient hardcoded viem's `base` chain
+  // object for its public/wallet clients regardless of the chainId param, so the raw transaction
+  // it signed always embedded chainId 8453, no matter which chain rpcUrl actually pointed at. Same
+  // "http://localhost, never actually dialed" pattern the D-104 tests above use — chain.id is set
+  // synchronously at client construction, no real RPC call needed to observe it.
+  it('Base (chainId 8453, the default) constructs with chain id 8453 — unchanged', () => {
+    const client = createSafeDeliveryClient('http://localhost', FAKE_MECH, account);
+    expect(client.chainId).toBe(8453);
+  });
+
+  it('Gnosis (chainId 100) constructs with chain id 100 — the actual bug fix', () => {
+    const client = createSafeDeliveryClient('http://localhost', FAKE_MECH, account, 100);
+    expect(client.chainId).toBe(100);
+    // The real, specific regression this fixes: before this fix, this would have been 8453
+    // regardless — exactly the mismatch the real "invalid chain id for signer: have 8453 want
+    // 100" error named.
+    expect(client.chainId).not.toBe(8453);
   });
 });
 

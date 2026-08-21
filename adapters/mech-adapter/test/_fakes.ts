@@ -74,6 +74,7 @@ export function fakeSignedCall(overrides: Partial<SignedSafeCall> = {}): SignedS
 
 export function fakeSafeDeliveryClient(overrides: Partial<SafeDeliveryClient> = {}): SafeDeliveryClient {
   return {
+    chainId: 8453,
     buildSignedDelivery: async (_mech: Address, _requestIds: readonly Hash[], _datas: readonly Hex[]) =>
       fakeSignedDelivery(),
     simulateDelivery: async (_signed: SignedSafeDelivery) => ({ success: true }),
