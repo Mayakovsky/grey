@@ -1,0 +1,48 @@
+# grey-mech-adapter-gnosis — the Olas Mech Marketplace (Gnosis) as a ChannelIngress
+# (BION-DIRECTIVE-101 §3). Entirely separate process/unit from grey-mech-adapter.service (Base) —
+# own EnvironmentFile, own MECH_ADAPTER_OBSERVE_ONLY value — specifically so flipping payment
+# acceptance on for Gnosis can never touch Base's own live, currently-revenue-generating flag
+# (D-100 §1.3's finding: the flag was a single global value on one process; this is the fix,
+# not a chain-scoping flag on the same process).
+#
+# WorkingDirectory is a SEPARATE, ISOLATED checkout (/opt/grey/grey-gnosis-staging), not the
+# shared /opt/grey/grey all other grey-* units build from (BION-DIRECTIVE-106 §2). Reason: this
+# unit's code (D-97/98/100/101/103/104's chain-parameterization) lives only on the still-unmerged,
+# held PR #54 — checking that branch out in the shared checkout would put Base's live
+# grey-mech-adapter.service one restart away from running unreviewed code. The isolated checkout
+# is this unit's alone; nothing else reads from it. Once PR #54 merges at arc-end review, this
+# staging checkout's job is done and it can be removed, ExecStart repointed at the shared one.
+#
+# Real mech/multisig now exist (BION-DIRECTIVE-105 §0: service 3789 Deployed) — this unit is
+# genuinely installable now, unlike when this file was first authored (D-101, before registration
+# completed). CORRECTED (BION-DIRECTIVE-111/112, 2026-08-21): D-105's mech
+# (0x1a235555E9545F2B4F1A8e929317FFb893C94dDb, GNOSIS_MECH_ADDRESS_ORIGINAL_INERT in config.ts) was
+# found permanently unpayable (D-109) and superseded by a corrected mech, GNOSIS_MECH_ADDRESS in
+# config.ts (0xf482B2Abbd0230b960320096B7b132fABc66830b) — this unit's own real MECH_ADDRESS value
+# lives in the EnvironmentFile below, not in this file; see config.ts for which address is current.
+#
+# Ships INSTALLED-BUT-DISABLED, same as the Base unit did originally. Enabling/starting it, and
+# flipping its own MECH_ADAPTER_OBSERVE_ONLY to false, are separate, later, explicit Forces acts —
+# same split D-100 §1.3 already specified, unchanged by this directive.
+[Unit]
+Description=Grey mech adapter (ChannelIngress — Olas Mech Marketplace, Gnosis)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=grey
+WorkingDirectory=/opt/grey/grey-gnosis-staging
+ExecStart=/usr/bin/node adapters/mech-adapter/dist/main.js
+EnvironmentFile=/etc/grey/mech-adapter-gnosis.env
+Restart=on-failure
+RestartSec=5
+
+# Hardening (drop if a probe shows it breaks node/pg; report before removing) — mirrors the Base
+# unit's own hardening exactly.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

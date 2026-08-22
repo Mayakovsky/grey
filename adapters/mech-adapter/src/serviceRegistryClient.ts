@@ -45,6 +45,12 @@ export interface CreateParams {
 }
 
 export interface ServiceRegistryClient {
+  /** The real, chain-correct Safe multisig implementation `deploy()` expects — resolved from this
+   *  client's own `chainId` at construction time (BION-DIRECTIVE-104). Exposed here rather than
+   *  left for `mechAdapter.ts`'s `runDeployStep` to import the bare Base constant directly, which
+   *  is exactly the real bug this fixes: that import is chain-blind, this client isn't. */
+  readonly gnosisSafeMultisig: Address;
+
   /** Read-only — safe to call regardless of observeOnly. */
   getService(serviceId: bigint): Promise<ServiceInfo>;
 
@@ -99,6 +105,8 @@ export function createServiceRegistryClient(
   const registryAddress = chain.serviceRegistry.serviceRegistryL2;
 
   return {
+    gnosisSafeMultisig: chain.serviceRegistry.gnosisSafeMultisig,
+
     async getService(serviceId: bigint) {
       const service = await publicClient.readContract({
         address: registryAddress,

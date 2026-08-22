@@ -9,7 +9,7 @@
 // for the full citation. RPC URL and the two wallet addresses ARE env-configurable (G4 — wallets
 // are ceremony-generated, address only, never a key in this repo).
 import process from 'node:process';
-import type { Address, Chain } from 'viem';
+import { getAddress, type Address, type Chain } from 'viem';
 import { base, gnosis } from 'viem/chains';
 import type { OfferingSlug } from '@grey/schemas/responses';
 
@@ -273,6 +273,34 @@ export const GREY_MECH_ADDRESS_ORIGINAL_INERT = '0x1ECFb7c086bCd483cF49405dadA00
 export const GREY_MECH_ADDRESS = '0x1a2A7b94726B0711E5365C0D73E79C77a9256Ad7' as const;
 export const GREY_MECH_MULTISIG_ADDRESS = '0x5587335a6Fa1Dc7C421f2b87D91C7E9def095872' as const;
 
+/** SUPERSEDED (BION-DIRECTIVE-110, 2026-08-21) — the exact same bug as
+ *  `GREY_MECH_ADDRESS_ORIGINAL_INERT` above, reproduced for real on Gnosis: `register-live.ts`'s
+ *  `createMech` step passed `GREY_MECH_PAYLOAD_HASH` (the IPFS metadata hash) straight through as
+ *  the real `payload` argument, unencoded — but the real contract expects
+ *  `abi.encode(uint256(deliveryRateWei))`, a price, not a hash. Confirmed live: `maxDeliveryRate()`
+ *  on this address reads back byte-for-byte identical to `GREY_MECH_PAYLOAD_HASH` — an
+ *  astronomically large, permanently unpayable rate, same as Base's original mistake. **This
+ *  address is real, permanently on-chain, permanently discoverable via the real Gnosis subgraph —
+ *  and permanently unable to ever receive a valid payment.** D-110 fixed the root cause in
+ *  `register-live.ts` (a required `--delivery-rate <wei>` flag, real `abi.encode`, fails closed if
+ *  missing — see `registrationResume.ts`'s `resolveMechPayload`) so this can't reproduce a third
+ *  time, and fork-proved a corrected second mech (real service 3789, same pattern as
+ *  `GREY_MECH_ADDRESS` above) — but the real, signed correction call is Forces' own passphrase-
+ *  gated action, not yet executed as of this comment. Do not reference this address anywhere a
+ *  live Gnosis mech identity is needed once the corrected one exists. */
+export const GNOSIS_MECH_ADDRESS_ORIGINAL_INERT = '0x1A235555e9545f2B4f1a8E929317FFb893c94dDB' as const;
+
+/** The real, live, corrected Gnosis mech (BION-DIRECTIVE-111/112, 2026-08-21) — replaces
+ *  `GNOSIS_MECH_ADDRESS_ORIGINAL_INERT` above. Registered via `register-live.ts`'s now-fixed
+ *  `createMech` step (real, signed, Forces' own passphrase-gated action — same real service 3789,
+ *  same `NATIVE` factory), fork-proven first (`test/fork/registerLivePreflightOrdering.forkcheck.ts`,
+ *  the actual corrected call sequence, not just the payload encoding in isolation), then executed
+ *  for real: tx `0x62c919b2ff77016fc42fea9123db6e7c884c1a9f008070733c3946c28fd1e747`.
+ *  `maxDeliveryRate()` independently re-read after execution (by Desktop, not taken from the
+ *  script's own printed output) and confirmed exactly `130000000000000000` wei (0.13 xDAI, Forces'
+ *  confirmed real price) — this mech is real, correctly priced, and payable. */
+export const GNOSIS_MECH_ADDRESS = '0xf482B2Abbd0230b960320096B7b132fABc66830b' as const;
+
 /** The exact `tools` array committed in `metadata/mech-payload.json` — the real, on-chain-
  *  referenced tool catalog `GREY_MECH_PAYLOAD_HASH` pins. This is deliberately NOT
  *  `MECH_OFFERING_SLUGS` (prices.ts), which also includes `daily_tech_brief` — an offering priced
@@ -348,19 +376,71 @@ function isAddress(v: string): v is Address {
   return /^0x[0-9a-fA-F]{40}$/.test(v);
 }
 
+/** Real, live-caught bug (BION-DIRECTIVE-106): this only checked hex *shape*, never checksum —
+ *  an env-provided address in an inconsistent (but shape-valid) case slips through here silently,
+ *  then fails deep inside viem's own strict EIP-55 checksum enforcement the first time it's
+ *  actually used in a contract call ("Address must match its checksum counterpart"), far from
+ *  where the real problem (a manually-copy-pasted env value) originated. `getAddress()` normalizes
+ *  any validly-shaped input to its correct checksum — applying it here means every address this
+ *  function resolves is always safe to hand directly to viem, regardless of how an operator or a
+ *  dispatched directive happened to capitalize it. */
 function requiredAddress(env: Env, key: string): Address {
   const raw = required(env, key);
   if (!isAddress(raw)) {
     throw new Error(`mech-adapter: ${key} is not a valid 0x-address, got "${raw}"`);
   }
-  return raw as Address;
+  return getAddress(raw);
+}
+
+/** Which chain this adapter *process* runs against (BION-DIRECTIVE-101 §3 — the chain-scoped
+ *  `observeOnly` fix). Defaults to `8453` (Base) when unset — the existing live deployment's env
+ *  file has no `MECH_ADAPTER_CHAIN_ID` entry, so it resolves identically to before this existed.
+ *  A genuinely separate process (its own systemd unit, its own `EnvironmentFile`) is how a second
+ *  chain gets its own `observeOnly` value — not a second flag on the same process/config. */
+export function loadChainId(env: Env = process.env): SupportedChainId {
+  const raw = env.MECH_ADAPTER_CHAIN_ID?.trim();
+  if (!raw) return 8453;
+  const n = Number(raw);
+  if (n !== 8453 && n !== 100) {
+    throw new Error(`mech-adapter: unsupported MECH_ADAPTER_CHAIN_ID "${raw}" — expected 8453 or 100`);
+  }
+  return n as SupportedChainId;
+}
+
+export interface MechIdentity {
+  mechAddress: Address;
+  mechMultisigAddress: Address;
+}
+
+/** The real, factory-created mech + its Safe multisig — `main.ts`'s poll loop needs both to know
+ *  which on-chain identity it's polling/delivering for. On Base this is `GREY_MECH_ADDRESS`/
+ *  `GREY_MECH_MULTISIG_ADDRESS` by default (env-overridable, but every real deployment today omits
+ *  the override, so behavior is unchanged). On any other chain there IS no hardcoded default —
+ *  those addresses only exist once that chain's real ServiceRegistry lifecycle
+ *  (create/activate/registerAgents/deploy) has actually completed (BION-DIRECTIVE-100/101), so
+ *  requiring them via env (fail-closed, same discipline as every other required field here) is
+ *  correct: a process for a not-yet-registered chain should refuse to start, not guess. */
+export function loadMechIdentity(env: Env = process.env, chainId: SupportedChainId = 8453): MechIdentity {
+  if (chainId === 8453) {
+    return {
+      mechAddress: env.MECH_ADDRESS?.trim() ? getAddress(env.MECH_ADDRESS.trim()) : GREY_MECH_ADDRESS,
+      mechMultisigAddress: env.MECH_MULTISIG_ADDRESS?.trim()
+        ? getAddress(env.MECH_MULTISIG_ADDRESS.trim())
+        : GREY_MECH_MULTISIG_ADDRESS,
+    };
+  }
+  return {
+    mechAddress: requiredAddress(env, 'MECH_ADDRESS'),
+    mechMultisigAddress: requiredAddress(env, 'MECH_MULTISIG_ADDRESS'),
+  };
 }
 
 export function loadConfig(env: Env = process.env): MechAdapterConfig {
+  const chainId = loadChainId(env);
   return {
     payToAddress: requiredAddress(env, 'BASE_MECH_PAY_TO'),
     poolWalletAddress: requiredAddress(env, 'BASE_MECH_POOL_WALLET'),
-    rpcUrl: env.BASE_RPC_URL?.trim() || 'https://mainnet.base.org',
+    rpcUrl: env.MECH_ADAPTER_RPC_URL?.trim() || env.BASE_RPC_URL?.trim() || CHAINS[chainId].defaultRpcUrl,
     databaseUrl: required(env, 'GREY_DATABASE_URL'),
     observeOnly: (env.MECH_ADAPTER_OBSERVE_ONLY?.trim() ?? 'true') !== 'false',
   };
