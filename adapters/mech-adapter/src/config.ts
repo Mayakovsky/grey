@@ -279,7 +279,24 @@ export const GREY_MECH_MULTISIG_ADDRESS = '0x5587335a6Fa1Dc7C421f2b87D91C7E9def0
  *  elsewhere but never published as a mech tool, so a real buyer can never address it through this
  *  channel. `pollAndRespond`'s `registeredTools` param (and the offerings a live main.ts actually
  *  registers) should use this list, not the broader prices.ts one, to stay consistent with what's
- *  really reachable on-chain. */
+ *  really reachable on-chain.
+ *
+ *  Same tools/pricing served on Gnosis (BION-DIRECTIVE-97/105/106, service 3789) — but Gnosis's
+ *  real on-chain `configHash` is, and stays, Base's own (`GREY_MECH_CONFIG_HASH`/
+ *  `GREY_MECH_PAYLOAD_HASH` above), permanently, by Forces' explicit decision (D-106 §1: `GREY_DID`
+ *  is a single cross-chain identity anchor by design, and `ServiceRegistryL2.update()` requires
+ *  `PreRegistration` state, already closed for 3789 before the decision was even made — not a
+ *  temporary gap, a closed door). This is NOT a bug:
+ *  `metadata/service-config-gnosis.json`/`mech-payload-gnosis.json` exist as descriptive-only
+ *  documentation of Gnosis's real offering set for a human reader, never pinned/referenced
+ *  on-chain — don't "fix" the on-chain hash to point at them.
+ *
+ *  **The first Gnosis mech address (`0x1A235555e9545f2B4f1a8E929317FFb893c94dDB`) IS a real bug**
+ *  (unrelated to the configHash decision above): BION-DIRECTIVE-110 found its `maxDeliveryRate()`
+ *  is `GREY_MECH_PAYLOAD_HASH` reinterpreted as a number — permanently unpayable, same root cause
+ *  as `GREY_MECH_ADDRESS_ORIGINAL_INERT` on Base. See `GNOSIS_MECH_ADDRESS_ORIGINAL_INERT`'s own
+ *  doc comment (`e3-g1` branch/PR — this metadata-only branch doesn't carry that fix) for the full
+ *  finding and the corrected-mech fork-proof. Do not treat that address as the live Gnosis mech. */
 export const GREY_MECH_REGISTERED_TOOLS = [
   'prediction_market_research',
   'resolution_evidence_compiler',
