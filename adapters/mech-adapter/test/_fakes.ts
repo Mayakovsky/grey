@@ -15,8 +15,11 @@ export const FAKE_AGENT_INSTANCE = '0x7777777777777777777777777777777777777777' 
 export const FAKE_CONFIG_HASH = `0x${'00'.repeat(32)}` as const;
 export const FAKE_TX_HASH = `0x${'ab'.repeat(32)}` as const;
 
+export const FAKE_FACTORY = '0x8888888888888888888888888888888888888888' as Address;
+
 export function fakeMarketplaceClient(overrides: Partial<MarketplaceClient> = {}): MarketplaceClient {
   return {
+    getFactoryAddress: (_paymentType) => FAKE_FACTORY,
     numMechs: async () => 0n,
     checkMech: async (_mech: Address) => '0x0000000000000000000000000000000000000000' as Address,
     getRequestStatus: async (_id) => 0,
@@ -71,6 +74,7 @@ export function fakeSignedCall(overrides: Partial<SignedSafeCall> = {}): SignedS
 
 export function fakeSafeDeliveryClient(overrides: Partial<SafeDeliveryClient> = {}): SafeDeliveryClient {
   return {
+    chainId: 8453,
     buildSignedDelivery: async (_mech: Address, _requestIds: readonly Hash[], _datas: readonly Hex[]) =>
       fakeSignedDelivery(),
     simulateDelivery: async (_signed: SignedSafeDelivery) => ({ success: true }),
@@ -84,6 +88,7 @@ export function fakeSafeDeliveryClient(overrides: Partial<SafeDeliveryClient> = 
 
 export function fakeServiceRegistryClient(overrides: Partial<ServiceRegistryClient> = {}): ServiceRegistryClient {
   return {
+    gnosisSafeMultisig: FAKE_MULTISIG,
     getService: async (_serviceId) => fakeServiceInfo(),
     simulateCreate: async (_params) => ({ serviceId: 1n }),
     executeCreate: async (_params) => ({ serviceId: 1n, txHash: FAKE_TX_HASH }),

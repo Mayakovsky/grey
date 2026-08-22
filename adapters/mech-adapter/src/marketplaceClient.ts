@@ -39,7 +39,7 @@ import {
   type Hash,
   type Log,
 } from 'viem';
-import { CHAINS, type SupportedChainId } from './config.js';
+import { CHAINS, type MechPaymentType, type SupportedChainId } from './config.js';
 import { MECH_MARKETPLACE_ABI } from './marketplaceAbi.js';
 
 /** Extracted so it's directly unit-testable against real, fixture'd log data (see
@@ -90,11 +90,21 @@ export interface MarketplaceClient {
   checkMech(mech: Address): Promise<Address>;
   getRequestStatus(requestId: `0x${string}`): Promise<number>;
 
-  /** `serviceRegistry` is fixed to SERVICE_REGISTRY_ADDRESSES.serviceRegistryL2 — not a parameter,
-   *  since this client only ever points at the one registry mechAdapter.ts's registerAsMech
-   *  registers services against. Throws if the client was constructed without an account. */
+  /** Throws if the client was constructed without an account. Note: since BION-DIRECTIVE-33,
+   *  these call `MechMarketplace.create(serviceId, factory, payload)`, not `MechFactory
+   *  .createMech(serviceRegistry, ...)` directly — no `serviceRegistry` address is passed by this
+   *  client at all (an earlier version of this comment said otherwise; stale, corrected here). */
   simulateCreateMech(factory: Address, serviceId: bigint, payload: `0x${string}`): Promise<Address>;
   executeCreateMech(factory: Address, serviceId: bigint, payload: `0x${string}`): Promise<Address>;
+
+  /** The real, chain-correct MechFactory address for a given payment type, resolved from this
+   *  client's own `chainId` at construction time (BION-DIRECTIVE-104 — the same real bug class as
+   *  `gnosisSafeMultisig` on `ServiceRegistryClient`: `mechAdapter.ts`'s `runCreateMechStep` used
+   *  to import the bare Base `MARKETPLACE_ADDRESSES.factories` constant directly, chain-blind).
+   *  Gnosis's factory set has different keys than Base's (3 factories, not 5 — BION-DIRECTIVE-97
+   *  Task 1) — throws a clear error if the requested `paymentType` has no factory on this chain,
+   *  rather than silently resolving to `undefined` or a wrong-chain address. */
+  getFactoryAddress(paymentType: MechPaymentType): Address;
 }
 
 /** `chainId` (BION-DIRECTIVE-97/98 Task 2) defaults to `8453` (Base) — every pre-existing call
@@ -127,6 +137,18 @@ export function createMarketplaceClient(
   }
 
   return {
+    getFactoryAddress(paymentType: MechPaymentType) {
+      const factories = chain.marketplace.factories as Partial<Record<MechPaymentType, Address>>;
+      const factory = factories[paymentType];
+      if (!factory) {
+        throw new Error(
+          `MarketplaceClient.getFactoryAddress: no "${paymentType}" factory on chain ${chainId} — ` +
+            `real factory set for this chain is [${Object.keys(chain.marketplace.factories).join(', ')}]. ` +
+            'Do not fall back to another chain\'s address for this payment type.',
+        );
+      }
+      return factory;
+    },
     async numMechs() {
       return client.readContract({ address, abi: MECH_MARKETPLACE_ABI, functionName: 'numMechs' });
     },

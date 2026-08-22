@@ -126,12 +126,11 @@ import type { OfferingSlug } from '@grey/schemas/responses';
 import {
   ETH_TOKEN_ADDRESS,
   GREY_DID,
-  MARKETPLACE_ADDRESSES,
-  SERVICE_REGISTRY_ADDRESSES,
   type MechAdapterConfig,
   type MechPaymentType,
 } from './config.js';
 import { createMarketplaceClient, type MarketplaceClient } from './marketplaceClient.js';
+import { nextStepForState } from './registrationResume.js';
 import type { SafeDeliveryClient, SignedSafeDelivery } from './safeDeliveryClient.js';
 import { SERVICE_STATE } from './serviceRegistryAbi.js';
 import type { ServiceRegistryClient } from './serviceRegistryClient.js';
@@ -444,21 +443,25 @@ export class MechAdapter implements ChannelIngress {
     });
     this.assertResumable(serviceId, stateBefore, 'registerAsMechStep');
 
-    if (stateBefore === SERVICE_STATE.PreRegistration) {
+    // BION-DIRECTIVE-111 — single source of truth for state→step, shared with register-live.ts
+    // (which needs to know the step BEFORE this call, to resolve the real createMech payload in
+    // time — see registrationResume.ts's own doc comment on why that ordering matters).
+    const step = nextStepForState(stateBefore);
+    if (step === 'activateRegistration') {
       await this.runActivateRegistrationStep(registry, serviceId, params.bondWei, simulatedOnly);
-      return { serviceId, step: 'activateRegistration', stateBefore, simulatedOnly };
+      return { serviceId, step, stateBefore, simulatedOnly };
     }
-    if (stateBefore === SERVICE_STATE.ActiveRegistration) {
+    if (step === 'registerAgents') {
       await this.runRegisterAgentsStep(registry, serviceId, params.agentId, params.bondWei, simulatedOnly);
-      return { serviceId, step: 'registerAgents', stateBefore, simulatedOnly };
+      return { serviceId, step, stateBefore, simulatedOnly };
     }
-    if (stateBefore === SERVICE_STATE.FinishedRegistration) {
+    if (step === 'deploy') {
       const multisig = await this.runDeployStep(registry, serviceId, simulatedOnly);
-      return { serviceId, step: 'deploy', stateBefore, simulatedOnly, multisig };
+      return { serviceId, step, stateBefore, simulatedOnly, multisig };
     }
     // Only Deployed can reach here — assertResumable above already ruled out every other state.
     const mech = await this.runCreateMechStep(paymentType, serviceId, params.mechPayload, simulatedOnly);
-    return { serviceId, step: 'createMech', stateBefore, simulatedOnly, multisig: service.multisig, mech };
+    return { serviceId, step, stateBefore, simulatedOnly, multisig: service.multisig, mech };
   }
 
   /** BION-DIRECTIVE-38 — builds a real, signed Safe execTransaction wrapping deliverToMarketplace
@@ -706,7 +709,9 @@ export class MechAdapter implements ChannelIngress {
   }
 
   private async runDeployStep(registry: ServiceRegistryClient, serviceId: bigint, simulatedOnly: boolean): Promise<Address> {
-    const multisigImplementation = SERVICE_REGISTRY_ADDRESSES.gnosisSafeMultisig;
+    // BION-DIRECTIVE-104 fix — was the bare Base constant, chain-blind; `registry` already knows
+    // its own chain (via the `chainId` passed to createServiceRegistryClient, D-97/98).
+    const multisigImplementation = registry.gnosisSafeMultisig;
     const deployData = '0x' as const;
     return simulatedOnly
       ? (await registry.simulateDeploy(serviceId, multisigImplementation, deployData)).multisig
@@ -719,7 +724,10 @@ export class MechAdapter implements ChannelIngress {
     mechPayload: `0x${string}`,
     simulatedOnly: boolean,
   ): Promise<Address> {
-    const factory = MARKETPLACE_ADDRESSES.factories[paymentType];
+    // BION-DIRECTIVE-104 fix — was the bare Base constant, chain-blind; `this.client` already
+    // knows its own chain (via the `chainId` passed to createMarketplaceClient, D-97/98), and
+    // fails closed if this chain has no factory for the requested payment type.
+    const factory = this.client.getFactoryAddress(paymentType);
     return simulatedOnly
       ? await this.simulateCreateMech(factory, serviceId, mechPayload)
       : await this.executeCreateMech(factory, serviceId, mechPayload);

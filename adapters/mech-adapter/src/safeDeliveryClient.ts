@@ -49,7 +49,7 @@ import {
   type Hash,
   type Hex,
 } from 'viem';
-import { base } from 'viem/chains';
+import { CHAINS, type SupportedChainId } from './config.js';
 import { OLAS_MECH_ABI } from './mechAbi.js';
 import { SAFE_ABI, SAFE_OPERATION_CALL } from './safeAbi.js';
 
@@ -105,6 +105,12 @@ export interface SignedSafeCall {
 }
 
 export interface SafeDeliveryClient {
+  /** BION-DIRECTIVE-115 — the chain id this client's public/wallet clients were actually
+   *  constructed with. Exists so this is independently, directly testable without a real network
+   *  call (same posture as ServiceRegistryClient.gnosisSafeMultisig/MarketplaceClient's
+   *  getFactoryAddress) — this exact property's absence is why the hardcoded-`base` bug this
+   *  directive fixes went uncaught: nothing outside an anvil-fork test could observe it. */
+  readonly chainId: number;
   /** Builds deliverToMarketplace calldata, reads the multisig's real current nonce + estimated
    *  gas + real transaction hash, and signs it with the injected agent-instance account. Pure
    *  construction — no network write, safe to call regardless of observeOnly. */
@@ -162,9 +168,26 @@ function genericExecTransactionArgs(signed: SignedSafeCall) {
   ] as const;
 }
 
-export function createSafeDeliveryClient(rpcUrl: string, multisig: Address, account?: Account): SafeDeliveryClient {
-  const client = createPublicClient({ chain: base, transport: http(rpcUrl) });
-  const walletClient = account ? createWalletClient({ chain: base, transport: http(rpcUrl), account }) : undefined;
+/** BION-DIRECTIVE-115 — real, live production bug: this function hardcoded viem's `base` chain
+ *  object for BOTH its clients, completely independent of whatever chain `rpcUrl` actually pointed
+ *  at. Never caught by this arc's D-97/98/104/106 chain-parameterization pass (which fixed
+ *  serviceRegistryClient.ts/marketplaceClient.ts, but never touched this file) or by
+ *  safeDeliveryClient.anvil.test.ts (which only ever forks Base). Real, live consequence: the
+ *  Gnosis adapter's first real delivery attempt (BION-DIRECTIVE-113's self-test request) failed at
+ *  `eth_sendRawTransaction` with `invalid chain id for signer: have 8453 want 100` — the signed raw
+ *  transaction itself carried chainId 8453, which Gnosis's own RPC correctly rejected outright.
+ *  `chainId` defaults to 8453 so Base's own real, already-live delivery path is completely
+ *  unaffected unless a caller explicitly passes 100 — same "behavior-identical unless explicit
+ *  opt-in" discipline createServiceRegistryClient/createMarketplaceClient already established. */
+export function createSafeDeliveryClient(
+  rpcUrl: string,
+  multisig: Address,
+  account?: Account,
+  chainId: SupportedChainId = 8453,
+): SafeDeliveryClient {
+  const chain = CHAINS[chainId].viemChain;
+  const client = createPublicClient({ chain, transport: http(rpcUrl) });
+  const walletClient = account ? createWalletClient({ chain, transport: http(rpcUrl), account }) : undefined;
 
   function requireAccount(): Account {
     if (!account) {
@@ -177,6 +200,7 @@ export function createSafeDeliveryClient(rpcUrl: string, multisig: Address, acco
   }
 
   return {
+    chainId: chain.id,
     async buildSignedDelivery(mech, requestIds, datas) {
       const acct = requireAccount();
       const data = encodeDeliverToMarketplaceCalldata(requestIds, datas);

@@ -14,7 +14,12 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p tsconfig.scripts.json",
     "test": "vitest run",
     "test:fork": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json NODE_OPTIONS=--loader=ts-node/esm hardhat test test/fork/marketplaceRead.forkcheck.ts test/fork/serviceRegistryWrite.forkcheck.ts",
-    "register:live": "tsx scripts/register-live.ts"
+    "test:fork:gnosis-corrected-mech": "cross-env MECH_FORK_CHAIN=gnosis TS_NODE_PROJECT=tsconfig.hardhat.json NODE_OPTIONS=--loader=ts-node/esm hardhat test test/fork/correctedGnosisMech.forkcheck.ts",
+    "test:fork:register-live-ordering": "cross-env MECH_FORK_CHAIN=gnosis TS_NODE_PROJECT=tsconfig.hardhat.json NODE_OPTIONS=--loader=ts-node/esm hardhat test test/fork/registerLivePreflightOrdering.forkcheck.ts",
+    "test:fork:self-test-request": "cross-env MECH_FORK_CHAIN=gnosis TS_NODE_PROJECT=tsconfig.hardhat.json NODE_OPTIONS=--loader=ts-node/esm hardhat test test/fork/selfTestRequest.forkcheck.ts",
+    "test:live-gateway-check": "cross-env GREY_MECH_LIVE_GATEWAY_CHECK=1 vitest run test/gatewayOverride.livecheck.test.ts",
+    "register:live": "tsx scripts/register-live.ts",
+    "self-test:request": "tsx scripts/self-test-request.ts"
   },
   "dependencies": {
     "@grey/ceremony": "workspace:*",

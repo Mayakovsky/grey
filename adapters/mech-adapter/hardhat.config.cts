@@ -27,12 +27,16 @@ const FORK_CHAIN_CONFIG: Record<
     chainId: 100,
     defaultRpcUrl: 'https://rpc.gnosischain.com',
     rpcEnvVar: 'GNOSIS_FORK_RPC_URL',
-    // Picked comfortably recent during D-97/98 research (real chain head read live via
-    // eth_blockNumber was 47_827_394 at the time; a real request in the Gnosis marketplace
-    // subgraph exists at block 47_827_388, so this postdates real, current marketplace activity,
-    // not just the contract's original deployment). Bump if the RPC's retained history window
-    // ages it out, same caveat as Base's entry above.
-    blockNumber: 47_827_450,
+    // BION-DIRECTIVE-113 — bumped again from D-110's 47_843_700: that block predates the real,
+    // now-executed corrected createMech call (BION-DIRECTIVE-111/112, tx
+    // 0x62c919b2ff77016fc42fea9123db6e7c884c1a9f008070733c3946c28fd1e747, landed at block
+    // 47_844_995), so it couldn't be used to fork-prove anything against GNOSIS_MECH_ADDRESS's
+    // real, live, correctly-priced state. This pin (real chain head read live via eth_blockNumber
+    // was 47_846_148 at the time) postdates the corrected mech's creation, so the fork genuinely
+    // sees the real GNOSIS_MECH_ADDRESS mech, already deployed and payable. Bump again if the
+    // RPC's retained history window ages it out, or once service 3789 undergoes any further real
+    // on-chain change this fork needs to see.
+    blockNumber: 47_846_000,
   },
 };
 
