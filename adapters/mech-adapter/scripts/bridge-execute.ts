@@ -28,7 +28,7 @@
 import process from 'node:process';
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { createPublicClient, createWalletClient, formatEther, http, parseEther } from 'viem';
+import { createPublicClient, createWalletClient, formatEther, http, parseAbi, parseEther } from 'viem';
 import { mainnet } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import { parseKeystore } from '@grey/ceremony/dist/crypto/index.js';
@@ -42,7 +42,17 @@ const CHAIN_ID = 100; // Gnosis-only — this is where Tier B accumulates for Gr
 const RPC_URL = process.env.GNOSIS_RPC_URL?.trim() || CHAINS[CHAIN_ID].defaultRpcUrl;
 const BASE_RPC_URL = process.env.BASE_RPC_URL?.trim() || CHAINS[8453].defaultRpcUrl;
 const NATIVE_XDAI = '0x0000000000000000000000000000000000000000';
-const NATIVE_WETH_ON_BASE = '0x4200000000000000000000000000000000000006'; // OP-stack predeploy, same address on every OP-stack L2 including Base
+// BION-DIRECTIVE-121 fix — the real bug: 0x4200...0006 is WETH9's real deployed CONTRACT address
+// (the OP-stack predeploy), not a "give me native currency" sentinel. Requesting it as `toToken`
+// asks LI.FI for real, wrapped WETH — which is exactly what Forces' first real run delivered
+// (confirmed via balanceOf, funds safe) — not native ETH. Confirmed live against LI.FI's own real
+// token list for Base (chainId 8453): the real native-ETH sentinel there is the same zero address
+// already correctly used for native xDAI on the Gnosis side, not 0xEeee...EEeE. A fresh quote with
+// this corrected address shows `action.toToken.symbol: "ETH"` (not "WETH") and estimateGas
+// succeeds cleanly against real live state.
+const NATIVE_ETH_ON_BASE = '0x0000000000000000000000000000000000000000';
+const WETH_ON_BASE = '0x4200000000000000000000000000000000000006'; // real WETH9 contract — kept only for Step 4's fallback balance check below, never used as toToken
+const WETH_ABI = parseAbi(['function balanceOf(address) view returns (uint256)']);
 
 interface LifiQuote {
   tool: string;
@@ -73,7 +83,7 @@ interface LifiQuote {
 async function fetchQuote(amountWei: bigint): Promise<LifiQuote> {
   const url =
     `https://li.quest/v1/quote?fromChain=${CHAIN_ID}&toChain=8453` +
-    `&fromToken=${NATIVE_XDAI}&toToken=${NATIVE_WETH_ON_BASE}` +
+    `&fromToken=${NATIVE_XDAI}&toToken=${NATIVE_ETH_ON_BASE}` +
     `&fromAmount=${amountWei}&fromAddress=${BASE_MECH_POOL_WALLET_ADDRESS}` +
     `&denyExchanges=paraswap`;
   const res = await fetch(url);
@@ -161,14 +171,15 @@ async function main(): Promise<void> {
     const account = privateKeyToAccount(`0x${Buffer.from(unlocked.keyBytes).toString('hex')}` as `0x${string}`);
     const walletClient = createWalletClient({ chain: CHAINS[CHAIN_ID].viemChain, transport: http(RPC_URL), account });
 
-    const baseWethBefore = await baseClient.getBalance({ address: BASE_MECH_POOL_WALLET_ADDRESS });
+    const nativeEthBefore = await baseClient.getBalance({ address: BASE_MECH_POOL_WALLET_ADDRESS });
+    const wethBefore = await baseClient.readContract({ address: WETH_ON_BASE, abi: WETH_ABI, functionName: 'balanceOf', args: [BASE_MECH_POOL_WALLET_ADDRESS] });
 
     console.log('\n=== FINAL SUMMARY — READ CAREFULLY BEFORE CONFIRMING ===');
     console.log(`Chain:                Gnosis -> Base, via LI.FI/Relay (real, non-custodial aggregator)`);
     console.log(`Sender/receiver:      ${account.address} (same address both chains)`);
     console.log(`Bridging:             ${formatEther(bridgeAmountWei)} xDAI`);
     console.log(`Expected to receive:  ~${formatEther(BigInt(previewQuote.estimate.toAmount))} ETH on Base (min ${formatEther(BigInt(previewQuote.estimate.toAmountMin))})`);
-    console.log(`Real Base ETH balance before: ${formatEther(baseWethBefore)} ETH`);
+    console.log(`Real Base balances before: ${formatEther(nativeEthBefore)} native ETH, ${formatEther(wethBefore)} WETH`);
     console.log('\nThis will submit ONE real transaction on Gnosis mainnet with real funds. This cannot be undone.');
 
     const typed = await askLine('\nType BRIDGE (all caps) to proceed, anything else to abort: ');
@@ -195,14 +206,29 @@ async function main(): Promise<void> {
     }
     console.log('\n=== DEPOSIT CONFIRMED ON GNOSIS ===');
 
+    // BION-DIRECTIVE-121 fix — check BOTH real native ETH and real WETH balances, whichever
+    // actually moves. toToken now correctly requests native ETH (see NATIVE_ETH_ON_BASE's own doc
+    // comment), but this is a real, deliberate safety net: Forces' own first real run showed the
+    // underlying route can deliver wrapped WETH even when asked for something else, and this
+    // script's own job is to detect what REALLY arrived, not assume the request was honored.
     console.log(`\n--- Step 4: watching Base for the real cross-chain delivery (up to ${maxWaitSeconds}s) ---`);
     const deadline = Date.now() + maxWaitSeconds * 1000;
     let delivered = false;
     while (Date.now() < deadline) {
-      const current = await baseClient.getBalance({ address: BASE_MECH_POOL_WALLET_ADDRESS });
-      if (current > baseWethBefore) {
-        console.log(`\n=== DELIVERED ===`);
-        console.log(`Real Base ETH balance: ${formatEther(baseWethBefore)} -> ${formatEther(current)} (+${formatEther(current - baseWethBefore)} ETH)`);
+      const [currentEth, currentWeth] = await Promise.all([
+        baseClient.getBalance({ address: BASE_MECH_POOL_WALLET_ADDRESS }),
+        baseClient.readContract({ address: WETH_ON_BASE, abi: WETH_ABI, functionName: 'balanceOf', args: [BASE_MECH_POOL_WALLET_ADDRESS] }),
+      ]);
+      if (currentEth > nativeEthBefore) {
+        console.log(`\n=== DELIVERED (native ETH) ===`);
+        console.log(`Real Base native ETH balance: ${formatEther(nativeEthBefore)} -> ${formatEther(currentEth)} (+${formatEther(currentEth - nativeEthBefore)} ETH)`);
+        delivered = true;
+        break;
+      }
+      if (currentWeth > wethBefore) {
+        console.log(`\n=== DELIVERED (WETH, not native ETH — real, safe, just a different real asset than requested) ===`);
+        console.log(`Real Base WETH balance: ${formatEther(wethBefore)} -> ${formatEther(currentWeth)} (+${formatEther(currentWeth - wethBefore)} WETH)`);
+        console.log('Funds are real and safe as WETH — unwrap via WETH.withdraw() separately if native ETH is specifically needed.');
         delivered = true;
         break;
       }
