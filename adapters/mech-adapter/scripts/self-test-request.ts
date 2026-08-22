@@ -62,7 +62,7 @@ import { zero } from '@grey/ceremony/dist/memory/index.js';
 import { BASE_MECH_PAY_TO_ADDRESS, CHAINS, GNOSIS_MECH_ADDRESS } from '../src/config.js';
 import { MECH_MARKETPLACE_ABI, REQUEST_STATUS } from '../src/marketplaceAbi.js';
 import { OLAS_MECH_ABI } from '../src/mechAbi.js';
-import { deriveResponseHash, fetchRequestContent } from '../src/requestContent.js';
+import { deriveResponseHash, hashToIpfsCid } from '../src/requestContent.js';
 import { createFilebasePinner } from '../src/responsePinner.js';
 import { loadFilebaseCredentialsFromEnv } from '../src/filebaseCredentials.js';
 
@@ -116,6 +116,30 @@ function parseArgs(argv: string[]): {
   const pollEverySeconds = peIdx !== -1 && argv[peIdx + 1] ? Number(argv[peIdx + 1]) : 15;
 
   return { keyfile, responseTimeoutSeconds, maxWaitSeconds, pollEverySeconds };
+}
+
+/** BION-DIRECTIVE-116 fix — Step 5 originally called `fetchRequestContent` on the DELIVERED
+ *  RESPONSE content, not a request. That function's own `tryParseRequestContent` validates for
+ *  `{prompt, tool}` fields specifically — real request shape (requestContent.ts's `RequestContent`
+ *  interface) — but a real `prediction_market_research` response is shaped completely differently
+ *  (`{market, status, analysis, lastAnalysed, note}`, per mech-payload.json's own schema), has
+ *  neither field, and so always failed to parse, throwing "not a valid request document" on every
+ *  real run. This is the same real gateway-fallback shape (direct CID, then `/metadata.json`) minus
+ *  the request-specific validation — response content just needs to be valid JSON, of any shape. */
+async function fetchArbitraryContent(hash: `0x${string}`, gatewayBaseUrl: string): Promise<unknown> {
+  const cid = hashToIpfsCid(hash);
+  const direct = await fetch(`${gatewayBaseUrl}/ipfs/${cid}`);
+  const directText = await direct.text();
+  try {
+    return JSON.parse(directText);
+  } catch {
+    // fall through to the directory-wrapped shape
+  }
+  const viaMetadata = await fetch(`${gatewayBaseUrl}/ipfs/${cid}/metadata.json`);
+  if (!viaMetadata.ok) {
+    throw new Error(`self-test-request: failed to fetch content for hash ${hash} (cid ${cid}): HTTP ${viaMetadata.status}`);
+  }
+  return viaMetadata.json();
 }
 
 async function askLine(prompt: string): Promise<string> {
@@ -328,7 +352,7 @@ async function main(): Promise<void> {
       return;
     }
     console.log(`Real Deliver event found — deliveryRate paid: ${deliveredRate} wei, response content hash: ${deliveredDataHash}`);
-    const delivered_content = await fetchRequestContent(deliveredDataHash, { gatewayBaseUrl: GATEWAY_OVERRIDE });
+    const delivered_content = await fetchArbitraryContent(deliveredDataHash, GATEWAY_OVERRIDE);
     console.log('\n=== REAL DELIVERED RESPONSE ===');
     console.log(JSON.stringify(delivered_content, null, 2));
     console.log('\nWhole cycle confirmed: request submitted, picked up, delivered, and the delivered content is real and independently fetchable.');
