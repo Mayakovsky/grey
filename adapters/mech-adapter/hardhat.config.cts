@@ -27,12 +27,11 @@ const FORK_CHAIN_CONFIG: Record<
     chainId: 100,
     defaultRpcUrl: 'https://rpc.gnosischain.com',
     rpcEnvVar: 'GNOSIS_FORK_RPC_URL',
-    // Picked comfortably recent during D-97/98 research (real chain head read live via
-    // eth_blockNumber was 47_827_394 at the time; a real request in the Gnosis marketplace
-    // subgraph exists at block 47_827_388, so this postdates real, current marketplace activity,
-    // not just the contract's original deployment). Bump if the RPC's retained history window
-    // ages it out, same caveat as Base's entry above.
-    blockNumber: 47_827_450,
+    // BION-DIRECTIVE-118/119 — bumped from D-97/98's original 47_827_450: this pass needs the
+    // real, CURRENT BASE_MECH_POOL_WALLET xDAI balance visible on the fork (real chain head read
+    // live via eth_blockNumber was 47_848_563 at the time), not the balance as of D-97/98's much
+    // earlier pin. Bump again if the RPC's retained history window ages it out.
+    blockNumber: 47_848_500,
   },
 };
 
