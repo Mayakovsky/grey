@@ -5,13 +5,13 @@
 # (D-100 §1.3's finding: the flag was a single global value on one process; this is the fix,
 # not a chain-scoping flag on the same process).
 #
-# WorkingDirectory is a SEPARATE, ISOLATED checkout (/opt/grey/grey-gnosis-staging), not the
-# shared /opt/grey/grey all other grey-* units build from (BION-DIRECTIVE-106 §2). Reason: this
-# unit's code (D-97/98/100/101/103/104's chain-parameterization) lives only on the still-unmerged,
-# held PR #54 — checking that branch out in the shared checkout would put Base's live
-# grey-mech-adapter.service one restart away from running unreviewed code. The isolated checkout
-# is this unit's alone; nothing else reads from it. Once PR #54 merges at arc-end review, this
-# staging checkout's job is done and it can be removed, ExecStart repointed at the shared one.
+# WorkingDirectory pointed at a SEPARATE, ISOLATED checkout (/opt/grey/grey-gnosis-staging) from
+# D-106 §2 through PR #54's merge (BION-DIRECTIVE-123, 2026-08-22): this unit's code (D-97/98/100/
+# 101/103/104's chain-parameterization) lived only on the then-unmerged, held PR #54 — checking
+# that branch out in the shared checkout would have put Base's live grey-mech-adapter.service one
+# restart away from running unreviewed code. Now that PR #54 (plus #56/#57) is merged into main,
+# repointed at the shared /opt/grey/grey checkout all other grey-* units build from, same as
+# D-106 §2 always said this would do once merge happened. The staging checkout's job is done.
 #
 # Real mech/multisig now exist (BION-DIRECTIVE-105 §0: service 3789 Deployed) — this unit is
 # genuinely installable now, unlike when this file was first authored (D-101, before registration
@@ -32,7 +32,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=grey
-WorkingDirectory=/opt/grey/grey-gnosis-staging
+WorkingDirectory=/opt/grey/grey
 ExecStart=/usr/bin/node adapters/mech-adapter/dist/main.js
 EnvironmentFile=/etc/grey/mech-adapter-gnosis.env
 Restart=on-failure
