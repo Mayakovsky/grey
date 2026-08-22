@@ -5,6 +5,17 @@
 // EvaluationKit projection itself, so this file has to apply it, same as every channel's own
 // listing renderer would for its own multiplier).
 //
+// BION-DIRECTIVE-122 (e3-g4) — real scoping finding, checked directly rather than assumed: this
+// function is already chain-agnostic and already correct for Gnosis, with no changes needed.
+// `MechListingEntry`/`EvaluationKitEntry` (@grey/schemas/evaluationKit/types.ts) carry no
+// chain/address/network field at all — by design, the same single projection every channel
+// listing (Bazaar, Kite, Olas, MCP) renders from. `MECH_OFFERING_SLUGS`/`mechPriceUsdFor` don't
+// vary by chain either (D-106/107's own explicit decision: Gnosis reuses Base's real tool/pricing
+// content). Same real conclusion D-63 already reached for e3-b3 itself ("already done, not a
+// pending activation") — any real per-chain distinction (which mech address a buyer actually
+// pays) lives entirely in config.ts's own chain-scoped constants and the real on-chain
+// registration, never in this render.
+//
 // Scope note (read before wiring this into an actual on-chain publish step): this produces the
 // EvaluationKit-shaped listing data — branding, schemas, sample, mech-resolved price. It does NOT
 // publish anything on-chain. Research during e3-b1/b3 found the Mech Marketplace's off-chain
