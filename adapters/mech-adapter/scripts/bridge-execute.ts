@@ -58,11 +58,24 @@ interface LifiQuote {
   transactionRequest: { to: `0x${string}`; data: `0x${string}`; value: string };
 }
 
+// BION-DIRECTIVE-120 — real, root-caused fix: Forces' real preflight reverted with panic 0x11
+// (arithmetic overflow). Confirmed via a real debug_traceCall against live mainnet state (not
+// guessed): the revert originates deep inside Balancer's real Vault (0xBA1333...ba9), reached
+// through a Paraswap-orchestrated swap step LI.FI's default routing includes as part of this
+// quote (feeCollection -> paraswap -> relaydepository). Reproduced consistently across 3 real
+// RPC providers and multiple amounts (ruling out a flaky-RPC or amount-too-small cause, both
+// checked directly) — this is a real fragility in that specific Paraswap-routed path, not a bug
+// in this script, the sentinel address (confirmed correct against LI.FI's own real token list),
+// or a stale value/units mismatch (transactionRequest.value exactly equals the real fromAmount).
+// Fix: exclude Paraswap from LI.FI's routing (`denyExchanges=paraswap`) — the resulting route
+// (feeCollection -> nordstern -> relaydepository) real-estimateGas's cleanly, repeatedly, across
+// multiple fresh quotes and amounts.
 async function fetchQuote(amountWei: bigint): Promise<LifiQuote> {
   const url =
     `https://li.quest/v1/quote?fromChain=${CHAIN_ID}&toChain=8453` +
     `&fromToken=${NATIVE_XDAI}&toToken=${NATIVE_WETH_ON_BASE}` +
-    `&fromAmount=${amountWei}&fromAddress=${BASE_MECH_POOL_WALLET_ADDRESS}`;
+    `&fromAmount=${amountWei}&fromAddress=${BASE_MECH_POOL_WALLET_ADDRESS}` +
+    `&denyExchanges=paraswap`;
   const res = await fetch(url);
   const json = (await res.json()) as LifiQuote & { message?: string };
   if (!res.ok || json.message) {
