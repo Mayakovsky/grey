@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildMechListing } from '../src/listing.js';
 import { MECH_OFFERING_SLUGS } from '../src/prices.js';
 
-describe('buildMechListing — e3-b3 EvaluationKit render (Base)', () => {
+describe('buildMechListing — e3-b3/e3-g4 EvaluationKit render (chain-agnostic — no Base/Gnosis-specific data anywhere in this render, see listing.ts\'s own file header)', () => {
   const listing = buildMechListing();
 
   it('renders exactly the two real mech offerings, in MECH_OFFERING_SLUGS order (BION-DIRECTIVE-62: daily_tech_brief excluded)', () => {
