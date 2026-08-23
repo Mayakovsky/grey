@@ -31,6 +31,10 @@ coverage/
 # settlement + crawler-check directive. NEVER committed.
 .cdp-organic-settlement/
 
+# CDP Bazaar Step 2 v2 — fresh single-purpose real-funds keystore for the reference-client
+# settlement test. NEVER committed. Kept (not auto-deleted) pending a follow-up round.
+.cdp-step2-v2/
+
 # one-off local review-diff artifacts (pre-merge review copies of branches that landed on main;
 # redundant with git history once merged — verified per-file before adding this, 2026-08-07).
 review-*.diff
