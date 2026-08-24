@@ -70,8 +70,12 @@ describe('trustRung — E1-C disable flag (Forces ruling B-1, Invariant #34)', (
     expect(ext.schema.type).toBe('object');
     expect(ext.schema.required).toEqual(['input']);
     expect(ext.schema.properties.input.required).toEqual(['type', 'method', 'bodyType', 'body']);
-    expect(ext.schema.properties.input.properties.body).toEqual(
-      body.accepts[0].extra.bazaar.inputSchema,
-    );
+    // directive-131: the bazaar-declared copy has its external $id stripped (CDP's real validator
+    // rejects it); extra.bazaar's copy is untouched, so they now genuinely differ by exactly $id.
+    const { $id: strippedId, ...rawInputSchemaWithoutId } = body.accepts[0].extra.bazaar
+      .inputSchema as Record<string, unknown>;
+    expect(strippedId).toBeTruthy(); // sanity: the real schema really does carry one to strip
+    expect(ext.schema.properties.input.properties.body).toEqual(rawInputSchemaWithoutId);
+    expect(ext.schema.properties.input.properties.body).not.toHaveProperty('$id');
   });
 });

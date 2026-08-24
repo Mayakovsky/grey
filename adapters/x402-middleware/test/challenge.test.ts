@@ -100,9 +100,13 @@ describe('buildPaymentRequirements — strict-canonical x402', () => {
     expect(ext.schema.properties.input.required).toEqual(['type', 'method', 'bodyType', 'body']);
     // the real per-offering request schema — nested two levels deep (schema.properties.input
     // .properties.body), confirmed from @x402/extensions' own source, not guessed a third time.
-    expect(ext.schema.properties.input.properties.body).toEqual(
-      body.accepts[0].extra.bazaar.inputSchema,
-    );
+    // directive-131: the bazaar-declared copy has its external $id stripped (CDP's real validator
+    // rejects it); extra.bazaar's copy is untouched, so they now genuinely differ by exactly $id.
+    const { $id: strippedId, ...rawInputSchemaWithoutId } = body.accepts[0].extra.bazaar
+      .inputSchema as Record<string, unknown>;
+    expect(strippedId).toBeTruthy(); // sanity: the real schema really does carry one to strip
+    expect(ext.schema.properties.input.properties.body).toEqual(rawInputSchemaWithoutId);
+    expect(ext.schema.properties.input.properties.body).not.toHaveProperty('$id');
   });
 
   it('buildCdpBazaarExtension is a pure reshape — same output for the same EvaluationKitEntry input', () => {
@@ -127,5 +131,59 @@ describe('buildPaymentRequirements — strict-canonical x402', () => {
       required: ['input'],
     });
     expect(extA.bazaar.info.output).toBeUndefined(); // no sample -> no output example, not a fabricated one
+  });
+
+  it('directive-131: strips an external $id from inputSchema before it reaches the bazaar declaration', () => {
+    const kitB = {
+      inputSchema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        $id: 'https://schemas.whitepapergrey.com/v1/requests/example.schema.json',
+        type: 'object',
+        properties: { token_address: { type: 'string' } },
+        required: ['token_address'],
+      },
+      sample: undefined,
+    } as never;
+    const extB = buildCdpBazaarExtension(kitB);
+    const schema = extB.bazaar.schema as { properties: { input: { properties: { body: Record<string, unknown> } } } };
+    const body = schema.properties.input.properties.body;
+    expect(body).not.toHaveProperty('$id');
+    // $schema (the meta-schema URI, not a document reference) is untouched — only $id/$ref strip.
+    expect(body.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
+    expect(body.type).toBe('object');
+    expect(body.required).toEqual(['token_address']);
+  });
+
+  it('directive-131: a same-document $ref fragment (e.g. "#/definitions/foo") is kept, not stripped', () => {
+    const kitC = {
+      inputSchema: {
+        type: 'object',
+        properties: { verdict: { $ref: '#/definitions/Verdict' } },
+        definitions: { Verdict: { type: 'string' } },
+      },
+      sample: undefined,
+    } as never;
+    const extC = buildCdpBazaarExtension(kitC);
+    const schemaC = extC.bazaar.schema as unknown as {
+      properties: { input: { properties: { body: { properties: { verdict: { $ref: string } } } } } };
+    };
+    expect(schemaC.properties.input.properties.body.properties.verdict.$ref).toBe('#/definitions/Verdict');
+  });
+
+  it('directive-131: an external (non-fragment) $ref is stripped, not just $id', () => {
+    const kitD = {
+      inputSchema: {
+        type: 'object',
+        properties: {
+          verdict: { $ref: 'https://schemas.whitepapergrey.com/v1/_shared.schema.json#/$defs/Verdict' },
+        },
+      },
+      sample: undefined,
+    } as never;
+    const extD = buildCdpBazaarExtension(kitD);
+    const schemaD = extD.bazaar.schema as unknown as {
+      properties: { input: { properties: { body: { properties: { verdict: Record<string, unknown> } } } } };
+    };
+    expect(schemaD.properties.input.properties.body.properties.verdict).not.toHaveProperty('$ref');
   });
 });
