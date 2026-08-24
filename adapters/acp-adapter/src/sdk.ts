@@ -11,7 +11,9 @@ const ACP_SDK_SPECIFIER = '@virtuals-protocol/acp-node-v2';
 
 /** The subset of the SDK's runtime surface the bundle maps (kept structural — no SDK types). */
 interface RawAcpSdk {
-  AcpAgent: { create(opts: { provider: unknown; transport: unknown }): Promise<AcpAgentLike> };
+  // v0.1.12: CreateAcpClientInput.provider (single, generic) was replaced with
+  // evmProvider/solanaProvider (chain-family-specific, both optional) — EVM-only here.
+  AcpAgent: { create(opts: { evmProvider: unknown; transport: unknown }): Promise<AcpAgentLike> };
   PrivyAlchemyEvmProviderAdapter: {
     create(opts: {
       walletAddress: `0x${string}`;
@@ -22,9 +24,11 @@ interface RawAcpSdk {
   };
   AssetToken: { usdc(amount: number, chainId: number): unknown };
   SseTransport: new () => unknown;
+  // v0.1.12: JobSession's 2nd ctor param moved from a single agentAddress: string to
+  // agentAddresses: string[] (multi-chain-family support) — we pass a single-element array.
   JobSession: new (
     agent: AcpAgentLike,
-    walletAddress: string,
+    walletAddresses: string[],
     jobId: string,
     chainId: number,
     roles: string[],
@@ -51,7 +55,7 @@ export async function createRealSdkBundle(): Promise<AcpSdkBundle> {
       // FDQ-63 (verified against the dist): create() + start() perform NO on-chain write — pure
       // client construct + SSE subscribe + REST reads. The only write risk is the adapter's own
       // setBudget/submit, which OBSERVE_ONLY suppresses.
-      const agent = await sdk.AcpAgent.create({ provider, transport: new sdk.SseTransport() });
+      const agent = await sdk.AcpAgent.create({ evmProvider: provider, transport: new sdk.SseTransport() });
       agent.on('entry', (session, entry) => onEntry(session, entry));
       return agent;
     },
@@ -60,7 +64,7 @@ export async function createRealSdkBundle(): Promise<AcpSdkBundle> {
     },
     newSession(agent, providerAddress, jobId, chainId, entries): AcpJobSession {
       // Mirrors the SDK's own hydrateSessions() for a polled funded job with no hydrated session.
-      return new sdk.JobSession(agent, providerAddress, jobId, chainId, ['provider'], entries);
+      return new sdk.JobSession(agent, [providerAddress], jobId, chainId, ['provider'], entries);
     },
   };
 }

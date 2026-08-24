@@ -41,5 +41,4 @@ allowBuilds:
   # approved argon2 (maintained native crypto binding, prebuilt binaries). Inspected 2026-08-08.
   keccak: true
 
-patchedDependencies:
-  '@virtuals-protocol/acp-node-v2@0.0.4': patches/@virtuals-protocol__acp-node-v2@0.0.4.patch
+
