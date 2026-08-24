@@ -68,6 +68,40 @@ lag, not an unauthorized or accidental enable. Full investigation:
   (low-risk call, no external interaction with the agent yet beyond internal testing — revisit if
   that changes).
 
+## ACP adapter — LIVE since 2026-08-13, `ACP_ADAPTER_OBSERVE_ONLY=false` (real-signing)
+
+`grey-acp-adapter` is the ChannelIngress for the Virtuals ACP marketplace (Movement 6 Phase C,
+FDQ-69b/70). Holds the ACP Privy signer (same non-custodial wallet `0xa9667116…` the retired pm2
+`grey` agent used — Q6, preserves the Virtuals Agent ID/history across the cutover), so it runs as
+its **own unit**, independent of grey-core/grey-sweeper/mech-adapter, same isolation posture as
+every other signing capability here. Its own systemd unit
+(`infra/systemd/grey-acp-adapter.service`, `EnvironmentFile=/etc/grey/acp-adapter.env`).
+**NEVER co-run this and the pm2 `grey` agent** — same signer, on-chain double-action risk.
+
+```bash
+# On unit-file change only:
+sudo cp infra/systemd/grey-acp-adapter.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart grey-acp-adapter
+```
+
+`ACP_ADAPTER_OBSERVE_ONLY` (`/etc/grey/acp-adapter.env`, root-only `600`, Forces-authored on-box)
+gates real setBudget/submit signing, same pattern as `MECH_ADAPTER_OBSERVE_ONLY` below — `true` =
+read-only observation, no signing; `false` = real. Currently `false` (real-signing), confirmed live
+in the startup banner's `observeOnly` field (`journalctl -u grey-acp-adapter | grep observeOnly`).
+
+**SDK migration (BION-DIRECTIVE-144/145, 2026-08-24):** `@virtuals-protocol/acp-node-v2` bumped
+`0.0.4` → `0.1.12` (was 20+ releases stale, causing the `getActiveJobs` poll backstop to fail
+continuously against Base's migrated job-registry contract address — 938 occurrences since 07-22).
+Deployed through the full tier discipline: offline smoke clean → `observeOnly=true` live against
+the real registry, zero errors over a sustained window → flipped back to `observeOnly=false`, zero
+errors continued. Detail: `bion/_internal/BION-DIRECTIVE-144-STATUS.md`,
+`bion/_internal/BION-DIRECTIVE-145-STATUS.md`. Runs under `node --import tsx` (FDQ-70, see the
+unit file's own comment) because 0.0.4 shipped ESM with extensionless relative imports; 0.1.12
+ships proper `.js` extensions natively, so `tsx` is now redundant-but-harmless for import
+resolution specifically — left in place since it isn't broken and changing `ExecStart` is a
+separate decision from this migration.
+
 ## Mech adapter — FULLY LIVE since 2026-08-13 (BION-DIRECTIVE-59), `observeOnly=false`
 
 `grey-mech-adapter` is the ChannelIngress for Grey's real, live-registered Olas mech,
