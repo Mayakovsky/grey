@@ -48,7 +48,40 @@ import { priceAtomicFor } from './prices.js';
  *  resolve). Passing `output.schema` made `parse` fail with a live DNS lookup error, not a shape
  *  problem. `output.schema` is optional (only tightens validation of `output.example`, which is
  *  unaffected by omitting it) and every output-related CDP check is `severity: advisory`, not
- *  required — so this is a safe drop, not a scope compromise. */
+ *  required — so this is a safe drop, not a scope compromise.
+ *
+ *  `inputSchema` has the SAME real defect (every offering's request schema carries its own external
+ *  `$id`, e.g. `https://schemas.whitepapergrey.com/v1/requests/legitimacy_scan.schema.json`) but
+ *  CANNOT use the same fix (CDP-BAZAAR-VALIDATOR-ROOT-CAUSE-KOV-REPORT.md, directive-131):
+ *  `bazaar.schema`'s `input` branch is `severity: required`, confirmed via `agentic.market/validate`'s
+ *  own preflight output — dropping it outright (like `output.schema`) would fail a required check
+ *  instead of an advisory one. Stripped, not omitted: `stripExternalSchemaRefs()` below removes any
+ *  `$id`/`$ref` value that isn't a same-document JSON Pointer fragment (the x402 spec's own
+ *  `bazaar.mdx` troubleshooting section names this exact rule — external `$ref`/`$id` rejected for
+ *  SSRF/LFI prevention), leaving the schema's real structural content (`properties`/`required`/etc.)
+ *  untouched. Scoped to this one call site only — `kit.inputSchema` itself, and `extra.bazaar`'s copy
+ *  of it (`types.ts`'s `PaymentRequirements.accepts[0].extra.bazaar`), are deliberately left carrying
+ *  the real `$id`, since other consumers may legitimately need it (flagged, not dropped, per Task 3's
+ *  own standing rule the last time this field's placement was touched). */
+
+/** Remove `$id`/`$ref` values that are external references (not same-document JSON Pointer
+ *  fragments like `#/definitions/foo`) from a JSON Schema object, recursively. CDP's real Bazaar
+ *  validator rejects any external `$ref`/`$id` outright (SSRF/LFI prevention) — this strips only
+ *  the copy handed to a Bazaar declaration, never the source schema itself. */
+export function stripExternalSchemaRefs<T>(schema: T): T {
+  if (schema === null || typeof schema !== 'object') return schema;
+  if (Array.isArray(schema)) {
+    return schema.map((v) => stripExternalSchemaRefs(v)) as unknown as T;
+  }
+  const isSameDocumentFragment = (v: unknown): boolean => typeof v === 'string' && v.startsWith('#');
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
+    if ((key === '$id' || key === '$ref') && !isSameDocumentFragment(value)) continue;
+    out[key] = stripExternalSchemaRefs(value);
+  }
+  return out as T;
+}
+
 export function buildCdpBazaarExtension(kit: EvaluationKitEntry): CdpBazaarExtension {
   return declareDiscoveryExtension({
     // `method` is stripped from the PUBLIC `DeclareDiscoveryExtensionInput` type (it's designed to
@@ -61,7 +94,7 @@ export function buildCdpBazaarExtension(kit: EvaluationKitEntry): CdpBazaarExten
     method: 'POST',
     bodyType: 'json',
     input: (kit.sample?.request as Record<string, unknown> | undefined) ?? {},
-    inputSchema: (kit.inputSchema as Record<string, unknown> | null) ?? {},
+    inputSchema: stripExternalSchemaRefs((kit.inputSchema as Record<string, unknown> | null) ?? {}),
     output: kit.sample ? { example: kit.sample.response } : undefined,
   } as unknown as Parameters<typeof declareDiscoveryExtension>[0]) as CdpBazaarExtension;
 }
