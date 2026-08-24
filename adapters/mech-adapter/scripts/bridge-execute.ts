@@ -29,7 +29,6 @@ import process from 'node:process';
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { createPublicClient, createWalletClient, formatEther, http, parseAbi, parseEther } from 'viem';
-import { mainnet } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import { parseKeystore } from '@grey/ceremony/dist/crypto/index.js';
 import { unlockKeystore } from '@grey/ceremony/dist/commands/address.js';
