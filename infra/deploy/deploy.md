@@ -177,6 +177,14 @@ this section before writing off an unexpected auth failure as a credentials/sign
 - Port 3002 stays firewalled off-box (see Firewall, above) — same underlying pattern: some things
   are only reachable/authorized from the VPS's own vantage point, not from wherever a human or Kov
   instance happens to be running.
+- **Never grep with a glob broad enough to match a real `.env` file** (e.g. `--include="*.env*"`)
+  when searching for where a secret is *documented* — it will also match the file where the secret
+  actually lives in cleartext, and print the real value into tool output/transcript. Discovered
+  2026-08-22 (`CDP-BAZAAR-INSPECT-OUTBOUND-SETTLE-ENVELOPE-KOV-REPORT.md`): a `CDP_API_KEY_ID`/
+  `CDP_API_KEY_SECRET` search matched local `.env` directly. Flagged live, Forces judged no
+  rotation needed that time — but the fix is to not create the exposure at all: grep for the
+  variable *name* inside `.md`/`.ts` specifically, or exclude `.env` explicitly, rather than a
+  broad glob that happens to also match the one file guaranteed to hold live secrets.
 
 ## Untouchables
 pm2 ElizaOS Grey (the units carry no coupling to it), ntfy/Caddy, and `wpv_*` are untouched by
