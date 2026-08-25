@@ -302,12 +302,14 @@ export const GNOSIS_MECH_ADDRESS_ORIGINAL_INERT = '0x1A235555e9545f2B4f1a8E92931
 export const GNOSIS_MECH_ADDRESS = '0xf482B2Abbd0230b960320096B7b132fABc66830b' as const;
 
 /** The exact `tools` array committed in `metadata/mech-payload.json` — the real, on-chain-
- *  referenced tool catalog `GREY_MECH_PAYLOAD_HASH` pins. This is deliberately NOT
- *  `MECH_OFFERING_SLUGS` (prices.ts), which also includes `daily_tech_brief` — an offering priced
- *  elsewhere but never published as a mech tool, so a real buyer can never address it through this
- *  channel. `pollAndRespond`'s `registeredTools` param (and the offerings a live main.ts actually
- *  registers) should use this list, not the broader prices.ts one, to stay consistent with what's
- *  really reachable on-chain.
+ *  referenced tool catalog `GREY_MECH_PAYLOAD_HASH` pins. Historically deliberately NOT
+ *  `MECH_OFFERING_SLUGS` (prices.ts), which used to also include `daily_tech_brief` — an offering
+ *  priced elsewhere but never published as a mech tool, so a real buyer could never address it
+ *  through this channel. `daily_tech_brief` was removed from `MECH_OFFERING_SLUGS` too (D-62), so
+ *  the two lists now agree; kept as two separate exports rather than merged, since
+ *  `pollAndRespond`'s `registeredTools` param (and the offerings a live main.ts actually registers)
+ *  should keep using this one, not the pricing-resolver-scoped one, to stay consistent with what's
+ *  really reachable on-chain if the two ever diverge again.
  *
  *  Same tools/pricing served on Gnosis (BION-DIRECTIVE-97/105/106, service 3789) — but Gnosis's
  *  real on-chain `configHash` is, and stays, Base's own (`GREY_MECH_CONFIG_HASH`/
