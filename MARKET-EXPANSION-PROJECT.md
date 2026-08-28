@@ -1,6 +1,6 @@
 # Grey — Market Expansion Project (MEP)
 
-**Status:** RATIFIED (OD-1, OD-2, OD-3, OD-5, OD-6 resolved 2026-07-26–2026-08-02 — **OD-2 corrected 2026-08-07, OD-8 (E3 chain split) added 2026-08-08, see §5.1**; OD-4 open)
+**Status:** RATIFIED (OD-1, OD-2, OD-3, OD-5, OD-6 resolved 2026-07-26–2026-08-02 — **OD-2 corrected 2026-08-07, OD-8 (E3 chain split) added 2026-08-08, see §5.1**; **OD-4 and OD-7 resolved 2026-08-28 (shelved/closed); B-1 relabeled shelved and E4/E7 shelved in full 2026-08-28 — see §5.1, §5.3, §1.1 media-first priority**)
 **Prepared:** 2026-07-26
 **Ratified:** 2026-07-26 by Forces
 **Prepared by:** Claude Desktop (architect) at Forces's direction
@@ -79,6 +79,18 @@ E8  Bittensor Path A               ── capital-gated, no bequest, terminal
 
 E5/E6 run as independent branches off the E4 trunk and may be reordered or dropped without disturbing anything upstream. E7 is the only expansion with two prerequisites. E8 bequeaths nothing and is therefore strictly last.
 
+**Sequencing note, 2026-08-28 (see §1.1 and §5.1 OD-4/OD-7):** the default E1→E2→E3→E4→E5/E6→E7→E8 chain above no longer auto-continues past E3. E4 and E7 are explicitly shelved, not "next up" — see their sections in §3 below. E5/E6/E8 are untouched by this note; nothing here implies anything about their status.
+
+### 1.1 Standing priority — media-first (Forces, 2026-08-28)
+
+Priority is now: finish a complete, advertisable product; establish Grey's brand identity at a technical level; ship a v2 website. This is preparation, not outreach — the goal is to have something genuinely finished to point to. This is why the sequencing chain stops auto-continuing past E3 (note above) — E4/E7 are shelved on their own merits, not paused for lack of engineering capacity.
+
+**Positioning doctrine for any copy/materials work:** lead with the tech, not with commerce volume — there isn't real agentic commerce happening yet, for anyone, so a volume pitch would be dishonest and also weak. Frame Grey as early on the curve but prescient: well-positioned, and demonstrably able to ship robust functionality fast. The Bion/Kov comms workflow can be an implicit factor in that speed story but should not be foregrounded in outward-facing materials — the subject is Grey, not the tooling that builds Grey.
+
+**Outreach itself** (business connections, funding, hackathons, employment, any other resource avenue) stays with Forces personally, starting only once the product/brand/website work is polished. This is not Bion's to initiate at any point past this directive, regardless of how the media work progresses — wait for explicit word from Forces, not an inferred "looks ready" judgement.
+
+See `BION-DECISION-RECORD-2026-08-28-shelve-e4-e7-media-first.md` for the full ratified record this section summarises.
+
 **Struck from the May portfolio:** SingularityNET as a standalone integration (folded into E6 — same ASI Alliance since the January 2026 merger completion; a dedicated `snet-daemon` adapter is redundant). Bittensor Path B (own subnet) — ~1,500 TAO / ~$470K locked registration is incompatible with grinder funding.
 
 ---
@@ -120,7 +132,7 @@ One canonical USD price per offering (source of truth in `@grey/schemas`), one `
 | Agentverse (E6) | **1.00×**, Research tier only | Conversational lookup buyers; no premium justification. |
 | Direct B2B (E7) | Retainer, off-multiplier | Model A. See §2.5. |
 
-### 2.4 The trust rung — **BLOCKED**
+### 2.4 The trust rung — **SHELVED**
 
 The design: every channel exposes `legitimacy_scan` at **$0.10, `CACHE_ONLY`** (Olas: $0.065). This is the answer to the evaluation-friction finding — a buying agent that cannot justify $5 on an unknown seller can justify $0.10, and the output is designed to make the $5 offering's value self-evident. Cache-only means we can afford to be wrong about conversion.
 
@@ -128,6 +140,9 @@ The design: every channel exposes `legitimacy_scan` at **$0.10, `CACHE_ONLY`** (
 > A $0.10 cache-only offering is abuse bait while buyer-reputation gating still runs in shadow mode (`BUYER_GATING_BLOCK_ENABLED=false`). The rung may be **designed, built and tested** as part of E1-C, but it must not be exposed on any channel until Forces explicitly lifts this block. Gate **G2** (§4) is the review point.
 >
 > Practical consequence: E1-C ships the offering behind a hard disable flag, defaulting off, with tests asserting it is unreachable on every live channel. E1's gate to E2 does **not** depend on the rung.
+
+> **SHELVED (Forces, 2026-08-28): relabeled from "blocked pending G2 review" to shelved, no review scheduled.**
+> Not a blocker on anything currently in flight. A cache-only trust rung only makes sense with a real customer base and a real dataset behind it — neither exists yet. Same non-liftable-by-Bion posture as the original block; revisit only when Forces reopens it. See §1.1.
 
 ### 2.5 Specific price recommendations (changes from deployment plan v7)
 
@@ -201,7 +216,7 @@ Each expansion states: objective, why it sits here, what it reuses, **what it be
 - **E2-A — Chain abstraction refactor.** Extract Base-specific assumptions out of the x402 adapter into a chain registry. No behaviour change on Base; this is a pure refactor with the existing test suite as the guard.
 - **E2-B — Kite wallet topology.** `KITE_PAY_TO` (Tier A hot, on VPS) → `KITE_POOL_WALLET` (Tier B, key offline). Keys generated via `@grey/ceremony`. **Tier C on Kite: NO** (KITE staking economics not legible post-mainnet). Never share keys across chains.
 - **E2-C — ~~Agent Passport registration~~ DOES NOT APPLY (corrected 2026-08-04).** Agent Passport is Kite's buyer-side identity/spending-guardrail system, not a seller-registration mechanism — Grey has nothing to register here. The actual seller-facing mechanism is the Agent App Store (see E2-D).
-- **E2-D — Listing + directory presence.** Corrected 2026-08-04: the real mechanism is Kite's **Agent App Store**, not a generic "provider directory" — invitation-gated, currently in limited access mode (see **OD-7**). Requires an OpenAPI JSON schema submission (Grey's existing `openapi.yaml` needs a Kite-flavored variant, not assumed byte-compatible with Bazaar's `EvaluationKitEntry` shape). No evidence of a separate "MCP hub" registration surface was found — this likely collapses into the same App Store listing rather than being a distinct step. **Further downgraded 2026-08-04 (see OD-7): the actual application Forces submitted was a generic lead-capture Typeform, not a vendor-onboarding system.** Nothing concrete to build against; this phase is dormant, not merely blocked.
+- **E2-D — Listing + directory presence.** Corrected 2026-08-04: the real mechanism is Kite's **Agent App Store**, not a generic "provider directory" — invitation-gated, currently in limited access mode (see **OD-7**). Requires an OpenAPI JSON schema submission (Grey's existing `openapi.yaml` needs a Kite-flavored variant, not assumed byte-compatible with Bazaar's `EvaluationKitEntry` shape). No evidence of a separate "MCP hub" registration surface was found — this likely collapses into the same App Store listing rather than being a distinct step. **Further downgraded 2026-08-04 (see OD-7): the actual application Forces submitted was a generic lead-capture Typeform, not a vendor-onboarding system.** Nothing concrete to build against; this phase is dormant, not merely blocked. **Closed 2026-08-28 per OD-7 (§5.1): no further Kite outreach on Bion's own initiative.**
 - **E2-E — Sweeper extension.** Kite Tier A → Tier B, then bridge path to Tier D on Base.
 
 **Pricing.** 1.00× — mirror x402 exactly. Revisit only when Kite volume is legible.
@@ -267,7 +282,9 @@ Each expansion states: objective, why it sits here, what it reuses, **what it be
 
 ---
 
-### E4 — Nevermined
+### E4 — Nevermined — **SHELVED IN FULL 2026-08-28**
+
+> **SHELVED (Forces, 2026-08-28) — the whole expansion, not just the OD-3 kill-criteria path.** E4-A/B metering core is off the board along with E4-C/D, until there's a real customer base to run metrics on. E4's main architectural justification was "E7 needs metering" — since E7 is shelved too (below), there's no live reason to build it right now. Not sequenced against E7 anymore — both are shelved together, not gated on each other (§1.1). Revisit once there's a customer base to run real metrics on.
 
 **Objective.** Add the credits/subscription billing model — and with it, the metering and entitlement layer grey-core currently lacks.
 
@@ -355,13 +372,15 @@ So: **treat Skyfire as a credential acquisition with a revenue tail, not as a re
 
 ---
 
-### E7 — Direct B2B (negotiated contracts)
+### E7 — Direct B2B (negotiated contracts) — **SHELVED 2026-08-28**
+
+> **SHELVED (Forces, 2026-08-28).** Direct B2B outreach only makes sense once there's a real customer base and dataset to point to — neither exists yet. Organic B2B contact isn't blocked, just not pursued on Bion's own initiative. Not sequenced against E4 anymore — both are shelved together, not gated on each other (see E4 above, §1.1). Revisit only when Forces reopens it.
 
 **Objective.** Land per-protocol monitoring retainers with DeFi allocators and vault curators.
 
-**Why here.** Highest revenue per unit of any surface, lowest *platform* code (grey-core HTTP + per-contract auth), highest *human* effort. It sits late because it consumes E4's metering and E5's auth.
+**Why here.** Highest revenue per unit of any surface, lowest *platform* code (grey-core HTTP + per-contract auth), highest *human* effort. It sits late because it consumes E4's metering and E5's auth. **Currently shelved regardless of sequencing position — see block above.**
 
-> **Outreach start: UNRESOLVED (OD-4).** Whether the non-engineering outreach track opens early (parallel from E1) or waits for E7 engineering is a Forces call not yet made. Bion does **not** initiate outreach on its own judgement. This blocks no engineering work in E1–E6; E7-A/B remain sequenced as written. Carry OD-4 forward as a live open decision and re-raise it at the E4 gate at the latest — a contract signed before metering exists would create delivery obligations grey-core cannot yet meter.
+> **Outreach start: RESOLVED 2026-08-28 (OD-4) — was UNRESOLVED.** Shelved along with the rest of E7 — see block above. Historical context retained: whether the non-engineering outreach track opens early (parallel from E1) or waits for E7 engineering was a live open Forces call through 2026-08-28; resolved by shelving E7 itself rather than answering the original either/or.
 
 **The re-anchor.** The May portfolio's Model B $7,500/mo anchor does not survive contact with current numbers. Giza: ~$6.5M TVL, ~$202.5K annualised protocol fees. A $7,500/mo retainer is ~44% of their entire annual fee revenue. Theoriq's AlphaVault launched December 2025 and its TVL is incentive-farmed against 1% of THQ supply — it will churn when the campaign ends.
 
@@ -408,7 +427,7 @@ These are not expansions. They are conditions that must hold at specific points.
 
 **G1 — Margin instrumentation live.** *Required before E2.* Shipped in E1-F. Without per-call cost attribution, every pricing multiplier in §2.3 is a guess.
 
-**G2 — Buyer reputation: shadow → enforce. HARD BLOCK ON THE TRUST RUNG.** The gating built in M0-Extension still runs with `BUYER_GATING_BLOCK_ENABLED=false`. Forces ruling 2026-07-26: **the $0.10 trust rung is blocked from live exposure on every channel until reviewed.** The rung may be built and tested in E1-C behind a default-off disable flag; it may not be reachable in production. G2 is the review point at which Forces decides whether to lift the block, and lifting it presupposes reputation gating flipped to enforce first. Bion may not lift this block on its own authority under any circumstance, including a later expansion appearing to need the rung.
+**G2 — Buyer reputation: shadow → enforce. Review point for the (now-shelved) trust rung.** The gating built in M0-Extension still runs with `BUYER_GATING_BLOCK_ENABLED=false`. Forces ruling 2026-07-26, relabeled 2026-08-28: **the $0.10 trust rung is shelved, not under active review** — no review scheduled, not a blocker on anything in flight (see §2.4, §5.3 B-1). The rung may still be built and tested in E1-C behind a default-off disable flag; it may not be reachable in production. If Forces reopens B-1, G2 is the review point at which reputation gating would need to flip to enforce first. Bion may not lift this block on its own authority under any circumstance, including a later expansion appearing to need the rung.
 
 **G3 — `computeClass` assertion coverage.** *Required before either E3 chain's `CACHE_ONLY` tier goes live (E3-B2, then again for E3-G2).* The 0.65× Olas tier is only safe if `CACHE_ONLY` provably cannot reach live compute. Assert in `vitest run`; verify in production logs before the tier goes live.
 
@@ -430,13 +449,12 @@ These are not expansions. They are conditions that must hold at specific points.
 | **OD-5** | E5/E6 branch order | **Skyfire first**, Agentverse second. | E5, E6 |
 | **OD-6** | Does the E1→E2 gate's "settled non-self payment" leg have to clear before E2 build starts | **Decoupled from E2 timing (2026-08-02).** Real, non-self settlement is still the goal and still tracked — wait for organic Bazaar-discovered traffic to produce it, promotion continues in parallel — but E2 build is not blocked on it. Indexing and the margin-ledger leg of the gate are **unaffected** and still required before E2 in earnest. | §3 E1 gate to E2 |
 | **OD-8** | E3 chain sequencing — one Gnosis build, or split by chain | **Split into two sequential subsections, Base first then Gnosis (Forces, 2026-08-08).** Commerce research shows the two chains are not comparable in size for this use case (Gnosis dominant, per §3 E3 chain-commerce research) — Base ships first because Grey already owns the infrastructure (cheap adapter proof, no bridge), Gnosis follows to capture the dominant pool the channel actually exists for. Both chains ship; order and rationale are ratified, not open. | §3 E3 |
+| **OD-4** | B2B outreach start — parallel from E1, or wait for E7 engineering | **SHELVED (Forces, 2026-08-28).** Direct B2B (E7) itself is shelved in full — same rationale as B-1: no value without a real customer base + dataset to point to yet. Organic B2B contact isn't blocked, just not pursued. Removes the "re-raise OD-4 at the E4 gate" dependency — E4 and E7 are no longer sequenced against each other, both shelved together (§1.1). | §3 E7, §7 |
+| **OD-7** | Kite Agent App Store access — request invitation now, or hold | **CLOSED (Forces, 2026-08-28) — was "downgraded 2026-08-04, likely dormant."** Standing principle across every platform in this project going forward: engage only where there's real value in real infrastructure, otherwise don't chase it. No further Kite outreach on Bion's own initiative. If Kite reaches out with something concrete, that's a new event to evaluate then, not a reason to reopen this now. Historical context retained: Forces' submitted application turned out to be a generic 5-question Typeform ending "thanks, we'll notify you," branded only "Kite AI" — no App Store or marketplace-specific language, no dashboard, no OpenAPI submission step, no invitation code. Did not look like a functioning vendor-onboarding system; more likely a lead-capture/notify list for something not yet built or not yet open. The earlier docs describing a Step0/1/2 registration flow with a 24-hour invitation window were themselves confirmed stale — retired from Kite's current live documentation, retrieved only via a cached search snippet, not the live site (browser-confirmed 2026-08-04). | §3 E2-D |
 
 ### 5.2 Open
 
-| ID | Decision | Status | Effect while open |
-|---|---|---|---|
-| **OD-4** | B2B outreach start — parallel from E1, or wait for E7 engineering | **TBD (Forces).** | Bion does not initiate outreach. Blocks no engineering in E1–E6. Re-raise at the E4 gate at the latest: a contract signed before metering exists creates delivery obligations grey-core cannot meter. |
-| **OD-7** | Kite Agent App Store access — request invitation now, or hold | **DOWNGRADED 2026-08-04: not resolved, likely dormant.** Forces submitted the application; it turned out to be a generic 5-question Typeform ending "thanks, we'll notify you," branded only "Kite AI" — no App Store or marketplace-specific language anywhere in it, no dashboard, no OpenAPI submission step, no invitation code. This does not look like a functioning vendor-onboarding system; more likely a lead-capture/notify list for something not yet built or not yet open. The earlier docs describing a Step0/1/2 registration flow with a 24-hour invitation window were themselves confirmed stale — retired from Kite's current live documentation, retrieved only via a cached search snippet, not the live site (browser-confirmed 2026-08-04). Revisit only if Kite actually opens a real onboarding flow with concrete requirements. | Bion does not request access again on its own judgement. E2-D's listing work has nothing concrete to build against — treat as dormant, not "in progress." Chain abstraction (E2-A) and wallet/sweep (E2-BE) are unaffected and already retained. |
+None currently open. OD-4 and OD-7 resolved 2026-08-28 (shelved / closed respectively) — see §5.1.
 
 ### 5.3 Standing blocks
 
@@ -444,7 +462,7 @@ Not decisions — instructions. Liftable only by explicit Forces authorisation.
 
 | ID | Block | Status |
 |---|---|---|
-| **B-1** | $0.10 `legitimacy_scan` trust rung: no live exposure on any channel | **ACTIVE (Forces, 2026-07-26).** Build and test permitted behind a default-off flag (E1-C). Review point is G2. Not liftable by Bion. |
+| **B-1** | $0.10 `legitimacy_scan` trust rung: no live exposure on any channel | **SHELVED (Forces, 2026-08-28; originally blocked 2026-07-26).** Relabeled from "blocked pending G2 review" to shelved — no review scheduled, not a blocker on anything in flight. Only makes sense with a real customer base + dataset behind it (§1.1). Build and test still permitted behind a default-off flag (E1-C). Not liftable by Bion; revisit only when Forces reopens it. |
 
 ---
 
@@ -466,7 +484,7 @@ Not decisions — instructions. Liftable only by explicit Forces authorisation.
 
 This project is structured to be run by an independent manager. The operating contract:
 
-0. **Two things Bion may not do on its own authority.** (a) Lift the B-1 trust-rung block (§2.4, §4 G2, §5.3). (b) Initiate B2B outreach while OD-4 is open (§5.2, E7). Both require explicit Forces authorisation. Everything else in this document is Bion's to run.
+0. **Two things Bion may not do on its own authority.** (a) Lift the B-1 trust-rung shelve (§2.4, §4 G2, §5.3). (b) Initiate B2B outreach — full stop, not contingent on OD-4 being open anymore (OD-4 resolved/shelved 2026-08-28, §5.1). Both require explicit Forces authorisation. Everything else in this document is Bion's to run.
 1. **One expansion at a time.** Do not open E(n+1) before E(n)'s gate is met. The bequest chain is the whole design; skipping ahead means rebuilding.
 2. **Gates are denominated in settled USDC and merged code, never in activity.** Directory listings, agent counts and probe volumes are diagnostics, not gates.
 3. **Kill criteria are instructions, not suggestions.** When a kill criterion fires, stop the platform-specific work and retain the bequeathed component. Several expansions are explicitly designed to be worth doing even if the platform earns nothing.
