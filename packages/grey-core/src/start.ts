@@ -63,6 +63,11 @@ const cdpGate = x402Config.cdp
 
 // M6 Phase A: x402 now boots THROUGH the ChannelIngress seam. The adapter runs the SAME
 // buildServer(deps, gate) + listen path this file used inline — zero per-request change.
+// Bankr Bridge: additive, non-x402 internal proxy — mounts POST /v1/bridge/bankr/<slug> only when
+// GREY_BANKR_BRIDGE_SECRET is set (see server/routes/bankrBridge.ts). No wallet, no relayer, no
+// signing key on this path; auth is a static bearer secret compared inside the route handler.
+const bankrBridgeSecret = process.env.GREY_BANKR_BRIDGE_SECRET;
+
 const port = Number(process.env.GREY_CORE_PORT ?? 3002);
 const adapter = new X402Adapter({
   deps,
@@ -72,6 +77,7 @@ const adapter = new X402Adapter({
   trustRungEnabled: trustRungOn,
   trustRungGate,
   cdpGate,
+  bankrBridgeSecret,
   // E1-D: MCP is unconditional (unlike the trust rung) — reuses the SAME relayer clients as the
   // HTTP gate, verify/settle against the same USDC contract, just a different transport.
   mcp: { x402Config, wallet: relayer.wallet, publicClient: relayer.publicClient },
