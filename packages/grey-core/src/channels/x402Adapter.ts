@@ -35,6 +35,9 @@ export interface X402AdapterOptions {
   /** E1-D: mounts POST /v1/mcp when present. Unconditional (unlike the trust rung) — MCP exposes
    *  the same 7+2 normal offerings, not a blocked one. */
   mcp?: McpRouteDeps;
+  /** Bankr Bridge: mounts POST /v1/bridge/bankr/<slug> when present. start.ts only passes this
+   *  when GREY_BANKR_BRIDGE_SECRET is configured — see server/routes/bankrBridge.ts. */
+  bankrBridgeSecret?: string;
 }
 
 /**
@@ -53,6 +56,7 @@ export class X402Adapter implements ChannelIngress {
   private readonly trustRungGate?: X402Gate;
   private readonly cdpGate?: X402Gate;
   private readonly mcp?: McpRouteDeps;
+  private readonly bankrBridgeSecret?: string;
   private readonly offerings: OfferingRegistration[] = [];
   private app: FastifyInstance | null = null;
   private boundAddress: string | null = null;
@@ -67,6 +71,7 @@ export class X402Adapter implements ChannelIngress {
     this.trustRungGate = opts.trustRungGate;
     this.cdpGate = opts.cdpGate;
     this.mcp = opts.mcp;
+    this.bankrBridgeSecret = opts.bankrBridgeSecret;
   }
 
   async start(): Promise<void> {
@@ -77,6 +82,7 @@ export class X402Adapter implements ChannelIngress {
       trustRungGate: this.trustRungGate,
       cdpGate: this.cdpGate,
       mcp: this.mcp,
+      bankrBridgeSecret: this.bankrBridgeSecret,
     });
     this.app = app;
     this.boundAddress = await app.listen({ port: this.port, host: this.host });

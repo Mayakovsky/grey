@@ -13,6 +13,7 @@ import { registerResourceRoutes } from './routes/resources';
 import { registerDiscoveryRoutes } from './routes/discovery';
 import { registerTrustRungRoute } from './routes/trustRung';
 import { registerMcpRoute, type McpRouteDeps } from './routes/mcp';
+import { registerBankrBridgeRoutes } from './routes/bankrBridge';
 
 export interface BuildServerOptions {
   /** E1-C, Invariant #34: default OFF. Only start.ts (reading @grey/x402-middleware's
@@ -29,6 +30,11 @@ export interface BuildServerOptions {
   /** E1-D: mounts POST /v1/mcp when present. Optional so existing callers (and most tests) are
    *  unaffected; start.ts always passes it (MCP is unconditional — only the trust rung is gated). */
   mcp?: McpRouteDeps;
+  /** Bankr Bridge: mounts POST /v1/bridge/bankr/<slug> (legitimacy_scan only) when present —
+   *  presence IS the enable signal, same posture as cdpGate above. start.ts only passes this when
+   *  GREY_BANKR_BRIDGE_SECRET is set; tests omit it entirely to leave the route unmounted. No x402
+   *  gate involved — auth is a static bearer secret checked inside the route handler itself. */
+  bankrBridgeSecret?: string;
 }
 
 export function buildServer(
@@ -51,5 +57,6 @@ export function buildServer(
   }
   if (opts.cdpGate) registerCdpOfferingRoutes(app, deps, opts.cdpGate); // CDP Facilitator Phase 2
   if (opts.mcp) registerMcpRoute(app, deps, opts.mcp); // E1-D: paid MCP tools, POST × 1
+  if (opts.bankrBridgeSecret) registerBankrBridgeRoutes(app, deps, opts.bankrBridgeSecret); // Bankr Bridge
   return app;
 }

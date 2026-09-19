@@ -1,0 +1,104 @@
+{
+  "payTo": "0x394e81DA28799b578620803772FAeE403dE2d3f6",
+  "network": "base",
+  "currency": "USDC",
+  "services": {
+    "legitimacy-scan": {
+      "description": "Fast structural + claims legitimacy read on a token project, cache-or-live. Runs Whitepaper Grey's due-diligence pipeline.",
+      "price": "0.25",
+      "methods": ["POST"],
+      "category": "data",
+      "tags": ["crypto", "due-diligence", "verification", "pre-trade"],
+      "paymentScheme": "exact",
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "token_address": { "type": "string", "description": "Token contract address to check" },
+            "project_name": { "type": "string", "description": "Project name (optional)" }
+          },
+          "required": ["token_address"]
+        },
+        "output": {
+          "type": "object",
+          "description": "The full GreyResponseEnvelope, verbatim — this handler is a pass-through (see index.ts), not a reshape. Corrected from the directive's original draft, which modeled the flat LegitimacyScanReport payload as the top-level response shape; the real wire response nests it under `payload`. Confirmed against packages/grey-schemas/src/generated/v1/GreyResponseEnvelope.d.ts:10-86 (envelope), packages/grey-core/src/envelope/build.ts:31-45 (buildEnvelope, called unchanged by the bridge route), and packages/grey-schemas/src/index.ts:164-178 (LegitimacyScanReport, the payload shape).",
+          "properties": {
+            "schemaVersion": { "type": "string", "enum": ["v1"] },
+            "offering": { "type": "string", "enum": ["legitimacy_scan"] },
+            "requestId": { "type": "string" },
+            "agent": {
+              "type": "object",
+              "properties": {
+                "did": { "type": "string" },
+                "name": { "type": "string" },
+                "runtime": { "type": "string" }
+              }
+            },
+            "subject": {
+              "type": "object",
+              "properties": {
+                "tokenAddress": { "type": ["string", "null"] },
+                "projectName": { "type": "string" }
+              }
+            },
+            "payload": {
+              "type": "object",
+              "description": "LegitimacyScanReport (@grey/schemas/src/index.ts:164-178). structuralScore=0 is the cache-miss sentinel, not a real worst-case score.",
+              "properties": {
+                "projectName": { "type": "string" },
+                "tokenAddress": { "type": ["string", "null"] },
+                "structuralScore": {
+                  "type": "number",
+                  "description": "1-5; 0 means not analyzed (cache-miss)"
+                },
+                "verdict": {
+                  "type": "string",
+                  "enum": ["PASS", "CONDITIONAL", "FAIL", "INSUFFICIENT_DATA", "NOT_IN_DATABASE"]
+                },
+                "hypeTechRatio": { "type": "number" },
+                "claimCount": { "type": "number" },
+                "claimsMicaCompliance": { "type": "string", "enum": ["YES", "NO", "NOT_MENTIONED"] },
+                "micaCompliant": { "type": "string", "enum": ["YES", "NO", "PARTIAL", "NOT_APPLICABLE"] },
+                "micaSummary": { "type": "string" },
+                "generatedAt": { "type": "string", "format": "date-time" },
+                "discoveryStatus": {
+                  "type": "string",
+                  "enum": ["cached", "provided", "primary", "community", "aggregator", "failed"]
+                },
+                "discoverySourceTier": { "type": ["number", "null"] },
+                "discoveryAttempts": {
+                  "type": "array",
+                  "description": "Optional — present on some cache-miss/live-discovery responses.",
+                  "items": { "type": "object" }
+                }
+              },
+              "required": [
+                "projectName",
+                "tokenAddress",
+                "structuralScore",
+                "verdict",
+                "hypeTechRatio",
+                "claimCount",
+                "claimsMicaCompliance",
+                "micaCompliant",
+                "micaSummary",
+                "generatedAt"
+              ]
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "costUsd": { "type": "number" },
+                "model": { "type": "string" },
+                "latencyMs": { "type": "number" },
+                "timestamp": { "type": "string" },
+                "cacheHit": { "type": "boolean" }
+              }
+            }
+          },
+          "required": ["schemaVersion", "offering", "requestId", "agent", "subject", "payload", "metadata"]
+        }
+      }
+    }
+  }
+}
