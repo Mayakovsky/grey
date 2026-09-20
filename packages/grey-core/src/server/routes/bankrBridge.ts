@@ -11,9 +11,19 @@ import type { HandlerDeps } from '../../deps';
 import { offeringHandlers } from '../../handlers';
 import { buildEnvelope } from '../../envelope/build';
 
-/** Slug allowlist for this pass — legitimacy_scan only. Deliberately not the full PAID array
- *  (offerings.ts) — scope stays tight per the directive; more slugs are a follow-up directive. */
-export const BANKR_BRIDGE_SLUGS = ['legitimacy_scan'] as const;
+/** Slug allowlist — the 6 normal paid offerings (offerings.ts's PAID array), minus
+ *  legitimacy_scan_trust_rung (standing Forces block B-1, unreachable on every channel —
+ *  TRUST_RUNG_ENABLED unset on the VPS, confirmed) and the not-yet-offered/placeholder slugs
+ *  (daily_tech_brief, daily_greenlight_list, scam_alert_feed, prediction_market_research,
+ *  resolution_evidence_compiler). See BANKR-BRIDGE-EXPAND-OFFERINGS-KOV-directive.md. */
+export const BANKR_BRIDGE_SLUGS = [
+  'legitimacy_scan',
+  'verify_whitepaper',
+  'verify_full_tech',
+  'claim_extraction',
+  'claim_history',
+  'quick_protocol_facts',
+] as const;
 export type BankrBridgeSlug = (typeof BANKR_BRIDGE_SLUGS)[number];
 
 const BANKR_BRIDGE_HEADER = 'x-grey-bridge-secret';

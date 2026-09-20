@@ -99,6 +99,379 @@
           "required": ["schemaVersion", "offering", "requestId", "agent", "subject", "payload", "metadata"]
         }
       }
+    },
+    "verify-whitepaper": {
+      "description": "Full whitepaper verification: structural read plus extracted claims and per-claim scores. Runs Whitepaper Grey's due-diligence pipeline.",
+      "price": "1.50",
+      "methods": ["POST"],
+      "category": "data",
+      "tags": ["crypto", "due-diligence", "verification", "pre-trade"],
+      "paymentScheme": "exact",
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "token_address": { "type": "string", "description": "Token contract address to check" },
+            "project_name": { "type": "string", "description": "Project name (optional)" },
+            "document_url": { "type": "string", "description": "Direct whitepaper URL (optional, skips discovery)" }
+          },
+          "required": ["token_address"]
+        },
+        "output": {
+          "type": "object",
+          "description": "The full GreyResponseEnvelope, verbatim, same pass-through posture as legitimacy-scan. payload is TokenomicsAuditReport (@grey/schemas/src/index.ts:180-184) -- extends LegitimacyScanReport (index.ts:164-178) with claims/claimScores/logicSummary. Confirmed against packages/grey-schemas/src/responses/v1/verify_whitepaper.schema.json (allOf legitimacy_scan.schema.json).",
+          "properties": {
+            "schemaVersion": { "type": "string", "enum": ["v1"] },
+            "offering": { "type": "string", "enum": ["verify_whitepaper"] },
+            "requestId": { "type": "string" },
+            "agent": {
+              "type": "object",
+              "properties": {
+                "did": { "type": "string" },
+                "name": { "type": "string" },
+                "runtime": { "type": "string" }
+              }
+            },
+            "subject": {
+              "type": "object",
+              "properties": {
+                "tokenAddress": { "type": ["string", "null"] },
+                "projectName": { "type": "string" }
+              }
+            },
+            "payload": {
+              "type": "object",
+              "description": "TokenomicsAuditReport: every LegitimacyScanReport field plus claims/claimScores/logicSummary.",
+              "properties": {
+                "projectName": { "type": "string" },
+                "tokenAddress": { "type": ["string", "null"] },
+                "structuralScore": { "type": "number", "description": "1-5; 0 means not analyzed (cache-miss)" },
+                "verdict": { "type": "string", "enum": ["PASS", "CONDITIONAL", "FAIL", "INSUFFICIENT_DATA", "NOT_IN_DATABASE"] },
+                "hypeTechRatio": { "type": "number" },
+                "claimCount": { "type": "number" },
+                "claimsMicaCompliance": { "type": "string", "enum": ["YES", "NO", "NOT_MENTIONED"] },
+                "micaCompliant": { "type": "string", "enum": ["YES", "NO", "PARTIAL", "NOT_APPLICABLE"] },
+                "micaSummary": { "type": "string" },
+                "generatedAt": { "type": "string", "format": "date-time" },
+                "discoveryStatus": { "type": "string", "enum": ["cached", "provided", "primary", "community", "aggregator", "failed"] },
+                "discoverySourceTier": { "type": ["number", "null"] },
+                "discoveryAttempts": { "type": "array", "items": { "type": "object" } },
+                "claims": {
+                  "type": "array",
+                  "description": "ExtractedClaim[] (@grey/schemas/src/index.ts:67-76).",
+                  "items": { "type": "object" }
+                },
+                "claimScores": {
+                  "type": "object",
+                  "description": "Per-claim aggregate score, real range 0-1. Missing claim IDs mean not-in-input-set, not 'unscored'.",
+                  "additionalProperties": { "type": "number" }
+                },
+                "logicSummary": { "type": "string" }
+              },
+              "required": [
+                "projectName", "tokenAddress", "structuralScore", "verdict", "hypeTechRatio",
+                "claimCount", "claimsMicaCompliance", "micaCompliant", "micaSummary", "generatedAt",
+                "claims", "claimScores", "logicSummary"
+              ]
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "costUsd": { "type": "number" },
+                "model": { "type": "string" },
+                "latencyMs": { "type": "number" },
+                "timestamp": { "type": "string" },
+                "cacheHit": { "type": "boolean" }
+              }
+            }
+          },
+          "required": ["schemaVersion", "offering", "requestId", "agent", "subject", "payload", "metadata"]
+        }
+      }
+    },
+    "verify-full-tech": {
+      "description": "Deepest verification tier: full claim evaluation with confidence scoring and per-category focus-area breakdown. Runs Whitepaper Grey's due-diligence pipeline.",
+      "price": "3.00",
+      "methods": ["POST"],
+      "category": "data",
+      "tags": ["crypto", "due-diligence", "verification", "pre-trade"],
+      "paymentScheme": "exact",
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "token_address": { "type": "string", "description": "Token contract address to check" },
+            "project_name": { "type": "string", "description": "Project name (optional)" },
+            "document_url": { "type": "string", "description": "Direct whitepaper URL (optional, skips discovery)" }
+          },
+          "required": ["token_address"]
+        },
+        "output": {
+          "type": "object",
+          "description": "The full GreyResponseEnvelope, verbatim, same pass-through posture as legitimacy-scan. payload is FullVerificationReport (@grey/schemas/src/index.ts:186-195) -- extends TokenomicsAuditReport with confidenceScore/evaluations/focusAreaScores/llmTokensUsed/computeCostUsd. Confirmed against packages/grey-schemas/src/responses/v1/verify_full_tech.schema.json (allOf verify_whitepaper.schema.json).",
+          "properties": {
+            "schemaVersion": { "type": "string", "enum": ["v1"] },
+            "offering": { "type": "string", "enum": ["verify_full_tech"] },
+            "requestId": { "type": "string" },
+            "agent": {
+              "type": "object",
+              "properties": {
+                "did": { "type": "string" },
+                "name": { "type": "string" },
+                "runtime": { "type": "string" }
+              }
+            },
+            "subject": {
+              "type": "object",
+              "properties": {
+                "tokenAddress": { "type": ["string", "null"] },
+                "projectName": { "type": "string" }
+              }
+            },
+            "payload": {
+              "type": "object",
+              "description": "FullVerificationReport: every TokenomicsAuditReport field plus confidenceScore/evaluations/focusAreaScores/llmTokensUsed/computeCostUsd.",
+              "properties": {
+                "projectName": { "type": "string" },
+                "tokenAddress": { "type": ["string", "null"] },
+                "structuralScore": { "type": "number", "description": "1-5; 0 means not analyzed (cache-miss)" },
+                "verdict": { "type": "string", "enum": ["PASS", "CONDITIONAL", "FAIL", "INSUFFICIENT_DATA", "NOT_IN_DATABASE"] },
+                "hypeTechRatio": { "type": "number" },
+                "claimCount": { "type": "number" },
+                "claimsMicaCompliance": { "type": "string", "enum": ["YES", "NO", "NOT_MENTIONED"] },
+                "micaCompliant": { "type": "string", "enum": ["YES", "NO", "PARTIAL", "NOT_APPLICABLE"] },
+                "micaSummary": { "type": "string" },
+                "generatedAt": { "type": "string", "format": "date-time" },
+                "discoveryStatus": { "type": "string", "enum": ["cached", "provided", "primary", "community", "aggregator", "failed"] },
+                "discoverySourceTier": { "type": ["number", "null"] },
+                "discoveryAttempts": { "type": "array", "items": { "type": "object" } },
+                "claims": { "type": "array", "items": { "type": "object" } },
+                "claimScores": { "type": "object", "additionalProperties": { "type": "number" } },
+                "logicSummary": { "type": "string" },
+                "confidenceScore": { "type": "number", "description": "0-100." },
+                "evaluations": {
+                  "type": "array",
+                  "description": "ClaimEvaluation[] (@grey/schemas/src/index.ts:78-86).",
+                  "items": { "type": "object" }
+                },
+                "focusAreaScores": {
+                  "type": "object",
+                  "description": "Per-category aggregate score. null = zero claims in that category (distinct from a real 0). Lowercase category-name keys.",
+                  "additionalProperties": { "type": ["number", "null"] }
+                },
+                "llmTokensUsed": { "type": "number" },
+                "computeCostUsd": { "type": "number" }
+              },
+              "required": [
+                "projectName", "tokenAddress", "structuralScore", "verdict", "hypeTechRatio",
+                "claimCount", "claimsMicaCompliance", "micaCompliant", "micaSummary", "generatedAt",
+                "claims", "claimScores", "logicSummary", "confidenceScore", "evaluations",
+                "focusAreaScores", "llmTokensUsed", "computeCostUsd"
+              ]
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "costUsd": { "type": "number" },
+                "model": { "type": "string" },
+                "latencyMs": { "type": "number" },
+                "timestamp": { "type": "string" },
+                "cacheHit": { "type": "boolean" }
+              }
+            }
+          },
+          "required": ["schemaVersion", "offering", "requestId", "agent", "subject", "payload", "metadata"]
+        }
+      }
+    },
+    "claim-extraction": {
+      "description": "Extracts structured claims from a whitepaper URL, with structural analysis. Runs Whitepaper Grey's due-diligence pipeline.",
+      "price": "0.75",
+      "methods": ["POST"],
+      "category": "data",
+      "tags": ["crypto", "due-diligence", "verification", "pre-trade"],
+      "paymentScheme": "exact",
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "whitepaperUrl": { "type": "string", "description": "Direct whitepaper URL to extract claims from" }
+          },
+          "required": ["whitepaperUrl"]
+        },
+        "output": {
+          "type": "object",
+          "description": "The full GreyResponseEnvelope, verbatim, same pass-through posture as legitimacy-scan. payload confirmed against packages/grey-schemas/src/responses/v1/claim_extraction.schema.json (derived from plugin-wpv/src/acp/AgentCardConfig.ts:174-179).",
+          "properties": {
+            "schemaVersion": { "type": "string", "enum": ["v1"] },
+            "offering": { "type": "string", "enum": ["claim_extraction"] },
+            "requestId": { "type": "string" },
+            "agent": {
+              "type": "object",
+              "properties": {
+                "did": { "type": "string" },
+                "name": { "type": "string" },
+                "runtime": { "type": "string" }
+              }
+            },
+            "subject": {
+              "type": "object",
+              "properties": {
+                "tokenAddress": { "type": ["string", "null"] },
+                "projectName": { "type": "string" }
+              }
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "whitepaper": { "type": "object" },
+                "structuralAnalysis": { "type": "object" },
+                "claims": { "type": "array" },
+                "tokenAddress": { "type": ["string", "null"] }
+              },
+              "required": ["whitepaper", "structuralAnalysis", "claims", "tokenAddress"]
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "costUsd": { "type": "number" },
+                "model": { "type": "string" },
+                "latencyMs": { "type": "number" },
+                "timestamp": { "type": "string" },
+                "cacheHit": { "type": "boolean" }
+              }
+            }
+          },
+          "required": ["schemaVersion", "offering", "requestId", "agent", "subject", "payload", "metadata"]
+        }
+      }
+    },
+    "claim-history": {
+      "description": "Verification history and past extracted claims for a project, by token address, project name, or whitepaper URL. Cache-only lookup.",
+      "price": "0.25",
+      "methods": ["POST"],
+      "category": "data",
+      "tags": ["crypto", "due-diligence", "verification", "pre-trade"],
+      "paymentScheme": "exact",
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "projectIdentifier": { "type": "string", "description": "Token address, project name, or whitepaper URL" }
+          },
+          "required": ["projectIdentifier"]
+        },
+        "output": {
+          "type": "object",
+          "description": "The full GreyResponseEnvelope, verbatim, same pass-through posture as legitimacy-scan. payload confirmed against packages/grey-schemas/src/responses/v1/claim_history.schema.json (derived from plugin-wpv/src/acp/AgentCardConfig.ts:143-148).",
+          "properties": {
+            "schemaVersion": { "type": "string", "enum": ["v1"] },
+            "offering": { "type": "string", "enum": ["claim_history"] },
+            "requestId": { "type": "string" },
+            "agent": {
+              "type": "object",
+              "properties": {
+                "did": { "type": "string" },
+                "name": { "type": "string" },
+                "runtime": { "type": "string" }
+              }
+            },
+            "subject": {
+              "type": "object",
+              "properties": {
+                "tokenAddress": { "type": ["string", "null"] },
+                "projectName": { "type": "string" }
+              }
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "project": { "type": "object" },
+                "verifications": { "type": "array" },
+                "claims": { "type": "array" },
+                "note": { "type": ["string", "null"], "description": "Present on a cache-miss / not-found result." }
+              },
+              "required": ["project", "verifications", "claims"]
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "costUsd": { "type": "number" },
+                "model": { "type": "string" },
+                "latencyMs": { "type": "number" },
+                "timestamp": { "type": "string" },
+                "cacheHit": { "type": "boolean" }
+              }
+            }
+          },
+          "required": ["schemaVersion", "offering", "requestId", "agent", "subject", "payload", "metadata"]
+        }
+      }
+    },
+    "quick-protocol-facts": {
+      "description": "Fast headline verdict and key facts for a project, by token address, project name, or whitepaper URL. Cache-only lookup.",
+      "price": "0.30",
+      "methods": ["POST"],
+      "category": "data",
+      "tags": ["crypto", "due-diligence", "verification", "pre-trade"],
+      "paymentScheme": "exact",
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "projectQuery": { "type": "string", "description": "Token address, project name, or whitepaper URL" }
+          },
+          "required": ["projectQuery"]
+        },
+        "output": {
+          "type": "object",
+          "description": "The full GreyResponseEnvelope, verbatim, same pass-through posture as legitimacy-scan. payload confirmed against packages/grey-schemas/src/responses/v1/quick_protocol_facts.schema.json (derived from plugin-wpv/src/acp/AgentCardConfig.ts:157-165). Cache-only; NOT_IN_DATABASE headlineVerdict on a miss.",
+          "properties": {
+            "schemaVersion": { "type": "string", "enum": ["v1"] },
+            "offering": { "type": "string", "enum": ["quick_protocol_facts"] },
+            "requestId": { "type": "string" },
+            "agent": {
+              "type": "object",
+              "properties": {
+                "did": { "type": "string" },
+                "name": { "type": "string" },
+                "runtime": { "type": "string" }
+              }
+            },
+            "subject": {
+              "type": "object",
+              "properties": {
+                "tokenAddress": { "type": ["string", "null"] },
+                "projectName": { "type": "string" }
+              }
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "project": { "type": "object" },
+                "type": { "type": ["string", "null"] },
+                "miCAStatus": { "type": ["string", "null"] },
+                "headlineVerdict": { "type": "string", "enum": ["PASS", "CONDITIONAL", "FAIL", "INSUFFICIENT_DATA", "NOT_IN_DATABASE"] },
+                "lastVerified": { "type": ["string", "null"], "format": "date-time" },
+                "sources": { "type": "array" },
+                "note": { "type": ["string", "null"] }
+              },
+              "required": ["project", "type", "miCAStatus", "headlineVerdict", "lastVerified", "sources"]
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "costUsd": { "type": "number" },
+                "model": { "type": "string" },
+                "latencyMs": { "type": "number" },
+                "timestamp": { "type": "string" },
+                "cacheHit": { "type": "boolean" }
+              }
+            }
+          },
+          "required": ["schemaVersion", "offering", "requestId", "agent", "subject", "payload", "metadata"]
+        }
+      }
     }
   }
 }
