@@ -65,4 +65,23 @@ describe('probes (app.inject)', () => {
     expect(res.body).toContain('openapi:');
     await app.close();
   });
+
+  it('GET /openapi.json → 200 JSON, same spec as /openapi (SELFHOST-DISCOVERY item 2)', async () => {
+    const app = buildServer(fakeDeps(), passThroughX402Gate);
+    const res = await app.inject({ method: 'GET', url: '/openapi.json' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('application/json');
+    const body = res.json() as {
+      openapi: string;
+      info: { title: string; version: string };
+      paths: Record<string, unknown>;
+    };
+    expect(body.openapi).toBe('3.1.0');
+    expect(body.info.title).toBe('Whitepaper Grey API');
+    expect(body.paths['/v1/offerings/legitimacy_scan']).toBeTruthy();
+    // Removed from the source YAML (SELFHOST-DISCOVERY finding): daily_tech_brief is not in
+    // offerings.ts's PAID array — it would 404, not 402, on a real crawler probe.
+    expect(body.paths['/v1/offerings/daily_tech_brief']).toBeUndefined();
+    await app.close();
+  });
 });

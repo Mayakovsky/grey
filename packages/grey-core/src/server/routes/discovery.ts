@@ -3,11 +3,31 @@
 // @grey/x402-middleware/challenge.ts). Free, unauthenticated — a crawler/evaluating agent reads
 // this before ever hitting a paid route. GET /v1/discovery/services/:slug returns one entry (the
 // public capability page E1-C's evaluation artifacts extend with a sample).
+//
+// GET /.well-known/x402 (SELFHOST-DISCOVERY-KOV-directive.md item 1): the x402scan-documented
+// compatibility fan-out shape (docs/DISCOVERY.md, section B — `{ version: 1, resources: [...] }`).
+// Sourced from `offerings.ts`'s PAID array, the single reachability source of truth (its own
+// header comment already names 3 places that must agree — this makes a 4th reader, not a 4th
+// hand-authored copy). Real finding, not a guess: x402scan/AgentCash's actual discovery runtime
+// (@agentcash/discovery@1.7.5, the exact version x402scan's own package.json pins) no longer
+// parses this document at all as of that version — its own shipped SPECIFICATION.md says so
+// verbatim ("Legacy `/.well-known/x402` ... are no longer parsed") and `GET /openapi.json`
+// (probes.ts) is the only discovery source that version's crawler actually reads. This route is
+// still worth having (cheap, matches the still-published x402scan docs/DISCOVERY.md compat
+// shape, harmless to any other/older consumer that does read it) but should not be treated as
+// the load-bearing piece for indexing — see the report for the full finding.
 import type { FastifyInstance } from 'fastify';
 import type { OfferingSlug } from '@grey/schemas/responses';
 import { buildEvaluationKit, buildEvaluationArtifact } from '@grey/schemas/evaluationKit';
 import { TRUST_RUNG_SLUG } from '@grey/x402-middleware';
 import { offeringHandlers } from '../../handlers';
+import { PAID } from './offerings';
+
+// Fixed, not env-configurable — same posture as deps/index.ts's CHANNEL_IDENTITY_REGISTRY literal
+// entries: this is the one real production origin api.whitepapergrey.com's Caddy block proxies to
+// (CDP-BAZAAR-LOG-CONFIRM-AND-CRAWLER-CHECK-REPORT-KOV.md), not a per-deployment value: a
+// discovery manifest describing a locally-run dev server's own resources would be meaningless.
+const LIVE_ORIGIN = 'https://api.whitepapergrey.com';
 
 export interface DiscoveryRouteOptions {
   /** E1-C, Invariant #34: the trust rung is registered in `offeringHandlers` unconditionally (the
@@ -29,7 +49,18 @@ export function registerDiscoveryRoutes(app: FastifyInstance, opts: DiscoveryRou
       .filter((kit) => kit.discoverable);
     // E1-D: "List in Bazaar as MCP" — the same offering set is also reachable as paid MCP tools
     // over one JSON-RPC endpoint (POST /v1/mcp), not one route per offering like the HTTP surface.
-    reply.send({ services, mcpEndpoint: '/v1/mcp' });
+    // SELFHOST-DISCOVERY item 3: surface the existing /health liveness check here too, so an
+    // evaluating agent reading this response doesn't need a second guess about availability.
+    reply.send({ services, mcpEndpoint: '/v1/mcp', health: `${LIVE_ORIGIN}/health` });
+  });
+
+  // SELFHOST-DISCOVERY-KOV-directive.md item 1 — see header comment for the sourcing/finding.
+  app.get('/.well-known/x402', async (_req, reply) => {
+    reply.send({
+      version: 1,
+      resources: PAID.map((slug) => `${LIVE_ORIGIN}/v1/offerings/${slug}`),
+      health: `${LIVE_ORIGIN}/health`,
+    });
   });
 
   app.get<{ Params: { slug: string } }>('/v1/discovery/services/:slug', async (req, reply) => {
