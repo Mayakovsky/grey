@@ -163,3 +163,90 @@ describe('runTick — never throws', () => {
     expect(h.critAlerts.length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('runTick — read-failure escalation (D-169)', () => {
+  // Shape of the real 2026-09-23 incident: viem wraps an Alchemy 503 as a plain
+  // ContractFunctionExecutionError — NOT RpcDownError, so isRecoverable() is false.
+  function rpc503(): Error {
+    const e = new Error('HTTP request failed.\n\nStatus: 503\nDetails: Service Unavailable');
+    e.name = 'ContractFunctionExecutionError';
+    return e;
+  }
+
+  /** Harness whose balance read fails while `failing.on` is true. */
+  function flaky(): { h: Harness; failing: { on: boolean } } {
+    const h = harness({ balance: 10n, lastSweepAt: NOW - 1000 });
+    const failing = { on: true };
+    h.deps.balanceClient = {
+      readContract: vi.fn(async () => {
+        if (failing.on) throw rpc503();
+        return 10n;
+      }),
+    };
+    h.deps.readFailures = { consecutive: 0 };
+    return { h, failing };
+  }
+
+  it('a single read blip pages operational, not critical, and still logs a failed row', async () => {
+    const { h } = flaky();
+    expect(await runTick(h.deps)).toBe('failed');
+    expect(h.critAlerts).toHaveLength(0);
+    expect(h.opsAlerts).toHaveLength(1);
+    expect(h.opsAlerts[0]).toContain('1/3 before critical');
+    const failed = h.logRows.find((r) => r[4] === 'failed');
+    expect(failed![5]).toBe('ContractFunctionExecutionError');
+  });
+
+  it('the real incident pattern (fail, ok, fail) never pages critical', async () => {
+    const { h, failing } = flaky();
+    await runTick(h.deps);
+    failing.on = false;
+    expect(await runTick(h.deps)).toBe('skipped');
+    expect(h.deps.readFailures!.consecutive).toBe(0);
+    failing.on = true;
+    await runTick(h.deps);
+    expect(h.critAlerts).toHaveLength(0);
+    expect(h.deps.readFailures!.consecutive).toBe(1);
+  });
+
+  it('a sustained outage escalates to critical on the 3rd consecutive failure and every one after', async () => {
+    const { h } = flaky();
+    await runTick(h.deps);
+    await runTick(h.deps);
+    expect(h.critAlerts).toHaveLength(0);
+    await runTick(h.deps);
+    expect(h.critAlerts).toHaveLength(1);
+    expect(h.critAlerts[0]).toContain('3 consecutive');
+    await runTick(h.deps);
+    expect(h.critAlerts).toHaveLength(2);
+  });
+
+  it('recovery after escalation resets the counter and sends an operational recovered notice', async () => {
+    const { h, failing } = flaky();
+    for (let i = 0; i < 3; i++) await runTick(h.deps);
+    failing.on = false;
+    const opsBefore = h.opsAlerts.length;
+    expect(await runTick(h.deps)).toBe('skipped');
+    expect(h.deps.readFailures!.consecutive).toBe(0);
+    expect(h.opsAlerts.slice(opsBefore).some((a) => a.includes('recovered after 3'))).toBe(true);
+  });
+
+  it('a DB read failure (getLastSweepTimestamp) counts toward the same escalation', async () => {
+    const h = harness({ balance: 10n });
+    h.deps.readFailures = { consecutive: 0 };
+    h.deps.pool = {
+      query: vi.fn(async () => {
+        throw new Error('pooler timeout');
+      }),
+    };
+    for (let i = 0; i < 3; i++) expect(await runTick(h.deps)).toBe('failed');
+    expect(h.critAlerts).toHaveLength(1);
+  });
+
+  it('without readFailures wired, a single read failure still pages critical (fail-loud default)', async () => {
+    const { h } = flaky();
+    delete h.deps.readFailures;
+    await runTick(h.deps);
+    expect(h.critAlerts).toHaveLength(1);
+  });
+});
