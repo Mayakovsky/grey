@@ -44,9 +44,30 @@ export interface TickDeps {
     publicClient: RefuelDeps['publicClient'];
     walletClient: RefuelDeps['walletClient'];
   };
+  /**
+   * D-169: consecutive balance/state-read failure counter, owned by the long-lived
+   * loop (main.ts) so it survives across ticks. Present → a read failure pages
+   * operational until READ_FAILURE_ESCALATE_AFTER consecutive failures, then
+   * CRITICAL on every failure from there on. Absent → every read failure pages
+   * CRITICAL (pre-D-169 behavior, the fail-loud default).
+   */
+  readFailures?: ReadFailureState;
   /** Override for deterministic tests. */
   now?: () => number;
 }
+
+export interface ReadFailureState {
+  consecutive: number;
+}
+
+/**
+ * D-169: a single upstream RPC blip (e.g. an Alchemy 503) no longer pages CRITICAL.
+ * 3 consecutive failed ticks ≈ 10 minutes after the first failure at the 5-min
+ * cadence — a real outage (the Jul 18 inactive-app incident ran 75 min) still
+ * escalates fast. The counter is in-memory: a restart resets it, which delays
+ * escalation but never silences a failure (every failure still pages ops).
+ */
+export const READ_FAILURE_ESCALATE_AFTER = 3;
 
 export type TickOutcome = 'swept' | 'skipped' | 'failed' | 'blocked';
 
@@ -76,8 +97,33 @@ export async function runTick(deps: TickDeps): Promise<TickOutcome> {
       errorMsg: errMsg(err),
       chainId: deps.chainId,
     });
-    await alertCritical('sweeper: failed to read balance/state', { error: errMsg(err) }, deps.alertDeps);
+    const state = deps.readFailures;
+    if (state) state.consecutive += 1;
+    if (!state || state.consecutive >= READ_FAILURE_ESCALATE_AFTER) {
+      await alertCritical(
+        state
+          ? `sweeper: failed to read balance/state (${state.consecutive} consecutive)`
+          : 'sweeper: failed to read balance/state',
+        { error: errMsg(err) },
+        deps.alertDeps,
+      );
+    } else {
+      await alertOperational(
+        `sweeper: failed to read balance/state (${errorClass(err)}), ` +
+          `${state.consecutive}/${READ_FAILURE_ESCALATE_AFTER} before critical, will retry next tick`,
+        deps.alertDeps,
+      );
+    }
     return 'failed';
+  }
+  if (deps.readFailures && deps.readFailures.consecutive > 0) {
+    if (deps.readFailures.consecutive >= READ_FAILURE_ESCALATE_AFTER) {
+      await alertOperational(
+        `sweeper: balance/state read recovered after ${deps.readFailures.consecutive} consecutive failures`,
+        deps.alertDeps,
+      );
+    }
+    deps.readFailures.consecutive = 0;
   }
 
   // Phase F (F-Q4(a)): refuel BEFORE the sweep decision — the USDC must still be

@@ -127,6 +127,8 @@ async function main(): Promise<void> {
     agentWallet: account.address,
     usdcAddress: config.usdcAddress,
     chainId: config.chainId,
+    // D-169: read-failure escalation counter lives for the process lifetime.
+    readFailures: { consecutive: 0 },
     // Phase F: same clients serve the refuel surfaces (viem public/wallet clients
     // structurally satisfy RefuelPublicLike/QuoteClientLike/BalanceReaderLike and
     // RefuelWalletLike). Disable via GREY_REFUEL_ENABLED=false → tick is pre-F.

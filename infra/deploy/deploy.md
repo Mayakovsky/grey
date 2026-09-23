@@ -60,6 +60,15 @@ lag, not an unauthorized or accidental enable. Full investigation:
   a separate decision each time, same posture D-39 already used for `grey-acp-adapter`'s signer.
 - `sweep_log`/`refuel_log` (`grey_two` schema) are its audit trail — check them, don't just trust
   the service came back up, if you ever do need to restart it.
+- **RPC + alerting (BION-DIRECTIVE-168/169, 2026-09-23):** reads and writes share one viem
+  transport on `GREY_SWEEPER_RPC_URL` (a dedicated keyed Alchemy Base app, separate from
+  grey-core's). `GREY_SWEEPER_RPC_URL_FALLBACK` is supported but currently **unset** — and per
+  FDQ-55 D it must be a *keyed* endpoint, never the public `mainnet.base.org` (that node rejected
+  `eth_sendRawTransaction`, and viem's fallback masked the primary's real error). A failed
+  balance/state read pages **ops** for the first 2 consecutive failures and **CRITICAL** from the
+  3rd onward (~10 min at the 5-min tick), with an ops "recovered" notice afterwards — so a single
+  upstream 503 no longer pages CRITICAL, but a sustained outage still does. Tick errors land in
+  `sweep_log` + ntfy, **not** `journalctl` (the journal is silent between restarts).
 - Known historical gap, already reconciled (not a fund-safety issue, funds fully accounted for):
   a live-format RPC API key sat unredacted in 16 `sweep_log.error_msg` rows from a 2026-07-18
   Alchemy outage, until the `redactError` sink-layer fix landed later that same day (commits
