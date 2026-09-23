@@ -64,18 +64,24 @@ lag, not an unauthorized or accidental enable. Full investigation:
   transport on `GREY_SWEEPER_RPC_URL` (a dedicated keyed Alchemy Base app, separate from
   grey-core's). `GREY_SWEEPER_RPC_URL_FALLBACK` is supported but currently **unset** — and per
   FDQ-55 D it must be a *keyed* endpoint, never the public `mainnet.base.org` (that node rejected
-  `eth_sendRawTransaction`, and viem's fallback masked the primary's real error). A failed
-  balance/state read pages **ops** for the first 2 consecutive failures and **CRITICAL** from the
-  3rd onward (~10 min at the 5-min tick), with an ops "recovered" notice afterwards — so a single
-  upstream 503 no longer pages CRITICAL, but a sustained outage still does. Tick errors land in
-  `sweep_log` + ntfy, **not** `journalctl` (the journal is silent between restarts).
+  `eth_sendRawTransaction`, and viem's fallback masked the primary's real error). **This isn't
+  theoretical — a parallel D-169 session set it to the unkeyed public URL live on this VPS the same
+  day, before this warning was written, and had to revert it** (env var removed, service restarted,
+  confirmed healthy, no sweep write occurred during the ~55 minutes it was live — see
+  `bion/_internal/BION-DIRECTIVE-169-STATUS.md`'s correction section). A failed balance/state read
+  pages **ops** for the first 2 consecutive failures and **CRITICAL** from the 3rd onward (~10 min
+  at the 5-min tick), with an ops "recovered" notice afterwards — so a single upstream 503 no
+  longer pages CRITICAL, but a sustained outage still does. Tick errors land in `sweep_log` + ntfy,
+  **not** `journalctl` (the journal is silent between restarts).
 - Known historical gap, already reconciled (not a fund-safety issue, funds fully accounted for):
   a live-format RPC API key sat unredacted in 16 `sweep_log.error_msg` rows from a 2026-07-18
   Alchemy outage, until the `redactError` sink-layer fix landed later that same day (commits
   `d54fd25`/`5b1fae9`, FDQ-56 — a separate fix from the earlier `5749089` Phase-E-enable commit
-  above, not the same one). Scrubbed per D-40's follow-up (BION-DIRECTIVE-41); key not rotated
-  (low-risk call, no external interaction with the agent yet beyond internal testing — revisit if
-  that changes).
+  above, not the same one). Scrubbed per D-40's follow-up (BION-DIRECTIVE-41), independently
+  re-verified live 2026-09-23 (BION-DIRECTIVE-169) — all 16 rows still show `[url-redacted]`, zero
+  raw key material in the DB. **Key rotation: ruled NOT needed, Forces, 2026-09-23** — zero real
+  earnings to date, every live channel still test-only. Closes the "revisit if that changes"
+  question the 2026-08-11 call (BION-DIRECTIVE-41) left open.
 
 ## ACP adapter — LIVE since 2026-08-13, `ACP_ADAPTER_OBSERVE_ONLY=false` (real-signing)
 
