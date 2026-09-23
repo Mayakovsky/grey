@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Address } from 'viem';
-import { poolWalletFor } from './config.js';
+import { poolWalletFor, BALANCE_READ_CRITICAL_THRESHOLD } from './config.js';
 import type { ChainId } from './config.js';
 import { readUsdcBalance } from './balance.js';
 import type { PublicClientLike as BalanceClient } from './balance.js';
@@ -44,6 +44,14 @@ export interface TickDeps {
     publicClient: RefuelDeps['publicClient'];
     walletClient: RefuelDeps['walletClient'];
   };
+  /**
+   * BION-DIRECTIVE-169 Task 2: mutated in place across ticks by the caller's single long-lived
+   * instance (main.ts constructs one before `runLoop` starts) so consecutive balance-read
+   * failures are actually counted tick-to-tick, not reset per call. Required (not optional +
+   * silently-defaulted) so the wiring can't be forgotten without a compile error — see config.ts's
+   * BALANCE_READ_CRITICAL_THRESHOLD doc comment for why this exists instead of isRecoverable().
+   */
+  balanceReadState: { consecutiveFailures: number };
   /** Override for deterministic tests. */
   now?: () => number;
 }
@@ -65,6 +73,7 @@ export async function runTick(deps: TickDeps): Promise<TickOutcome> {
   try {
     balance = await readUsdcBalance(deps.balanceClient, deps.usdcAddress, deps.agentWallet);
     lastSweepAt = await getLastSweepTimestamp(deps.pool, deps.chainId);
+    deps.balanceReadState.consecutiveFailures = 0;
   } catch (err) {
     await safeLog(deps, {
       txHash: null,
@@ -76,7 +85,22 @@ export async function runTick(deps: TickDeps): Promise<TickOutcome> {
       errorMsg: errMsg(err),
       chainId: deps.chainId,
     });
-    await alertCritical('sweeper: failed to read balance/state', { error: errMsg(err) }, deps.alertDeps);
+    deps.balanceReadState.consecutiveFailures += 1;
+    // BION-DIRECTIVE-169 Task 2: N consecutive read failures before CRITICAL, not isRecoverable()
+    // — see config.ts's BALANCE_READ_CRITICAL_THRESHOLD doc comment for why isRecoverable() isn't
+    // usable here (nothing in this package throws RpcDownError for a real error).
+    if (deps.balanceReadState.consecutiveFailures >= BALANCE_READ_CRITICAL_THRESHOLD) {
+      await alertCritical(
+        `sweeper: failed to read balance/state (${deps.balanceReadState.consecutiveFailures} consecutive failures)`,
+        { error: errMsg(err) },
+        deps.alertDeps,
+      );
+    } else {
+      await alertOperational(
+        `sweeper: failed to read balance/state (${deps.balanceReadState.consecutiveFailures}/${BALANCE_READ_CRITICAL_THRESHOLD} consecutive, will retry next tick): ${errMsg(err)}`,
+        deps.alertDeps,
+      );
+    }
     return 'failed';
   }
 

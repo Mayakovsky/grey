@@ -73,6 +73,7 @@ function harness(opts: {
     agentWallet: WALLET,
     usdcAddress: USDC,
     chainId: opts.chainId ?? 8453,
+    balanceReadState: { consecutiveFailures: 0 },
     now: () => NOW,
   };
 
@@ -160,6 +161,60 @@ describe('runTick — never throws', () => {
     };
     const outcome = await runTick(h.deps);
     expect(outcome).toBe('failed');
-    expect(h.critAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(h.critAlerts.length).toBe(0);
+    expect(h.opsAlerts.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('runTick — balance-read failure escalation (BION-DIRECTIVE-169 Task 2)', () => {
+  it('a single transient balance-read failure pages operational, not critical (D-168: an isolated Alchemy 503)', async () => {
+    const h = harness({ balance: 0n });
+    h.deps.balanceClient = {
+      readContract: vi.fn(async () => {
+        throw new Error('503 Service Unavailable');
+      }),
+    };
+    const outcome = await runTick(h.deps);
+    expect(outcome).toBe('failed');
+    expect(h.critAlerts.length).toBe(0);
+    expect(h.opsAlerts.length).toBe(1);
+    expect(h.deps.balanceReadState.consecutiveFailures).toBe(1);
+  });
+
+  it('a real outage (consecutive failures reaching the threshold) escalates to critical, same as the Jul 18 incident', async () => {
+    const h = harness({ balance: 0n });
+    h.deps.balanceClient = {
+      readContract: vi.fn(async () => {
+        throw new Error('App is inactive');
+      }),
+    };
+    await runTick(h.deps); // 1/3
+    await runTick(h.deps); // 2/3
+    expect(h.critAlerts.length).toBe(0);
+    const outcome = await runTick(h.deps); // 3/3 — threshold reached
+    expect(outcome).toBe('failed');
+    expect(h.critAlerts.length).toBe(1);
+    expect(h.deps.balanceReadState.consecutiveFailures).toBe(3);
+  });
+
+  it('a successful tick resets the consecutive-failure counter', async () => {
+    const h = harness({ balance: 10n, lastSweepAt: NOW - 1000 });
+    const failing = {
+      readContract: vi.fn(async () => {
+        throw new Error('503 Service Unavailable');
+      }),
+    };
+    const succeeding = h.deps.balanceClient;
+    h.deps.balanceClient = failing;
+    await runTick(h.deps); // 1/3
+    await runTick(h.deps); // 2/3
+    expect(h.deps.balanceReadState.consecutiveFailures).toBe(2);
+    h.deps.balanceClient = succeeding;
+    const outcome = await runTick(h.deps); // succeeds — resets to 0
+    expect(outcome).toBe('skipped');
+    expect(h.deps.balanceReadState.consecutiveFailures).toBe(0);
+    h.deps.balanceClient = failing;
+    await runTick(h.deps); // back to 1/3, not 3/3 — proves the reset actually happened
+    expect(h.critAlerts.length).toBe(0);
   });
 });

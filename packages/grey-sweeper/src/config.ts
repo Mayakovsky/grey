@@ -66,6 +66,18 @@ export const CADENCE_MS = 7 * 24 * 60 * 60 * 1000;
 /** Default tick interval (5 minutes). */
 export const DEFAULT_TICK_MS = 300_000;
 
+/**
+ * BION-DIRECTIVE-169 Task 2: consecutive balance/state-read failures before the tick's read-catch
+ * escalates to `alertCritical` instead of `alertOperational`. 3 ticks at the default 5-minute
+ * cadence is ~15 minutes — a real outage (the Jul 18 incident: 16 consecutive failures) still
+ * pages fast; a single transient upstream blip (D-168: two isolated Alchemy 503s, ticks either
+ * side succeeded) does not. Chosen over reusing `isRecoverable()`/`RpcDownError` because nothing
+ * in this package ever constructs `RpcDownError` for a real error — `readUsdcBalance` propagates
+ * viem's raw error types untouched, so that classification would never actually fire for the
+ * failure mode this exists to fix; see index.ts's balance-read catch.
+ */
+export const BALANCE_READ_CRITICAL_THRESHOLD = 3;
+
 export type ChainId = 8453 | 84532 | 2366;
 
 export interface SweeperConfig {

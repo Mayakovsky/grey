@@ -114,6 +114,7 @@ function harness(opts: {
     agentWallet: WALLET,
     usdcAddress: USDC,
     chainId: 8453,
+    balanceReadState: { consecutiveFailures: 0 },
     now: () => NOW,
     ...(opts.omitRefuelDeps
       ? {}

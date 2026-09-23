@@ -127,6 +127,10 @@ async function main(): Promise<void> {
     agentWallet: account.address,
     usdcAddress: config.usdcAddress,
     chainId: config.chainId,
+    // BION-DIRECTIVE-169 Task 2: one instance for the process lifetime, mutated in place by
+    // runTick across ticks (see index.ts) — must be constructed here, not per-tick, or the
+    // consecutive-failure count could never advance past 1.
+    balanceReadState: { consecutiveFailures: 0 },
     // Phase F: same clients serve the refuel surfaces (viem public/wallet clients
     // structurally satisfy RefuelPublicLike/QuoteClientLike/BalanceReaderLike and
     // RefuelWalletLike). Disable via GREY_REFUEL_ENABLED=false → tick is pre-F.

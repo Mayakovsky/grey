@@ -64,9 +64,25 @@ lag, not an unauthorized or accidental enable. Full investigation:
   a live-format RPC API key sat unredacted in 16 `sweep_log.error_msg` rows from a 2026-07-18
   Alchemy outage, until the `redactError` sink-layer fix landed later that same day (commits
   `d54fd25`/`5b1fae9`, FDQ-56 — a separate fix from the earlier `5749089` Phase-E-enable commit
-  above, not the same one). Scrubbed per D-40's follow-up (BION-DIRECTIVE-41); key not rotated
-  (low-risk call, no external interaction with the agent yet beyond internal testing — revisit if
-  that changes).
+  above, not the same one). Scrubbed per D-40's follow-up (BION-DIRECTIVE-41), independently
+  re-verified live 2026-09-23 (BION-DIRECTIVE-169) — all 16 rows still show `[url-redacted]`, zero
+  raw key material in the DB. **Key itself still not rotated** (Forces' 2026-08-11 call: low-risk,
+  no external interaction beyond internal testing at the time — explicitly "revisit if that
+  changes"). By 2026-09-23 Grey has real external paid traffic across ACP, CDP Bazaar, and Bankr
+  Bridge — the condition that made rotation low-priority no longer holds as stated; flagged back to
+  Forces (BION-DIRECTIVE-169 report) as due for a fresh look, not decided here.
+- `GREY_SWEEPER_RPC_URL_FALLBACK` (`/etc/grey/sweeper.env`, set 2026-09-23, BION-DIRECTIVE-169 Task
+  1) — a second RPC provider (`https://mainnet.base.org`, same public Base RPC the mech adapters
+  already use) so one upstream 503 on the primary keyed Alchemy endpoint doesn't page CRITICAL by
+  itself (root cause: `_internal/BION-DIRECTIVE-168-STATUS.md`). Read-path only in practice: viem's
+  `fallback()` only engages the second transport when the first errors, and the primary keyed
+  endpoint stays authoritative for writes (`main.ts`'s own comment on why a public node was
+  deliberately NOT auto-injected pre-D-169 — a public RPC previously rejected a real broadcast and
+  the fallback wrapper laundered the true primary error behind it, FDQ-55 D). Balance/state-read
+  failures also now escalate to CRITICAL only after `BALANCE_READ_CRITICAL_THRESHOLD` (3)
+  consecutive ticks, not on the first one (`packages/grey-sweeper/src/index.ts`,
+  BION-DIRECTIVE-169 Task 2) — a single transient blip pages `alertOperational`; a real outage
+  (the Jul 18 pattern: 16 in a row) still reaches CRITICAL in ~15 minutes.
 
 ## ACP adapter — LIVE since 2026-08-13, `ACP_ADAPTER_OBSERVE_ONLY=false` (real-signing)
 
