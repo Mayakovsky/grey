@@ -92,4 +92,18 @@ What I did do: linked the existing `/health` into both `GET /v1/discovery/servic
 - `pnpm -C packages/grey-schemas test` — 7 files, 146 passed, unaffected (openapi.yaml isn't consumed by any grey-schemas test).
 
 ---
+
+## Addendum — `pnpm-lock.yaml` churn follow-up (`SELFHOST-DISCOVERY-FOLLOWUP-KOV-directive.md`)
+
+Forces flagged the lockfile diff beyond the `js-yaml` addition itself: a `ws` peer-resolution shift (`8.20.1` → `7.5.13`) on the `@solana/kit`/`@virtuals-protocol/acp-node-v2`/`@privy-io/node` chain, plus new `socket.io-client`/`engine.io-client`/`socket.io-parser` entries. Investigated per the directive's exact steps, not assumed away.
+
+**1. pnpm version actually used — matched the pin, but via a different path than corepack.** `pnpm --version` in the shell I ran `pnpm add` from reports `11.5.2`, exactly matching `package.json`'s `packageManager` pin. But `which pnpm` resolves to `C:\Users\kidco\AppData\Roaming\npm\pnpm` — an `npm install -g pnpm` global, confirmed via `npm list -g pnpm` (`pnpm@11.5.2` under that same npm-global prefix), not a corepack-managed shim. `corepack pnpm --version` also reports `11.5.2`, so both paths currently agree on the exact version — this isn't the "different version shadowing it on PATH" scenario the directive worried about (the version string genuinely matches), but it's worth Forces/Desktop knowing this machine's `pnpm` isn't actually corepack-brokered day-to-day, in case a future version drifts silently on one path and not the other.
+
+**2. Reproduced from a genuinely clean state — reproduces byte-for-byte identically.** Saved the branch's current `pnpm-lock.yaml` and `packages/grey-core/package.json` aside, restored both to `main`'s exact content (`git checkout main -- <path>`), deleted the root `node_modules` entirely, ran `pnpm install --frozen-lockfile` against that clean `main` state (worked cleanly, no errors), then re-ran the exact same two commands from the original session: `pnpm add js-yaml@^4.2.0` then `pnpm add -D @types/js-yaml@^4.0.9`, both from `packages/grey-core`. Diffed the result against the saved branch copy: **zero differences, byte-for-byte identical** — same `ws@7.5.13` shift, same new `socket.io-*`/`supports-color` entries, same everything.
+
+**Conclusion, stated plainly per the directive's ask:** this is real, deterministic pnpm resolver behavior — adding `js-yaml` (whose own dependency graph pulls in a `ws`-consuming chain with a different acceptable peer range) causes pnpm's resolver to re-evaluate and select a different already-valid `ws` variant for the unrelated `@solana/kit`/`@virtuals-protocol/acp-node-v2`/`@privy-io/node` chain, rather than leaving `8.20.1` in place. Not a mistake, not a wrong pnpm version, not unsafe (both `7.5.13` and `8.20.1` were already present in the pre-existing lockfile for different peer combinations — this is pnpm choosing a different existing variant, not introducing a new one). The `pnpm-lock.yaml` diff on the branch is exactly what a correct, clean install produces — no further changes made; nothing to re-commit (working tree confirmed clean via `git status` after resetting to `HEAD`).
+
+Re-ran the full suite after the reproduction to confirm nothing regressed in the process: `pnpm -C packages/grey-core typecheck` clean, `pnpm -C packages/grey-core test` — 23 files, 198 passed, identical to before.
+
+---
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
