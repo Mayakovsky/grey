@@ -86,6 +86,7 @@ export function registerOfferingRoutes(
           { offeringId: slug, requirement: req.body },
           deps,
         );
+        const latencyMs = deps.clock().getTime() - start;
         const env = buildEnvelope({
           offering: slug,
           payload: result.payload as never,
@@ -95,10 +96,19 @@ export function registerOfferingRoutes(
           metadata: {
             costUsd: priceUsdFor(slug),
             model: 'none',
-            latencyMs: deps.clock().getTime() - start,
+            latencyMs,
             timestamp: deps.clock().toISOString(),
             cacheHit: result.cacheHit,
           },
+        });
+        // TURNKEY-PREP Task 1: the envelope already carried cacheHit/latencyMs per response, but
+        // never logged it — there was no durable, queryable record of either path's timing (see
+        // TURNKEY-PREP-KOV-report.md Task 1). One structured line per request, same two fields.
+        deps.logger.info('offering request completed', {
+          offering: slug,
+          channel: 'x402',
+          cacheHit: result.cacheHit,
+          latencyMs,
         });
         reply.send(env);
       },

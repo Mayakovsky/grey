@@ -92,6 +92,7 @@ export function registerBankrBridgeRoutes(
           { offeringId: slug, requirement: req.body },
           deps,
         );
+        const latencyMs = deps.clock().getTime() - start;
         const env = buildEnvelope({
           offering: slug,
           payload: result.payload as never,
@@ -101,10 +102,17 @@ export function registerBankrBridgeRoutes(
           metadata: {
             costUsd: 0,
             model: 'none',
-            latencyMs: deps.clock().getTime() - start,
+            latencyMs,
             timestamp: deps.clock().toISOString(),
             cacheHit: result.cacheHit,
           },
+        });
+        // TURNKEY-PREP Task 1: same gap as offerings.ts — log the timing this route already computes.
+        deps.logger.info('offering request completed', {
+          offering: slug,
+          channel: 'bankr-bridge',
+          cacheHit: result.cacheHit,
+          latencyMs,
         });
         reply.send(env);
       },
