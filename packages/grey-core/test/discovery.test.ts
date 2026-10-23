@@ -61,4 +61,27 @@ describe('discovery routes — Bazaar index (E1-B, Invariant #33)', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/discovery/services/nope' });
     expect(res.statusCode).toBe(404);
   });
+
+  it('GET /v1/discovery/services includes a health link (SELFHOST-DISCOVERY item 3)', async () => {
+    const app = makeApp();
+    const res = await app.inject({ method: 'GET', url: '/v1/discovery/services' });
+    const body = res.json() as { health: string };
+    expect(body.health).toBe('https://api.whitepapergrey.com/health');
+  });
+});
+
+describe('GET /.well-known/x402 (SELFHOST-DISCOVERY-KOV-directive.md item 1)', () => {
+  it('lists exactly the 6 live PAID offerings as absolute resource URLs, x402scan-compat shape', async () => {
+    const app = makeApp();
+    const res = await app.inject({ method: 'GET', url: '/.well-known/x402' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { version: number; resources: string[]; health: string };
+    expect(body.version).toBe(1);
+    expect(body.resources).toHaveLength(6);
+    expect(body.resources).toContain('https://api.whitepapergrey.com/v1/offerings/legitimacy_scan');
+    // daily_tech_brief is NOT in PAID (BION-DIRECTIVE-62, not-yet-offered) — must not leak in here
+    // even though it's still discoverable-adjacent elsewhere; PAID is the reachability source.
+    expect(body.resources.some((r) => r.includes('daily_tech_brief'))).toBe(false);
+    expect(body.health).toBe('https://api.whitepapergrey.com/health');
+  });
 });

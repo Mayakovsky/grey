@@ -11,9 +11,25 @@ info:
     Bazaar discovery metadata (E1-B) is NOT hand-mirrored here (Invariant #33 —
     single source, no per-platform metadata): every 402 response's `accepts[].extra.bazaar`
     and `GET /v1/discovery/services` project the same @grey/schemas/evaluationKit source live.
+  contact:
+    email: grey@whitepapergrey.com
+  x-guidance: >
+    Unpaid requests to /v1/offerings/* return HTTP 402 with an x402 payment challenge
+    (see x-payment-info per operation and the x402PaymentRequired security scheme below).
+  # SELFHOST-DISCOVERY-KOV-directive.md item 1/4: per @agentcash/discovery's own
+  # docs/SPECIFICATION.md §8 (the runtime x402scan/AgentCash actually execute), this is the
+  # canonical way to point a crawler at freeform agent guidance without bloating discovery.
+  x-agentcash-guidance:
+    llmsTxtUrl: https://whitepapergrey.com/llms.txt
 servers:
-  - url: https://whitepapergrey.com
-    description: Live domain
+  # SELFHOST-DISCOVERY finding: this previously pointed at the marketing site (whitepapergrey.com),
+  # not the domain these paths actually live on. Cosmetic for x402scan/AgentCash specifically (their
+  # discovery runtime resolves resource origin from wherever /openapi.json was actually fetched,
+  # not this field — confirmed by reading @agentcash/discovery's dist: `servers[]` only contributes
+  # an optional base PATH prefix) but still a real correctness bug for anyone reading the spec
+  # itself, so fixed here.
+  - url: https://api.whitepapergrey.com
+    description: Live domain (native x402 + free resources)
   - url: http://localhost:3002
     description: Local dev (GREY_CORE_PORT)
 
@@ -55,6 +71,9 @@ paths:
       description: "Path placeholder; M3-authoritative. Cache or live L1."
       security: [{ x402PaymentRequired: [] }]
       x-x402-pricing: "0.25"
+      x-payment-info:
+        price: { mode: fixed, currency: USD, amount: "0.25" }
+        protocols: [{ x402: {} }]
       requestBody:
         required: true
         content:
@@ -72,6 +91,8 @@ paths:
             application/json:
               schema:
                 $ref: ../src/responses/v1/envelope.schema.json
+        "402":
+          description: Payment required (x402 challenge).
 
   /v1/offerings/verify_whitepaper:
     post:
@@ -80,6 +101,9 @@ paths:
       description: "Path placeholder; M3-authoritative. Cache or live L1+L2."
       security: [{ x402PaymentRequired: [] }]
       x-x402-pricing: "1.50"
+      x-payment-info:
+        price: { mode: fixed, currency: USD, amount: "1.50" }
+        protocols: [{ x402: {} }]
       requestBody:
         required: true
         content:
@@ -98,6 +122,8 @@ paths:
             application/json:
               schema:
                 $ref: ../src/responses/v1/envelope.schema.json
+        "402":
+          description: Payment required (x402 challenge).
 
   /v1/offerings/verify_full_tech:
     post:
@@ -106,6 +132,9 @@ paths:
       description: "Path placeholder; M3-authoritative. Cache or live L1+L2+L3."
       security: [{ x402PaymentRequired: [] }]
       x-x402-pricing: "3.00"
+      x-payment-info:
+        price: { mode: fixed, currency: USD, amount: "3.00" }
+        protocols: [{ x402: {} }]
       requestBody:
         required: true
         content:
@@ -124,6 +153,8 @@ paths:
             application/json:
               schema:
                 $ref: ../src/responses/v1/envelope.schema.json
+        "402":
+          description: Payment required (x402 challenge).
 
   /v1/offerings/claim_extraction:
     post:
@@ -132,6 +163,9 @@ paths:
       description: "Path placeholder; M3-authoritative. L1+L2 against a buyer-provided URL."
       security: [{ x402PaymentRequired: [] }]
       x-x402-pricing: "0.75"
+      x-payment-info:
+        price: { mode: fixed, currency: USD, amount: "0.75" }
+        protocols: [{ x402: {} }]
       requestBody:
         required: true
         content:
@@ -148,6 +182,8 @@ paths:
             application/json:
               schema:
                 $ref: ../src/responses/v1/envelope.schema.json
+        "402":
+          description: Payment required (x402 challenge).
 
   /v1/offerings/claim_history:
     post:
@@ -156,6 +192,9 @@ paths:
       description: "Path placeholder; M3-authoritative. Read-only DB lookup."
       security: [{ x402PaymentRequired: [] }]
       x-x402-pricing: "0.25"
+      x-payment-info:
+        price: { mode: fixed, currency: USD, amount: "0.25" }
+        protocols: [{ x402: {} }]
       requestBody:
         required: true
         content:
@@ -172,6 +211,8 @@ paths:
             application/json:
               schema:
                 $ref: ../src/responses/v1/envelope.schema.json
+        "402":
+          description: Payment required (x402 challenge).
 
   /v1/offerings/quick_protocol_facts:
     post:
@@ -180,6 +221,9 @@ paths:
       description: "Path placeholder; M3-authoritative. Cache-only lookup."
       security: [{ x402PaymentRequired: [] }]
       x-x402-pricing: "0.30"
+      x-payment-info:
+        price: { mode: fixed, currency: USD, amount: "0.30" }
+        protocols: [{ x402: {} }]
       requestBody:
         required: true
         content:
@@ -196,35 +240,25 @@ paths:
             application/json:
               schema:
                 $ref: ../src/responses/v1/envelope.schema.json
+        "402":
+          description: Payment required (x402 challenge).
 
-  /v1/offerings/daily_tech_brief:
-    post:
-      operationId: dailyTechBrief
-      summary: Daily Technical Briefing
-      description: "Path placeholder; M3-authoritative. DB aggregation of recent verifications."
-      security: [{ x402PaymentRequired: [] }]
-      x-x402-pricing: "8.00"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                date: { type: string }
-      responses:
-        "200":
-          description: GreyResponseEnvelope with a DailyTechBriefResponse payload.
-          content:
-            application/json:
-              schema:
-                $ref: ../src/responses/v1/envelope.schema.json
+  # SELFHOST-DISCOVERY finding: /v1/offerings/daily_tech_brief REMOVED from this document.
+  # daily_tech_brief is NOT in grey-core's routes/offerings.ts PAID array (held back entirely per
+  # BION-DIRECTIVE-62 — not-yet-offered, same posture as the two free resources below being
+  # enabled:false would be, not a priced gap) — so the route does not exist and a real probe gets
+  # a plain 404, not a 402. Documenting it here would hand x402scan/AgentCash a guaranteed
+  # "Expected 402, got 404" failure on this JSON once /openapi.json (probes.ts) starts serving it.
+  # PAID is the single reachability source of truth (offerings.ts's own header comment); this
+  # document should only list what that array actually contains. Re-add this path (with
+  # x-payment-info) the same day daily_tech_brief is added back to PAID — not before.
 
   /v1/resources/daily_greenlight_list:
     get:
       operationId: dailyGreenlightList
       summary: Daily Greenlight List (free resource)
       description: "Path placeholder; M3-authoritative. Free — no x402 payment required."
+      security: []
       responses:
         "200":
           description: GreyResponseEnvelope with a DailyGreenlightListResponse payload.
@@ -238,6 +272,7 @@ paths:
       operationId: scamAlertFeed
       summary: Scam Alert Feed (free resource)
       description: "Path placeholder; M3-authoritative. Free — no x402 payment required."
+      security: []
       responses:
         "200":
           description: GreyResponseEnvelope with a ScamAlertFeedResponse payload.
